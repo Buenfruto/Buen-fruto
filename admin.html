@@ -511,13 +511,16 @@ onAuthStateChanged(auth, async user=>{
     if(!snap.exists||snap.data().rol!=='admin'){
       await signOut(auth);
       showLogin();
-      return; // NO mostrar error automáticamente — solo limpiar sesión
+      return;
     }
     perfil=snap.data();
     iniciarAdmin();
   } catch(e) {
-    await signOut(auth);
+    console.error('Error auth:', e);
+    // No cerrar sesión por error de red — solo mostrar login para reintentar
     showLogin();
+    const btn = document.getElementById('btn-login');
+    if(btn){ btn.textContent='Entrar'; btn.disabled=false; }
   }
 });
 
