@@ -507,10 +507,7 @@ let platillosBuf=[], extrasList=[];
 onAuthStateChanged(auth, async user=>{
   if(!user){ showLogin(); return; }
   try {
-    const snap = await Promise.race([
-      db.collection('empleados').doc(user.uid).get(),
-      new Promise((_,reject) => setTimeout(() => reject(new Error('timeout')), 5000))
-    ]);
+    const snap = await db.collection('empleados').doc(user.uid).get();
     if(!snap.exists||snap.data().rol!=='admin'){
       await signOut(auth);
       showLogin();
@@ -519,10 +516,8 @@ onAuthStateChanged(auth, async user=>{
     perfil=snap.data();
     try { iniciarAdmin(); } catch(err) { console.error('iniciarAdmin error:', err); }
   } catch(e) {
-    await signOut(auth);
+    console.error('Error cargando perfil:', e);
     showLogin();
-    const btn = document.getElementById('btn-login');
-    if(btn){ btn.textContent='Entrar'; btn.disabled=false; }
   }
 });
 
