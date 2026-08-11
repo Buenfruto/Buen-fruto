@@ -517,7 +517,7 @@ onAuthStateChanged(auth, async user=>{
       return;
     }
     perfil=snap.data();
-    iniciarAdmin();
+    try { iniciarAdmin(); } catch(err) { console.error('iniciarAdmin error:', err); }
   } catch(e) {
     await signOut(auth);
     showLogin();
