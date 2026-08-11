@@ -817,6 +817,7 @@ async function pedirAhora() {
     platillos: buffetHoy ? platHoy : [],
     extras: extrasHoy, cargo: cg,
     tipo: 'momento', hora_preorden: null,
+    comedor: perfil.comedor || 'betel',
     estado: 'pagado', escaneado: false,
     creado_en: serverTimestamp()
   };
@@ -847,6 +848,7 @@ async function crearOrden(fecha, horaPreorden) {
     cargo: cg,
     tipo: horaPreorden ? 'preorden' : 'momento',
     hora_preorden: horaPreorden || null,
+    comedor: perfil.comedor || 'betel',
     estado: 'pagado',
     escaneado: false,
     creado_en: serverTimestamp()
@@ -943,6 +945,7 @@ function selDia(i) {
         fecha, platillos: buffetDet ? platDet : [],
         extras: extrasDet, cargo: cg,
         tipo: 'momento', hora_preorden: null,
+        comedor: perfil.comedor || 'betel',
         estado: 'pagado', escaneado: false,
         creado_en: serverTimestamp()
       };
@@ -1024,6 +1027,7 @@ async function procesarOrden(hora) {
     extras: ext, cargo: cg,
     tipo: hora ? 'preorden' : 'momento',
     hora_preorden: hora || null,
+    comedor: perfil.comedor || 'betel',
     estado: 'pagado', escaneado: false,
     creado_en: serverTimestamp()
   };

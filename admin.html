@@ -352,7 +352,7 @@ input[type=file]{display:none}
           <div class="card-body" style="padding:0">
             <div class="loading" id="loading-emp"><div style="padding:1.5rem;display:flex;align-items:center;gap:.5rem"><div class="spinner"></div>Cargando empleados...</div></div>
             <div class="tabla-wrap"><table>
-              <thead><tr><th>Nombre</th><th>Email</th><th>Rol</th><th>Estado</th><th>Código gafete</th><th>Contraseña</th><th>Acciones</th></tr></thead>
+              <thead><tr><th>Nombre</th><th>Email</th><th>Rol</th><th>Estado</th><th>Código gafete</th><th>Comedor</th><th>Contraseña</th><th>Acciones</th></tr></thead>
               <tbody id="tabla-empleados"></tbody>
             </table></div>
           </div>
@@ -381,6 +381,12 @@ input[type=file]{display:none}
       <div class="seccion" id="sec-ordenes">
         <div class="sec-titulo">Órdenes</div>
         <div class="sec-sub" id="ordenes-fecha">—</div>
+        <div style="display:flex;gap:.5rem;margin-bottom:1rem;flex-wrap:wrap">
+          <button class="btn btn-outline btn-sm comedor-btn active" onclick="filtrarComedor('todos',this)">Todos</button>
+          <button class="btn btn-outline btn-sm comedor-btn" onclick="filtrarComedor('betel',this)">Betel</button>
+          <button class="btn btn-outline btn-sm comedor-btn" onclick="filtrarComedor('cuauhtemoc',this)">Cuauhtémoc</button>
+          <button class="btn btn-outline btn-sm comedor-btn" onclick="filtrarComedor('intelomas',this)">Intelomas</button>
+        </div>
         <div class="card">
           <div class="card-body" style="padding:0">
             <div class="tabla-wrap"><table>
@@ -396,6 +402,12 @@ input[type=file]{display:none}
       <div class="seccion" id="sec-reportes">
         <div class="sec-titulo">Reportes</div>
         <div class="sec-sub">Reporte de consumo — desglosado por empleado y día.</div>
+        <div style="display:flex;gap:.5rem;flex-wrap:wrap;margin-bottom:.5rem">
+          <button class="btn btn-outline btn-sm rep-comedor-btn active" onclick="setRepComedor('todos',this)">Todos</button>
+          <button class="btn btn-outline btn-sm rep-comedor-btn" onclick="setRepComedor('betel',this)">Betel</button>
+          <button class="btn btn-outline btn-sm rep-comedor-btn" onclick="setRepComedor('cuauhtemoc',this)">Cuauhtémoc</button>
+          <button class="btn btn-outline btn-sm rep-comedor-btn" onclick="setRepComedor('intelomas',this)">Intelomas</button>
+        </div>
 
         <!-- Selector de período -->
         <div style="display:flex;gap:.5rem;flex-wrap:wrap;margin-bottom:1rem">
@@ -437,6 +449,13 @@ input[type=file]{display:none}
     <div class="campo"><label>Correo electrónico</label><input type="email" id="emp-email" placeholder="juan@empresa.com"/></div>
     <div class="campo"><label>Contraseña inicial</label><input type="password" id="emp-pass" placeholder="Mínimo 6 caracteres"/></div>
     <div class="campo"><label>Puesto</label><input type="text" id="emp-puesto" placeholder="Ej. Vendedor, Supervisor, Gerente"/></div>
+    <div class="campo"><label>Comedor</label>
+      <select id="emp-comedor">
+        <option value="betel">Betel</option>
+        <option value="cuauhtemoc">Cuauhtémoc</option>
+        <option value="intelomas">Intelomas</option>
+      </select>
+    </div>
     <div class="campo"><label>Rol</label>
       <select id="emp-rol">
         <option value="empleado">Empleado</option>
@@ -606,6 +625,7 @@ async function cargarEmpleados(){
         <td><span class="badge ${e.rol==='admin'?'badge-c':e.rol==='chef'?'badge-r':'badge-g'}">${e.rol||'empleado'}</span></td>
         <td><span class="badge ${e.activo!==false?'badge-v':'badge-r'}">${e.activo!==false?'Activo':'Inactivo'}</span></td>
         <td style="font-family:monospace;font-size:.78rem;color:var(--v);font-weight:700">${e.codigo_gafete||'—'}</td>
+        <td><span class="badge badge-g">${e.comedor||'—'}</span></td>
         <td style="font-family:monospace;font-size:.78rem;color:var(--g2)">${e.password_texto||'—'}</td>
         <td style="display:flex;gap:.4rem;flex-wrap:wrap">
           <button class="btn btn-outline btn-sm" onclick="toggleActivo('${d.id}',${e.activo!==false})">${e.activo!==false?'Desactivar':'Activar'}</button>
@@ -744,6 +764,7 @@ window.mostrarModalEmpleado=function(){
   document.getElementById('emp-email').value='';
   document.getElementById('emp-pass').value='';
   document.getElementById('emp-puesto').value='';
+  document.getElementById('emp-comedor').value='betel';
   document.getElementById('emp-rol').value='empleado';
   document.getElementById('emp-msg').className='msg';
   document.getElementById('emp-msg').style.display='none';
@@ -756,6 +777,7 @@ document.getElementById('btn-guardar-emp').addEventListener('click', async()=>{
   const email=document.getElementById('emp-email').value.trim();
   const pass=document.getElementById('emp-pass').value;
   const puesto=document.getElementById('emp-puesto').value.trim()||'Empleado';
+  const comedor=document.getElementById('emp-comedor').value||'betel';
   const rol=document.getElementById('emp-rol').value;
   const msg=document.getElementById('emp-msg');
   if(!nombre||!email||!pass){ msg.textContent='Completa todos los campos'; msg.className='msg err'; return; }
@@ -773,7 +795,7 @@ document.getElementById('btn-guardar-emp').addEventListener('click', async()=>{
     if(!res.ok) throw new Error(data.error?.message||'Error al crear usuario');
     const uid=data.localId;
     const codigo_gafete=generarCodigoGafete();
-    await setDoc(doc(db,'empleados',uid),{nombre,email,rol,puesto,activo:true,codigo_gafete,password_texto:pass,creado_en:serverTimestamp()});
+    await setDoc(doc(db,'empleados',uid),{nombre,email,rol,puesto,comedor,activo:true,codigo_gafete,password_texto:pass,creado_en:serverTimestamp()});
     msg.textContent='✓ Empleado creado correctamente'; msg.className='msg ok';
     setTimeout(()=>cerrarModalEmp(),1500);
   }catch(e){
@@ -1006,10 +1028,12 @@ async function cargarOrdenesHoy(){
       const docs=[];
       snap.forEach(d=>{ const o=d.data(); if(o.fecha>=ayerStr) docs.push({id:d.id,...o}); });
       docs.sort((a,b)=>a.fecha.localeCompare(b.fecha)||(a.creado_en?.toMillis?.()||0)-(b.creado_en?.toMillis?.()||0));
+      // Filtrar por comedor si está seleccionado
+      const filtrados = _filtroComedor === 'todos' ? docs : docs.filter(o => o.comedor === _filtroComedor);
       const tbody=document.getElementById('tabla-ordenes');
-      if(!docs.length){ tbody.innerHTML='<tr><td colspan="8" style="text-align:center;padding:2rem;color:var(--g3)">Sin órdenes</td></tr>'; return; }
+      if(!filtrados.length){ tbody.innerHTML='<tr><td colspan="8" style="text-align:center;padding:2rem;color:var(--g3)">Sin órdenes</td></tr>'; return; }
       tbody.innerHTML='';
-      docs.forEach(o=>{
+      filtrados.forEach(o=>{
         const cancelada = o.estado==='cancelado';
         const esHoy = o.fecha === hoyStr;
         const dt = new Date(o.fecha+'T12:00:00');
@@ -1018,7 +1042,7 @@ async function cargarOrdenesHoy(){
         tr.style.opacity = cancelada ? '.45' : '1';
         tr.style.background = !esHoy && !cancelada ? 'var(--vl2)' : '';
         tr.innerHTML=`
-        <td style="font-size:.75rem;color:var(--g2);white-space:nowrap">${esHoy?'<span class="badge badge-v">Hoy</span>':fmtDia}</td>
+        <td style="font-size:.75rem;color:var(--g2);white-space:nowrap">${esHoy?'<span class="badge badge-v">Hoy</span>':fmtDia}<br><span style="font-size:.7rem;font-weight:600;color:var(--v)">${o.comedor||'—'}</span></td>
         <td style="font-weight:600">${o.empleado_nombre||'—'}</td>
         <td style="font-size:.78rem;max-width:140px">${(o.platillos||[]).join(', ')||'—'}</td>
         <td style="font-size:.78rem;color:var(--naranja)">${(o.extras||[]).map(e=>e.nombre||e).join(', ')||'—'}</td>
@@ -1048,6 +1072,23 @@ let _reporteRaw = [];
 const DS_R = ['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'];
 const MS_R = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
 const MF_R = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+
+// ── FILTROS DE COMEDOR ──
+let _filtroComedor = 'todos';
+let _repComedor = 'todos';
+
+window.filtrarComedor = function(comedor, btn) {
+  _filtroComedor = comedor;
+  document.querySelectorAll('.comedor-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+};
+
+window.setRepComedor = function(comedor, btn) {
+  _repComedor = comedor;
+  document.querySelectorAll('.rep-comedor-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  cargarReporte();
+};
 
 // ── PERÍODO DE REPORTE ──
 let _periodoActual = 'semana-actual';
@@ -1129,7 +1170,12 @@ async function cargarReporte(){
     : MS_R[d0.getMonth()]+' '+d0.getFullYear();
 
   const snapAll = await db.collection('ordenes').get();
-  const snap = { forEach: cb => snapAll.forEach(d => { if(d.data().fecha >= desde && d.data().fecha <= hasta) cb(d); }) };
+  const snap = { forEach: cb => snapAll.forEach(d => { 
+    const data = d.data();
+    if(data.fecha >= desde && data.fecha <= hasta && data.estado !== 'cancelado') {
+      if(_repComedor === 'todos' || data.comedor === _repComedor) cb(d);
+    }
+  })};
 
   // Agrupar por empleado
   const porEmp = {};

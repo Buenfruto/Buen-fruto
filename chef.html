@@ -366,6 +366,11 @@ const MS = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','s
 
 function hoy(){ const d=new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
 
+// Comedor de esta pantalla — se pasa en la URL: chef.html?comedor=betel
+const _comedor = new URLSearchParams(window.location.search).get('comedor') || 'betel';
+const _comedorLabels = { betel:'Betel', cuauhtemoc:'Cuauhtémoc', intelomas:'Intelomas' };
+document.title = 'Buen Fruto — Cocina ' + (_comedorLabels[_comedor] || _comedor);
+
 // ── RELOJ ──
 function actualizarReloj(){
   const d=new Date(),h=d.getHours(),m=d.getMinutes();
@@ -544,11 +549,17 @@ document.getElementById('scan-overlay').addEventListener('click', () => {
 });
 
 // ── LISTENER FIRESTORE EN TIEMPO REAL ──
+let _unsubOrdenes = null;
 function suscribirOrdenes() {
+  if (_unsubOrdenes) { _unsubOrdenes(); _unsubOrdenes = null; }
   const q = db.collection('ordenes').where('fecha', '==', hoy());
-  q.onSnapshot(snap => {
+  _unsubOrdenes = q.onSnapshot(snap => {
     const todasHoy = [];
-    snap.forEach(d => todasHoy.push({ id: d.id, ...d.data() }));
+    snap.forEach(d => {
+      const data = d.data();
+      // Filtrar por comedor en cliente
+      if (data.comedor === _comedor) todasHoy.push({ id: d.id, ...data });
+    });
     todasHoy.sort((a,b) => (a.creado_en?.toMillis?.()||0) - (b.creado_en?.toMillis?.()||0));
 
     const totalPreordenes = todasHoy.filter(o => o.hora_preorden && o.estado !== 'lista' && o.estado !== 'cancelado').length;
