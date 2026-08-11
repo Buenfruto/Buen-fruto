@@ -531,8 +531,17 @@ document.getElementById('btn-login').addEventListener('click', async()=>{
   if(!e||!p){ err.style.display='block'; err.textContent='Ingresa correo y contraseña'; return; }
   err.style.display='none';
   document.getElementById('btn-login').textContent='Entrando...';
-  try{ await auth.signInWithEmailAndPassword(e,p); }
-  catch(ex){ err.style.display='block'; err.textContent='Correo o contraseña incorrectos'; document.getElementById('btn-login').textContent='Entrar'; }
+  try{
+    await Promise.race([
+      auth.signInWithEmailAndPassword(e,p),
+      new Promise((_,reject) => setTimeout(() => reject(new Error('timeout')), 10000))
+    ]);
+  }
+  catch(ex){
+    err.style.display='block';
+    err.textContent = ex.message === 'timeout' ? 'Sin respuesta del servidor. Intenta de nuevo.' : 'Correo o contraseña incorrectos';
+    document.getElementById('btn-login').textContent='Entrar';
+  }
 });
 document.getElementById('btn-salir').addEventListener('click', async()=>{
   if(unsubOrdenes)unsubOrdenes();
