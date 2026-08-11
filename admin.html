@@ -507,7 +507,10 @@ let platillosBuf=[], extrasList=[];
 onAuthStateChanged(auth, async user=>{
   if(!user){ showLogin(); return; }
   try {
-    const snap=await db.collection('empleados').doc(user.uid).get();
+    const snap = await Promise.race([
+      db.collection('empleados').doc(user.uid).get(),
+      new Promise((_,reject) => setTimeout(() => reject(new Error('timeout')), 5000))
+    ]);
     if(!snap.exists||snap.data().rol!=='admin'){
       await signOut(auth);
       showLogin();
@@ -516,11 +519,12 @@ onAuthStateChanged(auth, async user=>{
     perfil=snap.data();
     iniciarAdmin();
   } catch(e) {
-    console.error('Error auth:', e);
-    // No cerrar sesión por error de red — solo mostrar login para reintentar
+    await signOut(auth);
     showLogin();
     const btn = document.getElementById('btn-login');
     if(btn){ btn.textContent='Entrar'; btn.disabled=false; }
+  }
+});
   }
 });
 
