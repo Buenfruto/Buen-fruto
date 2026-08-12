@@ -542,8 +542,8 @@ auth.onAuthStateChanged(function(user) {
         return;
       }
       perfil = snap.data();
-      if (perfil.rol === 'admin') { window.location.href = 'admin.html'; return; }
-      if (perfil.rol === 'chef')  { window.location.href = 'chef.html';  return; }
+      if (perfil.rol === 'admin') { window.location.replace('admin.html'); return; }
+      if (perfil.rol === 'chef')  { window.location.replace('chef.html');  return; }
       iniciarApp();
     })
     .catch(function(e) {
