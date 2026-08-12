@@ -492,12 +492,12 @@ let csvData=[], diaMenuSel=null;
 let platillosBuf=[], extrasList=[];
 
 // ── AUTH ──
-onAuthStateChanged(auth, async user=>{
+auth.onAuthStateChanged(async function(user){
   if(!user){ return; }
   try {
     const snap=await db.collection('empleados').doc(user.uid).get();
     if(!snap.exists||snap.data().rol!=='admin'){
-      await signOut(auth);
+      await auth.signOut();
       window.location.replace('index.html');
       return;
     }
