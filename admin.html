@@ -225,16 +225,7 @@ input[type=file]{display:none}
 </head>
 <body>
 
-<!-- LOGIN -->
-<div id="pg-login">
-  <div class="login-box">
-    <div class="login-brand">Buen Fruto</div>
-    <div class="login-sub">Panel de administración</div>
-    <div class="campo"><label>Correo</label><input type="email" id="inp-email" placeholder="admin@empresa.com" autocomplete="email"/></div>
-    <div class="campo"><label>Contraseña</label><input type="password" id="inp-pass" placeholder="••••••••"/></div>
-    <button class="btn btn-v" style="width:100%;justify-content:center;padding:.85rem;margin-top:.5rem" id="btn-login">Entrar</button>
-    <div class="msg err" id="login-err" style="display:none;margin-top:.75rem">Acceso no autorizado</div>
-    <div style="position:fixed;bottom:.5rem;right:.75rem;font-size:.6rem;color:rgba(255,255,255,.25);font-family:monospace">v42</div>
+<!-- Sin login propio — el index.html maneja el acceso -->
 <div id="pg-admin" style="display:none" class="layout">
 
   <!-- SIDEBAR -->
@@ -502,57 +493,37 @@ let platillosBuf=[], extrasList=[];
 
 // ── AUTH ──
 onAuthStateChanged(auth, async user=>{
-  if(!user){ showLogin(); return; }
+  if(!user){ window.location.href='index.html'; return; }
   try {
     const snap=await db.collection('empleados').doc(user.uid).get();
     if(!snap.exists||snap.data().rol!=='admin'){
-      await signOut(auth);
-      showLogin();
-      return; // NO mostrar error automáticamente — solo limpiar sesión
+      window.location.href='index.html';
+      return;
     }
     perfil=snap.data();
+    document.getElementById('pg-admin').style.display='flex';
     iniciarAdmin();
   } catch(e) {
-    await signOut(auth);
-    showLogin();
+    console.error('Error auth admin:', e);
+    window.location.href='index.html';
   }
 });
 
-function showLogin(){ 
-  document.getElementById('pg-login').style.display='flex'; 
-  document.getElementById('pg-admin').style.display='none';
-  var btn=document.getElementById('btn-login');
-  if(btn){btn.textContent='Entrar';btn.disabled=false;}
-}
-
-document.addEventListener('DOMContentLoaded', function() {
-document.getElementById('btn-login').addEventListener('click', async()=>{
-  const e=document.getElementById('inp-email').value.trim();
-  const p=document.getElementById('inp-pass').value;
-  const err=document.getElementById('login-err');
-  if(!e||!p){ err.style.display='block'; err.textContent='Ingresa correo y contraseña'; return; }
-  err.style.display='none';
-  document.getElementById('btn-login').textContent='Entrando...';
-  document.getElementById('btn-login').disabled=true;
-  try{ await auth.signInWithEmailAndPassword(e,p); }
-  catch(ex){ err.style.display='block'; err.textContent='Correo o contraseña incorrectos'; document.getElementById('btn-login').textContent='Entrar'; document.getElementById('btn-login').disabled=false; }
-});
-document.getElementById('btn-salir').addEventListener('click', async()=>{
-  if(unsubOrdenes)unsubOrdenes();
-  if(unsubEmpleados)unsubEmpleados();
-  await signOut(auth); showLogin();
-  document.getElementById('btn-login').textContent='Entrar';
-});
+// Cerrar sesión — vuelve al index
+document.addEventListener('DOMContentLoaded', function(){
+  document.getElementById('btn-salir').addEventListener('click', async function(){
+    if(unsubOrdenes)unsubOrdenes();
+    if(unsubEmpleados)unsubEmpleados();
+    await signOut(auth);
+    window.location.href='index.html';
+  });
 });
 
 // ── INICIAR ──
 function iniciarAdmin(){
-  document.getElementById('pg-login').style.display='none';
-  document.getElementById('pg-admin').style.display='flex';
   document.getElementById('admin-nombre').textContent=perfil.nombre||perfil.email;
   const ahora=new Date();
   document.getElementById('topbar-fecha').textContent=DS[ahora.getDay()]+' '+ahora.getDate()+' de '+MF[ahora.getMonth()];
-  document.getElementById('ordenes-fecha').textContent='Órdenes del '+fmtF(hoy());
   cargarDashboard();
   cargarEmpleados();
   initMenuEditor();
