@@ -312,29 +312,64 @@ input[type=file]{display:none}
 
         <!-- TARJETAS POR CENTRO -->
         <div style="font-size:.65rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--g3);margin-bottom:.75rem">Por centro</div>
-        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:1rem;margin-bottom:2rem">
-          ${['betel','cuauhtemoc','intelomas'].map(c => {
-            const label = {betel:'Betel',cuauhtemoc:'Cuauhtémoc',intelomas:'Intelomas'}[c];
-            return `<div class="card" style="margin:0">
-              <div class="card-head" style="background:var(--v);border-radius:var(--rc) var(--rc) 0 0">
-                <span class="card-titulo" style="color:#fff">${label}</span>
-                <span id="centro-hora-${c}" style="font-size:.7rem;color:rgba(255,255,255,.6)">—</span>
-              </div>
-              <div class="card-body" style="padding:1rem">
-                <div style="display:grid;grid-template-columns:1fr 1fr;gap:.75rem;margin-bottom:1rem">
-                  <div style="text-align:center;background:var(--vl);border-radius:10px;padding:.75rem">
-                    <div style="font-size:1.6rem;font-weight:800;color:var(--v)" id="c-ordenes-${c}">—</div>
-                    <div style="font-size:.68rem;color:var(--g2)">Órdenes</div>
-                  </div>
-                  <div style="text-align:center;background:var(--vl);border-radius:10px;padding:.75rem">
-                    <div style="font-size:1.6rem;font-weight:800;color:var(--v)" id="c-recaudado-${c}">—</div>
-                    <div style="font-size:.68rem;color:var(--g2)">Recaudado</div>
-                  </div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:1rem;margin-bottom:2rem" id="centros-grid">
+          <div class="card" style="margin:0">
+            <div class="card-head" style="background:var(--v);border-radius:var(--rc) var(--rc) 0 0">
+              <span class="card-titulo" style="color:#fff">Betel</span>
+              <span id="centro-hora-betel" style="font-size:.7rem;color:rgba(255,255,255,.6)">—</span>
+            </div>
+            <div class="card-body" style="padding:1rem">
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:.75rem;margin-bottom:1rem">
+                <div style="text-align:center;background:var(--vl);border-radius:10px;padding:.75rem">
+                  <div style="font-size:1.6rem;font-weight:800;color:var(--v)" id="c-ordenes-betel">—</div>
+                  <div style="font-size:.68rem;color:var(--g2)">Órdenes</div>
                 </div>
-                <div id="c-tabla-${c}" style="font-size:.78rem;color:var(--g2);text-align:center;padding:.5rem">Cargando...</div>
+                <div style="text-align:center;background:var(--vl);border-radius:10px;padding:.75rem">
+                  <div style="font-size:1.6rem;font-weight:800;color:var(--v)" id="c-recaudado-betel">—</div>
+                  <div style="font-size:.68rem;color:var(--g2)">Recaudado</div>
+                </div>
               </div>
-            </div>`;
-          }).join('')}
+              <div id="c-tabla-betel" style="font-size:.78rem;color:var(--g2);text-align:center;padding:.5rem">Cargando...</div>
+            </div>
+          </div>
+          <div class="card" style="margin:0">
+            <div class="card-head" style="background:var(--v);border-radius:var(--rc) var(--rc) 0 0">
+              <span class="card-titulo" style="color:#fff">Cuauhtémoc</span>
+              <span id="centro-hora-cuauhtemoc" style="font-size:.7rem;color:rgba(255,255,255,.6)">—</span>
+            </div>
+            <div class="card-body" style="padding:1rem">
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:.75rem;margin-bottom:1rem">
+                <div style="text-align:center;background:var(--vl);border-radius:10px;padding:.75rem">
+                  <div style="font-size:1.6rem;font-weight:800;color:var(--v)" id="c-ordenes-cuauhtemoc">—</div>
+                  <div style="font-size:.68rem;color:var(--g2)">Órdenes</div>
+                </div>
+                <div style="text-align:center;background:var(--vl);border-radius:10px;padding:.75rem">
+                  <div style="font-size:1.6rem;font-weight:800;color:var(--v)" id="c-recaudado-cuauhtemoc">—</div>
+                  <div style="font-size:.68rem;color:var(--g2)">Recaudado</div>
+                </div>
+              </div>
+              <div id="c-tabla-cuauhtemoc" style="font-size:.78rem;color:var(--g2);text-align:center;padding:.5rem">Cargando...</div>
+            </div>
+          </div>
+          <div class="card" style="margin:0">
+            <div class="card-head" style="background:var(--v);border-radius:var(--rc) var(--rc) 0 0">
+              <span class="card-titulo" style="color:#fff">Intelomas</span>
+              <span id="centro-hora-intelomas" style="font-size:.7rem;color:rgba(255,255,255,.6)">—</span>
+            </div>
+            <div class="card-body" style="padding:1rem">
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:.75rem;margin-bottom:1rem">
+                <div style="text-align:center;background:var(--vl);border-radius:10px;padding:.75rem">
+                  <div style="font-size:1.6rem;font-weight:800;color:var(--v)" id="c-ordenes-intelomas">—</div>
+                  <div style="font-size:.68rem;color:var(--g2)">Órdenes</div>
+                </div>
+                <div style="text-align:center;background:var(--vl);border-radius:10px;padding:.75rem">
+                  <div style="font-size:1.6rem;font-weight:800;color:var(--v)" id="c-recaudado-intelomas">—</div>
+                  <div style="font-size:.68rem;color:var(--g2)">Recaudado</div>
+                </div>
+              </div>
+              <div id="c-tabla-intelomas" style="font-size:.78rem;color:var(--g2);text-align:center;padding:.5rem">Cargando...</div>
+            </div>
+          </div>
         </div>
 
         <!-- TABLA GLOBAL -->
