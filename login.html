@@ -560,39 +560,44 @@ auth.onAuthStateChanged(function(user) {
 
 // ── INICIAR APP ──
 async function iniciarApp() {
-  var n = perfil.nombre || 'Empleado';
-  var primer = n.split(' ')[0];
-  function set(id, val) { var el = document.getElementById(id); if (el) el.textContent = val; }
-  set('top-nombre', primer);
-  set('sal-nombre', 'Hola, ' + primer);
-  set('sal-fecha', 'Hoy es ' + fmtFecha(hoy()));
-  set('pf-nombre', n);
-  set('pf-email', perfil.email || '');
-  set('pf-av', n.split(' ').map(function(x){return x[0];}).slice(0,2).join(''));
-  pg('pg-emp');
-  suscribirOrdenes();
-  await cargarMenuHoy();
+  try {
+    var n = perfil.nombre || 'Empleado';
+    var primer = n.split(' ')[0];
+    function set(id, val) { var el = document.getElementById(id); if (el) el.textContent = val; }
+    set('top-nombre', primer);
+    set('sal-nombre', 'Hola, ' + primer);
+    set('sal-fecha', 'Hoy es ' + fmtFecha(hoy()));
+    set('pf-nombre', n);
+    set('pf-email', perfil.email || '');
+    set('pf-av', n.split(' ').map(function(x){return x[0];}).slice(0,2).join(''));
+    pg('pg-emp');
+    suscribirOrdenes();
+    await cargarMenuHoy();
+  } catch(e) {
+    console.error('iniciarApp error:', e);
+  }
 }
 
 function suscribirOrdenes() {
   if (unsubOrdenes) unsubOrdenes();
-  const q = query(collection(db, 'ordenes'), where('empleado_uid', '==', auth.currentUser.uid));
-  unsubOrdenes = onSnapshot(q, snap => {
+  const uid = auth.currentUser ? auth.currentUser.uid : null;
+  if (!uid) return;
+  const hoyStr = hoy();
+  unsubOrdenes = db.collection('ordenes').where('empleado_uid', '==', uid).onSnapshot(function(snap) {
     ordenes = {};
-    const hoyStr = hoy();
-    snap.forEach(d => {
+    snap.forEach(function(d) {
       const data = d.data();
-      if (data.fecha < hoyStr) return; // solo hoy en adelante
+      if (data.fecha < hoyStr) return;
       const fecha = data.fecha;
       const existente = ordenes[fecha];
-      // Si ya hay una orden activa para esta fecha, no la sobreescribas con una cancelada
       if (existente && existente.estado !== 'cancelado' && data.estado === 'cancelado') return;
-      // Si la existente es activa y la nueva también es activa, quedarse con la más reciente
       ordenes[fecha] = { id: d.id, ...data };
     });
     renderInicio();
     if (document.getElementById('t-pedidos').style.display === 'block') renderPedidos();
     renderDiasTabs();
+  }, function(err) {
+    console.error('Error suscribirOrdenes:', err);
   });
 }
 
