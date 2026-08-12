@@ -292,18 +292,57 @@ input[type=file]{display:none}
 
       <!-- DASHBOARD -->
       <div class="seccion on" id="sec-dashboard">
-        <div class="metricas" id="metricas-wrap">
-          <div class="metrica verde"><div class="metrica-label">Órdenes</div><div class="metrica-val" id="m-ordenes">—</div><div class="metrica-sub">En el comedor</div></div>
+        <!-- HEADER BRANDING -->
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1.5rem">
+          <div>
+            <div style="font-size:.65rem;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--g3)">Sistema de Comedor Empresarial</div>
+            <div style="font-size:1.4rem;font-weight:800;color:var(--negro);font-family:'Cormorant Garamond',serif">Buen Fruto</div>
+            <div style="font-size:.72rem;color:var(--g3)">Casa Villasante · Sebastián de Villasante</div>
+          </div>
+        </div>
+
+        <!-- MÉTRICAS GLOBALES -->
+        <div style="font-size:.65rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--g3);margin-bottom:.75rem">Global — Hoy</div>
+        <div class="metricas" id="metricas-wrap" style="margin-bottom:2rem">
+          <div class="metrica verde"><div class="metrica-label">Órdenes totales</div><div class="metrica-val" id="m-ordenes">—</div><div class="metrica-sub">Todos los centros</div></div>
           <div class="metrica"><div class="metrica-label">Empleados activos</div><div class="metrica-val" id="m-empleados">—</div><div class="metrica-sub">Registrados</div></div>
           <div class="metrica ciruela"><div class="metrica-label">Pre-órdenes hoy</div><div class="metrica-val" id="m-preordenes">—</div><div class="metrica-sub">Con hora agendada</div></div>
           <div class="metrica"><div class="metrica-label">Recaudado hoy</div><div class="metrica-val" id="m-recaudado">—</div><div class="metrica-sub">Empleados + empresa</div></div>
         </div>
 
+        <!-- TARJETAS POR CENTRO -->
+        <div style="font-size:.65rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--g3);margin-bottom:.75rem">Por centro</div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:1rem;margin-bottom:2rem">
+          ${['betel','cuauhtemoc','intelomas'].map(c => {
+            const label = {betel:'Betel',cuauhtemoc:'Cuauhtémoc',intelomas:'Intelomas'}[c];
+            return `<div class="card" style="margin:0">
+              <div class="card-head" style="background:var(--v);border-radius:var(--rc) var(--rc) 0 0">
+                <span class="card-titulo" style="color:#fff">${label}</span>
+                <span id="centro-hora-${c}" style="font-size:.7rem;color:rgba(255,255,255,.6)">—</span>
+              </div>
+              <div class="card-body" style="padding:1rem">
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:.75rem;margin-bottom:1rem">
+                  <div style="text-align:center;background:var(--vl);border-radius:10px;padding:.75rem">
+                    <div style="font-size:1.6rem;font-weight:800;color:var(--v)" id="c-ordenes-${c}">—</div>
+                    <div style="font-size:.68rem;color:var(--g2)">Órdenes</div>
+                  </div>
+                  <div style="text-align:center;background:var(--vl);border-radius:10px;padding:.75rem">
+                    <div style="font-size:1.6rem;font-weight:800;color:var(--v)" id="c-recaudado-${c}">—</div>
+                    <div style="font-size:.68rem;color:var(--g2)">Recaudado</div>
+                  </div>
+                </div>
+                <div id="c-tabla-${c}" style="font-size:.78rem;color:var(--g2);text-align:center;padding:.5rem">Cargando...</div>
+              </div>
+            </div>`;
+          }).join('')}
+        </div>
+
+        <!-- TABLA GLOBAL -->
         <div class="card">
-          <div class="card-head"><span class="card-titulo">Órdenes</span><span id="dashboard-hora" style="font-size:.75rem;color:var(--g3)">—</span></div>
+          <div class="card-head"><span class="card-titulo">Todas las órdenes de hoy</span><span id="dashboard-hora" style="font-size:.75rem;color:var(--g3)">—</span></div>
           <div class="card-body">
             <div class="tabla-wrap"><table>
-              <thead><tr><th>Empleado</th><th>Platillos</th><th>Extras</th><th>Hora</th><th>Tipo</th><th>Total</th><th>Estado</th></tr></thead>
+              <thead><tr><th>Centro</th><th>Empleado</th><th>Platillos</th><th>Extras</th><th>Tipo</th><th>Total</th><th>Estado</th></tr></thead>
               <tbody id="tabla-dashboard"></tbody>
             </table></div>
             <div class="loading" id="loading-dashboard"><div class="spinner"></div>Cargando órdenes...</div>
@@ -584,22 +623,51 @@ async function cargarDashboard(){
     const ordenes=[];
     snap.forEach(d=>{ if(d.data().estado!=='cancelado') ordenes.push({id:d.id,...d.data()}); });
     const preordenes=ordenes.filter(o=>o.hora_preorden);
-    const total=ordenes.reduce((s,o)=>s+o.cargo,0);
+    const total=ordenes.reduce((s,o)=>s+(o.cargo||0),0);
     document.getElementById('m-ordenes').textContent=ordenes.length;
     document.getElementById('m-preordenes').textContent=preordenes.length;
     document.getElementById('m-recaudado').textContent='$'+total;
     document.getElementById('loading-dashboard').style.display='none';
     const hora=new Date();
-    document.getElementById('dashboard-hora').textContent='Actualizado '+hora.getHours()+':'+String(hora.getMinutes()).padStart(2,'0');
+    const horaStr=hora.getHours()+':'+String(hora.getMinutes()).padStart(2,'0');
+    document.getElementById('dashboard-hora').textContent='Actualizado '+horaStr;
+
+    // Métricas por centro
+    ['betel','cuauhtemoc','intelomas'].forEach(c=>{
+      const del_centro = ordenes.filter(o=>o.comedor===c);
+      const total_c = del_centro.reduce((s,o)=>s+(o.cargo||0),0);
+      const el_ord = document.getElementById('c-ordenes-'+c);
+      const el_rec = document.getElementById('c-recaudado-'+c);
+      const el_hora = document.getElementById('centro-hora-'+c);
+      const el_tabla = document.getElementById('c-tabla-'+c);
+      if(el_ord) el_ord.textContent = del_centro.length;
+      if(el_rec) el_rec.textContent = '$'+total_c;
+      if(el_hora) el_hora.textContent = horaStr;
+      if(el_tabla){
+        if(!del_centro.length){
+          el_tabla.textContent = 'Sin órdenes hoy';
+        } else {
+          el_tabla.innerHTML = del_centro.slice(0,5).map(o=>
+            `<div style="display:flex;justify-content:space-between;padding:.3rem 0;border-bottom:1px solid var(--borde2)">
+              <span style="color:var(--negro);font-weight:600">${(o.empleado_nombre||'—').split(' ')[0]}</span>
+              <span style="color:var(--g2)">${o.escaneado?'✓ Escaneado':'Pendiente'}</span>
+            </div>`
+          ).join('') + (del_centro.length>5?`<div style="color:var(--g3);margin-top:.4rem">+${del_centro.length-5} más</div>`:'');
+        }
+      }
+    });
+
+    // Tabla global
     const tbody=document.getElementById('tabla-dashboard');
     if(!ordenes.length){ tbody.innerHTML='<tr><td colspan="7" style="text-align:center;padding:2rem;color:var(--g3)">Sin órdenes por el momento</td></tr>'; return; }
+    const labels={betel:'Betel',cuauhtemoc:'Cuauhtémoc',intelomas:'Intelomas'};
     tbody.innerHTML=ordenes.map(o=>`
       <tr>
+        <td><span class="badge badge-g">${labels[o.comedor]||o.comedor||'—'}</span></td>
         <td style="font-weight:600">${o.empleado_nombre||'—'}</td>
-        <td style="max-width:200px;font-size:.78rem">${(o.platillos||[]).join(', ')||'—'}</td>
+        <td style="max-width:160px;font-size:.78rem">${(o.platillos||[]).join(', ')||'—'}</td>
         <td style="font-size:.78rem;color:var(--naranja)">${(o.extras||[]).map(e=>e.nombre).join(', ')||'—'}</td>
         <td>${o.hora_preorden?'<span class="badge badge-c">⏰ '+o.hora_preorden+'</span>':'<span class="badge badge-v">Al llegar</span>'}</td>
-        <td style="font-size:.78rem;color:var(--g2)">${o.creado_en?.toDate?fmtHora(o.creado_en.toDate()):'—'}</td>
         <td style="font-weight:700">$${o.cargo}</td>
         <td>${o.escaneado?'<span class="badge badge-v">Escaneado</span>':'<span class="badge badge-g">Pendiente</span>'}</td>
       </tr>`).join('');
