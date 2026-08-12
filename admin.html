@@ -560,7 +560,12 @@ onAuthStateChanged(auth, async user=>{
   }
 });
 
-function showLogin(){ document.getElementById('pg-login').style.display='flex'; document.getElementById('pg-admin').style.display='none'; }
+function showLogin(){ 
+  document.getElementById('pg-login').style.display='flex'; 
+  document.getElementById('pg-admin').style.display='none';
+  var btn = document.getElementById('btn-login');
+  if(btn){ btn.textContent='Entrar'; btn.disabled=false; }
+}
 
 document.addEventListener('DOMContentLoaded', function() {
 document.getElementById('btn-login').addEventListener('click', async()=>{
