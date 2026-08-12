@@ -519,41 +519,30 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 
 // ── AUTH STATE ──
+var _redirigiendo = false;
 auth.onAuthStateChanged(function(user) {
+  if (_redirigiendo) return;
   if (!user) {
     pg('pg-login');
     var btn = document.getElementById('btn-login');
     if (btn) { btn.textContent = 'Entrar'; btn.disabled = false; }
     return;
   }
-  // Usuario autenticado — cargar perfil
   db.collection('empleados').doc(user.uid).get()
     .then(function(snap) {
       if (!snap.exists) {
         var err = document.getElementById('login-err');
-        if (err) {
-          err.style.display = 'block';
-          err.style.background = '#FDEDEC';
-          err.style.color = '#C0392B';
-          err.textContent = 'UID: ' + user.uid;
-        }
-        auth.signOut();
-        pg('pg-login');
-        return;
+        if (err) { err.style.display = 'block'; err.style.background = '#FDEDEC'; err.style.color = '#C0392B'; err.textContent = 'UID: ' + user.uid; }
+        auth.signOut(); pg('pg-login'); return;
       }
       perfil = snap.data();
-      if (perfil.rol === 'admin') { window.location.replace('admin.html'); return; }
-      if (perfil.rol === 'chef')  { window.location.replace('chef.html');  return; }
+      if (perfil.rol === 'admin') { _redirigiendo = true; window.location.replace('admin.html'); return; }
+      if (perfil.rol === 'chef')  { _redirigiendo = true; window.location.replace('chef.html');  return; }
       iniciarApp();
     })
     .catch(function(e) {
       var err = document.getElementById('login-err');
-      if (err) {
-        err.style.display = 'block';
-        err.style.background = '#FDEDEC';
-        err.style.color = '#C0392B';
-        err.textContent = 'Error de conexión: ' + e.message;
-      }
+      if (err) { err.style.display = 'block'; err.style.background = '#FDEDEC'; err.style.color = '#C0392B'; err.textContent = 'Error: ' + e.message; }
       pg('pg-login');
     });
 });
