@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no"/>
-<meta name="theme-color" content="#2D5016"/>
+<meta name="theme-color" content="#6F775E"/>
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <title>Buen Fruto — Cocina</title>
 <link rel="preconnect" href="https://fonts.googleapis.com"/>
@@ -11,11 +11,11 @@
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet"/>
 <style>
 :root{
-  --v:#2D5016;--v2:#234010;--vl:#EBF2E3;--vl2:#F4F8EE;
+  --v:#6F775E;--v2:#4a5040;--vl:#EEF0E8;--vl2:#F5F6F1;
   --c:#4A1942;--cl:#F5EFF4;
-  --crema:#F7F3EE;--w:#FFFFFF;
-  --negro:#1C1C1E;--g1:#48484A;--g2:#8E8E93;--g3:#C7C7CC;
-  --borde:#E8E2DA;--borde2:#F0EBE3;
+  --crema:#FBF8F3;--w:#FFFFFF;
+  --negro:#2C2E27;--g1:#4a4d42;--g2:#6F775E;--g3:#A1AC92;
+  --borde:#E4E3CF;--borde2:#EEEDD8;
   --naranja:#C65E00;--naranjal:#FFF3E0;
   --shadow:0 2px 8px rgba(0,0,0,.06),0 8px 24px rgba(0,0,0,.05);
 }
@@ -671,7 +671,7 @@ function render(){
 
   if (cola.length === 0 && completadasLista.length === 0) {
     const e = document.createElement('div'); e.className = 'empty-full';
-    e.innerHTML = '<div class="empty-icon"><svg viewBox="0 0 24 24" width="34" height="34" fill="none" stroke="#2D5016" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg></div><div class="empty-titulo">Todo en orden</div><div class="empty-sub">Las órdenes aparecerán cuando los empleados escaneen su gafete</div>';
+    e.innerHTML = '<div class="empty-icon"><svg viewBox="0 0 24 24" width="34" height="34" fill="none" stroke="#6F775E" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg></div><div class="empty-titulo">Todo en orden</div><div class="empty-sub">Las órdenes aparecerán cuando los empleados escaneen su gafete</div>';
     grid.appendChild(e); return;
   }
 
