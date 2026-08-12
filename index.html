@@ -246,7 +246,7 @@ html,body{height:100%;font-family:'Inter',system-ui,sans-serif;background:var(--
       <div class="campo"><label>Contraseña</label><input type="password" id="inp-pass" placeholder="••••••••" autocomplete="current-password"/></div>
       <button class="btn-fill" id="btn-login">Entrar</button>
       <div class="err" id="login-err">Correo o contraseña incorrectos</div>
-      <div style="position:fixed;bottom:.5rem;right:.75rem;font-size:.6rem;color:rgba(255,255,255,.2);font-family:monospace">v48</div>
+      <div style="position:fixed;bottom:.5rem;right:.75rem;font-size:.6rem;color:rgba(255,255,255,.2);font-family:monospace">v49</div>
     </div>
   </div>
 </div>
@@ -418,7 +418,7 @@ function fmtFecha(f) {
 function newBarcode() {
   return 'BF' + Date.now().toString(36).toUpperCase() + Math.random().toString(36).slice(2,6).toUpperCase();
 }
-async function getPerfil(uid) { const s=await getDoc(doc(db,'empleados',uid)); return (s.exists?s.data():null); }
+async function getPerfil(uid) { const s = await db.collection('empleados').doc(uid).get(); return s.exists ? s.data() : null; }
 
 // ── ESTADO ──
 let perfil = null;
