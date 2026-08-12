@@ -9,15 +9,20 @@
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet"/>
 <style>
 :root{
-  --v:#5C6B4A;--v2:#445238;--vl:#EAF0E4;--vl2:#F2F5EF;
-  --c:#4A1942;--cl:#F5EFF4;
-  --crema:#F5F0E8;--w:#FFFFFF;
-  --negro:#2C3020;--g1:#445238;--g2:#7A8A68;--g3:#8FA882;
-  --borde:#DDE3D4;--borde2:#E8EDE1;
-  --amarillo:#E8C84A;--amarillol:#FDF8E1;
-  --naranja:#C65E00;--naranjal:#FFF3E0;
+  --v:#5C6B4A;
+  --vl:#E8C84A;
+  --crema:#F5F0E8;
+  --salvia:#8FA882;
+  --negro:#5C6B4A;
+  --g1:#5C6B4A;
+  --g2:#8FA882;
+  --g3:#A1B890;
+  --borde:#D9D5C8;
+  --borde2:#E4E0D4;
+  --w:#FFFFFF;
   --rojo:#C0392B;--rojol:#FDEDEC;
-  --shadow:0 1px 3px rgba(0,0,0,.06),0 4px 16px rgba(0,0,0,.04);
+  --naranja:#C65E00;--naranjal:#FFF3E0;
+  --shadow:0 1px 3px rgba(92,107,74,.08),0 4px 16px rgba(92,107,74,.06);
 }
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 html,body{height:100%;font-family:'Inter',system-ui,sans-serif;background:var(--crema);color:var(--negro);-webkit-font-smoothing:antialiased}
@@ -122,8 +127,8 @@ html,body{height:100%;font-family:'Inter',system-ui,sans-serif;background:var(--
 .btn-danger{background:var(--rojol);color:var(--rojo)}
 .btn-danger:hover{background:#fbd9d6}
 .periodo-btn.active{background:var(--v)!important;color:#fff!important;border-color:var(--v)!important}
-.btn-elim{background:#FDE8E8;color:#C0392B;border:none;border-radius:6px;padding:.3rem .65rem;font-size:.75rem;font-weight:700;cursor:pointer}
-.btn-elim:hover{background:#C0392B;color:#fff}
+.btn-elim{background:#F5F0E8;color:#C0392B;border:none;border-radius:6px;padding:.3rem .65rem;font-size:.75rem;font-weight:700;cursor:pointer}
+.btn-elim:hover{background:#F5F0E8;color:#fff}
 .btn-sm{padding:.45rem .85rem;font-size:.78rem}
 
 /* INPUTS */
@@ -153,7 +158,7 @@ tbody tr:last-child td{border-bottom:none}
 tbody tr:hover{background:var(--crema)}
 .badge{display:inline-flex;padding:.18rem .55rem;border-radius:12px;font-size:.68rem;font-weight:700}
 .badge-v{background:var(--vl);color:var(--v)}
-.badge-g{background:#F2F2F7;color:var(--g2)}
+.badge-g{background:#F5F0E8;color:var(--g2)}
 .badge-r{background:var(--rojol);color:var(--rojo)}
 .badge-c{background:var(--cl);color:var(--c)}
 
