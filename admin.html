@@ -492,8 +492,17 @@ let csvData=[], diaMenuSel=null;
 let platillosBuf=[], extrasList=[];
 
 // ── AUTH ──
+// Mostrar loading mientras Firebase restaura la sesión
+document.getElementById('pg-admin').innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100vh;font-family:Inter,sans-serif;color:#8E8E93;font-size:.9rem">Cargando...</div>';
+document.getElementById('pg-admin').style.display = 'flex';
+
 onAuthStateChanged(auth, async user=>{
-  if(!user){ window.location.replace('index.html'); return; }
+  if(!user){
+    // No redirigir automáticamente — mostrar nada y esperar
+    document.getElementById('pg-admin').innerHTML = '';
+    document.getElementById('pg-admin').style.display = 'none';
+    return;
+  }
   try {
     const snap=await db.collection('empleados').doc(user.uid).get();
     if(!snap.exists||snap.data().rol!=='admin'){
@@ -502,6 +511,7 @@ onAuthStateChanged(auth, async user=>{
       return;
     }
     perfil=snap.data();
+    document.getElementById('pg-admin').innerHTML = '';
     document.getElementById('pg-admin').style.display='flex';
     iniciarAdmin();
   } catch(e) {
