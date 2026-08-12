@@ -9,12 +9,12 @@
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet"/>
 <style>
 :root{
-  --v:#6F775E;--v2:#4a5040;--vl:#EEF0E8;--vl2:#F5F6F1;
+  --v:#5C6B4A;--v2:#445238;--vl:#EAF0E4;--vl2:#F2F5EF;
   --c:#4A1942;--cl:#F5EFF4;
-  --crema:#FBF8F3;--w:#FFFFFF;
-  --negro:#2C2E27;--g1:#4a4d42;--g2:#6F775E;--g3:#A1AC92;
-  --borde:#E4E3CF;--borde2:#EEEDD8;
-  --amarillo:#F1D575;--amarillol:#FEFAE8;
+  --crema:#F5F0E8;--w:#FFFFFF;
+  --negro:#2C3020;--g1:#445238;--g2:#7A8A68;--g3:#8FA882;
+  --borde:#DDE3D4;--borde2:#E8EDE1;
+  --amarillo:#E8C84A;--amarillol:#FDF8E1;
   --naranja:#C65E00;--naranjal:#FFF3E0;
   --rojo:#C0392B;--rojol:#FDEDEC;
   --shadow:0 1px 3px rgba(0,0,0,.06),0 4px 16px rgba(0,0,0,.04);
@@ -720,21 +720,21 @@ window.imprimirGafete=function(uid, nombre, codigo, puesto, comedor){
     + '<script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"><\/script>'
     + '<style>'
     + '*{margin:0;padding:0;box-sizing:border-box}'
-    + 'body{background:#FBF8F3;display:flex;align-items:center;justify-content:center;min-height:100vh;font-family:Inter,sans-serif;-webkit-print-color-adjust:exact;print-color-adjust:exact}'
+    + 'body{background:#F5F0E8;display:flex;align-items:center;justify-content:center;min-height:100vh;font-family:Inter,sans-serif;-webkit-print-color-adjust:exact;print-color-adjust:exact}'
     + '.gafete{width:340px;background:#fff;border-radius:20px;overflow:hidden;box-shadow:0 8px 32px rgba(0,0,0,.12)}'
-    + '.header{background:linear-gradient(135deg,#6F775E,#8a9478);padding:28px 24px 20px;text-align:center;position:relative}'
+    + '.header{background:linear-gradient(135deg,#5C6B4A,#7A8A68);padding:28px 24px 20px;text-align:center;position:relative}'
     + '.header::after{content:"";position:absolute;bottom:-1px;left:0;right:0;height:24px;background:#fff;border-radius:50% 50% 0 0/100% 100% 0 0}'
     + '.logo-txt{font-family:"Cormorant Garamond",serif;font-size:15px;font-weight:700;color:rgba(255,255,255,.9);letter-spacing:.08em;margin-bottom:4px}'
     + '.centro-txt{font-size:11px;font-weight:600;color:rgba(255,255,255,.55);letter-spacing:.12em;text-transform:uppercase;margin-bottom:16px}'
     + '.avatar{width:80px;height:80px;border-radius:50%;background:rgba(255,255,255,.15);border:3px solid rgba(255,255,255,.3);display:flex;align-items:center;justify-content:center;margin:0 auto;font-family:"Cormorant Garamond",serif;font-size:28px;font-weight:700;color:#fff}'
     + '.body{padding:24px 24px 16px;text-align:center}'
     + '.nombre{font-family:"Cormorant Garamond",serif;font-size:22px;font-weight:700;color:#1C1C1E;margin-bottom:4px;line-height:1.2}'
-    + '.puesto{font-size:12px;font-weight:600;color:#fff;background:#6F775E;display:inline-block;padding:3px 14px;border-radius:20px;margin-bottom:20px}'
-    + '.bc-wrap{background:#FBF8F3;border-radius:10px;padding:12px 16px 8px;margin:0 0 8px}'
+    + '.puesto{font-size:12px;font-weight:600;color:#fff;background:#5C6B4A;display:inline-block;padding:3px 14px;border-radius:20px;margin-bottom:20px}'
+    + '.bc-wrap{background:#F5F0E8;border-radius:10px;padding:12px 16px 8px;margin:0 0 8px}'
     + '.bc-label{font-size:9px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#C7C7CC;margin-bottom:6px}'
     + 'svg{width:100%;height:64px}'
     + '.codigo{font-family:monospace;font-size:12px;color:#8E8E93;letter-spacing:.1em;margin-top:4px}'
-    + '.footer{background:linear-gradient(135deg,#6F775E,#8a9478);padding:10px 24px;display:flex;align-items:center;justify-content:space-between}'
+    + '.footer{background:linear-gradient(135deg,#5C6B4A,#7A8A68);padding:10px 24px;display:flex;align-items:center;justify-content:space-between}'
     + '.footer-txt{font-size:10px;color:rgba(255,255,255,.6);font-weight:500}'
     + '.footer-dot{width:6px;height:6px;border-radius:50%;background:rgba(255,255,255,.4)}'
     + '@media print{body{background:#fff}.gafete{box-shadow:none;border:1px solid #ddd}}'
