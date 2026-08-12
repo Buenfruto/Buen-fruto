@@ -553,7 +553,11 @@ onAuthStateChanged(auth, async user=>{
       return;
     }
     perfil=snap.data();
-    try { iniciarAdmin(); } catch(err) { console.error('iniciarAdmin error:', err); }
+    try { iniciarAdmin(); } catch(err) { 
+      console.error('iniciarAdmin error:', err);
+      document.getElementById('login-err').style.display='block';
+      document.getElementById('login-err').textContent='Error: '+err.message;
+    }
   } catch(e) {
     console.error('Error cargando perfil:', e);
     showLogin();
