@@ -535,7 +535,7 @@ auth.onAuthStateChanged(function(user) {
           err.style.display = 'block';
           err.style.background = '#FDEDEC';
           err.style.color = '#C0392B';
-          err.textContent = 'Tu usuario no está registrado como empleado. Contacta al administrador.';
+          err.textContent = 'UID: ' + user.uid;
         }
         auth.signOut();
         pg('pg-login');
