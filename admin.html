@@ -521,7 +521,12 @@ onAuthStateChanged(auth, async user=>{
   }
 });
 
-function showLogin(){ document.getElementById('pg-login').style.display='flex'; document.getElementById('pg-admin').style.display='none'; }
+function showLogin(){ 
+  document.getElementById('pg-login').style.display='flex'; 
+  document.getElementById('pg-admin').style.display='none';
+  var btn=document.getElementById('btn-login');
+  if(btn){btn.textContent='Entrar';btn.disabled=false;}
+}
 
 document.addEventListener('DOMContentLoaded', function() {
 document.getElementById('btn-login').addEventListener('click', async()=>{
@@ -531,8 +536,9 @@ document.getElementById('btn-login').addEventListener('click', async()=>{
   if(!e||!p){ err.style.display='block'; err.textContent='Ingresa correo y contraseña'; return; }
   err.style.display='none';
   document.getElementById('btn-login').textContent='Entrando...';
+  document.getElementById('btn-login').disabled=true;
   try{ await auth.signInWithEmailAndPassword(e,p); }
-  catch(ex){ err.style.display='block'; err.textContent='Correo o contraseña incorrectos'; document.getElementById('btn-login').textContent='Entrar'; }
+  catch(ex){ err.style.display='block'; err.textContent='Correo o contraseña incorrectos'; document.getElementById('btn-login').textContent='Entrar'; document.getElementById('btn-login').disabled=false; }
 });
 document.getElementById('btn-salir').addEventListener('click', async()=>{
   if(unsubOrdenes)unsubOrdenes();
