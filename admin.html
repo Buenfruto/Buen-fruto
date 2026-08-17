@@ -989,6 +989,25 @@ function emailSinteticoHC(loginBase){
   const limpio = quitarAcentos(loginBase||'').toLowerCase().replace(/[^a-z0-9._-]/g,'');
   return (limpio || ('hc'+Date.now())) + '@' + HC_EMAIL_DOMINIO;
 }
+function esperar(ms){ return new Promise(function(res){ setTimeout(res, ms); }); }
+// Crea la cuenta de acceso del nuevo empleado. Si el correo ya está registrado
+// (cuenta huérfana de una corrida anterior que se cortó a la mitad, p. ej. por
+// el límite de creación de cuentas de Firebase) reintenta una vez con un correo
+// alterno único, en vez de fallar para siempre en ese empleado.
+async function crearCuentaHeadCount(loginBase, hcId, pass){
+  try {
+    const email = emailSinteticoHC(loginBase);
+    const uid = await crearEmpleadoAuth(email, pass);
+    return { uid: uid, email: email };
+  } catch(err){
+    if(err && err.code === 'auth/email-already-in-use'){
+      const emailAlt = emailSinteticoHC(loginBase + '.' + hcId);
+      const uid = await crearEmpleadoAuth(emailAlt, pass);
+      return { uid: uid, email: emailAlt };
+    }
+    throw err;
+  }
+}
 
 function parseHeadCountFilas(filas){
   if(!filas || !filas.length) return { registros:[], duplicadosArchivo:[] };
@@ -1179,16 +1198,24 @@ async function aplicarCambiosHeadCount(){
   let pasoActual = 0;
   function avanzar(){ pasoActual++; bar.style.width = Math.round((pasoActual/totalPasos)*100)+'%'; }
 
-  // 1) ALTAS — una por una, porque cada una necesita su propia cuenta de acceso
+  // 1) ALTAS — una por una, porque cada una necesita su propia cuenta de acceso.
+  // Firebase bloquea temporalmente la creación de cuentas si detecta demasiadas
+  // muy seguidas desde el mismo dispositivo ("actividad inusual"). Para bajadas
+  // grandes (cientos de altas de golpe, como la primera carga del Head Count)
+  // dejamos una pequeña pausa entre cada una para no disparar ese bloqueo, y si
+  // aun así se activa, nos detenemos de inmediato en vez de seguir fallando
+  // cientos de veces más — lo que ya se aplicó queda guardado, y lo que falta
+  // se recoge solo la próxima vez que se suba el mismo archivo (nunca se pierde
+  // ni se duplica nada, porque siempre se compara contra lo que ya existe).
+  let detenidoPorLimite = false;
   for(let i=0;i<altas.length;i++){
     const r = altas[i];
     try {
-      const email = emailSinteticoHC(r.login_base);
       const pass = Math.random().toString(36).slice(2,10);
-      const uid = await crearEmpleadoAuth(email, pass);
+      const cuenta = await crearCuentaHeadCount(r.login_base, r.hc_id, pass);
       const codigo = generarCodigoGafete();
-      await db.collection('empleados').doc(uid).set({
-        nombre: r.nombre, email: email, password_texto: pass, rol: 'empleado',
+      await db.collection('empleados').doc(cuenta.uid).set({
+        nombre: r.nombre, email: cuenta.email, password_texto: pass, rol: 'empleado',
         comedor: r.comedor, puesto: r.puesto, activo: true, codigo_gafete: codigo,
         hc_id: r.hc_id, origen: 'head_count'
       });
@@ -1199,9 +1226,16 @@ async function aplicarCambiosHeadCount(){
       nuevosCreados.push({ nombre:r.nombre, codigo_gafete:codigo, puesto:r.puesto, comedor:r.comedor });
     } catch(err){
       console.error('Error al dar de alta', r.nombre, err);
+      if(err && err.code === 'auth/too-many-requests'){
+        detenidoPorLimite = true;
+        errores.push('Firebase pausó la creación de cuentas por volumen. Quedan '+(altas.length-i)+' pendiente(s) — vuelve a subir el mismo archivo en unos 30-60 minutos para terminarlos, sin riesgo de duplicar lo ya hecho.');
+        avanzar();
+        break;
+      }
       errores.push(r.nombre+': '+traducirErrorAuth(err));
     }
     avanzar();
+    if(!detenidoPorLimite && i < altas.length-1) await esperar(350);
   }
 
   // 2) BAJAS + ACTUALIZADOS — en lotes atómicos (máx 450 operaciones por lote)
@@ -1239,7 +1273,7 @@ async function aplicarCambiosHeadCount(){
   btn.disabled = false; btnCancelar.disabled = false;
   msg.style.display='block';
 
-  let resumen = altas.length+' alta(s), '+bajas.length+' baja(s), '+actualizados.length+' actualizado(s).';
+  let resumen = nuevosCreados.length+' de '+altas.length+' alta(s) aplicada(s), '+bajas.length+' baja(s), '+actualizados.length+' actualizado(s).';
   if(errores.length) resumen += ' '+errores.length+' error(es): '+errores.slice(0,5).join(' | ')+(errores.length>5?' …':'');
   msg.className = 'msg ' + (errores.length ? 'err' : 'ok');
   msg.textContent = resumen;
