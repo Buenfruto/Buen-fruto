@@ -449,6 +449,7 @@ input[type=file]{display:none}
             </button>
           </div>
           <div class="card-body" style="padding:0">
+            <div id="emp-resumen" style="display:flex;gap:.6rem;flex-wrap:wrap;padding:1rem 1.25rem;border-bottom:1px solid var(--borde2)"></div>
             <div class="loading" id="loading-emp"><div style="padding:1.5rem;display:flex;align-items:center;gap:.5rem"><div class="spinner"></div>Cargando empleados...</div></div>
             <div class="tabla-wrap"><table>
               <thead><tr><th>Nombre</th><th>Email</th><th>Rol</th><th>Estado</th><th>Código gafete</th><th>Comedor</th><th>Contraseña</th><th>Acciones</th></tr></thead>
@@ -573,6 +574,7 @@ input[type=file]{display:none}
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-functions-compat.js"></script>
 <script src="fb-compat.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script>
@@ -610,6 +612,28 @@ function traducirErrorAuth(err){
     'auth/network-request-failed': 'Error de conexión. Intenta de nuevo.'
   };
   return mapa[code] || (err && err.message) || 'Ocurrió un error inesperado.';
+}
+
+// ── ALTA MASIVA DEL HEAD COUNT — vía Cloud Function ──
+// Crear cuentas de acceso una por una desde el navegador (como en
+// crearEmpleadoAuth arriba) tiene un límite: si Firebase detecta demasiadas
+// cuentas nuevas seguidas desde el mismo navegador, bloquea temporalmente
+// más creaciones ("actividad inusual"). Para una persona a la vez (agregar
+// un empleado a mano) nunca se topa con ese límite. Pero para el alta de
+// cientos del Head Count de golpe, sí. La función de servidor
+// crearEmpleadosHeadCount corre con permisos de administrador de Firebase,
+// que no tiene ese límite — puede crear cientos de cuentas sin bloquearse,
+// sin importar el volumen.
+const _fnsCrearEmpleadosHC = (function(){
+  try { return firebase.functions().httpsCallable('crearEmpleadosHeadCount'); }
+  catch(e){ return null; }
+})();
+async function crearEmpleadosHeadCountLote(registros, fecha){
+  if(!_fnsCrearEmpleadosHC){
+    throw new Error('La función de servidor no está disponible. Verifica que crearEmpleadosHeadCount esté desplegada en Firebase.');
+  }
+  const resp = await _fnsCrearEmpleadosHC({ registros: registros, fecha: fecha });
+  return (resp && resp.data && resp.data.resultados) || [];
 }
 
 const DS = ['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'];
@@ -989,26 +1013,6 @@ function emailSinteticoHC(loginBase){
   const limpio = quitarAcentos(loginBase||'').toLowerCase().replace(/[^a-z0-9._-]/g,'');
   return (limpio || ('hc'+Date.now())) + '@' + HC_EMAIL_DOMINIO;
 }
-function esperar(ms){ return new Promise(function(res){ setTimeout(res, ms); }); }
-// Crea la cuenta de acceso del nuevo empleado. Si el correo ya está registrado
-// (cuenta huérfana de una corrida anterior que se cortó a la mitad, p. ej. por
-// el límite de creación de cuentas de Firebase) reintenta una vez con un correo
-// alterno único, en vez de fallar para siempre en ese empleado.
-async function crearCuentaHeadCount(loginBase, hcId, pass){
-  try {
-    const email = emailSinteticoHC(loginBase);
-    const uid = await crearEmpleadoAuth(email, pass);
-    return { uid: uid, email: email };
-  } catch(err){
-    if(err && err.code === 'auth/email-already-in-use'){
-      const emailAlt = emailSinteticoHC(loginBase + '.' + hcId);
-      const uid = await crearEmpleadoAuth(emailAlt, pass);
-      return { uid: uid, email: emailAlt };
-    }
-    throw err;
-  }
-}
-
 function parseHeadCountFilas(filas){
   if(!filas || !filas.length) return { registros:[], duplicadosArchivo:[] };
   const headers = filas[0];
@@ -1198,44 +1202,37 @@ async function aplicarCambiosHeadCount(){
   let pasoActual = 0;
   function avanzar(){ pasoActual++; bar.style.width = Math.round((pasoActual/totalPasos)*100)+'%'; }
 
-  // 1) ALTAS — una por una, porque cada una necesita su propia cuenta de acceso.
-  // Firebase bloquea temporalmente la creación de cuentas si detecta demasiadas
-  // muy seguidas desde el mismo dispositivo ("actividad inusual"). Para bajadas
-  // grandes (cientos de altas de golpe, como la primera carga del Head Count)
-  // dejamos una pequeña pausa entre cada una para no disparar ese bloqueo, y si
-  // aun así se activa, nos detenemos de inmediato en vez de seguir fallando
-  // cientos de veces más — lo que ya se aplicó queda guardado, y lo que falta
-  // se recoge solo la próxima vez que se suba el mismo archivo (nunca se pierde
-  // ni se duplica nada, porque siempre se compara contra lo que ya existe).
-  let detenidoPorLimite = false;
-  for(let i=0;i<altas.length;i++){
-    const r = altas[i];
+  // 1) ALTAS — en lotes, vía la Cloud Function crearEmpleadosHeadCount. Como
+  // esa función corre en un servidor con permisos de administrador (no en
+  // este navegador), no existe el límite de "actividad inusual" que Firebase
+  // aplica a cuentas creadas desde el cliente — puede procesar cientos de
+  // altas de golpe sin bloquearse. Se divide en lotes de 200 solo para que
+  // ninguna llamada tarde tanto que se pase del tiempo máximo de la función,
+  // no por ningún límite de Firebase.
+  const LOTE_HC = 200;
+  for(let i=0;i<altas.length;i+=LOTE_HC){
+    const lote = altas.slice(i, i+LOTE_HC).map(function(r){
+      return {
+        hc_id: r.hc_id, nombre: r.nombre, puesto: r.puesto, comedor: r.comedor,
+        email: emailSinteticoHC(r.login_base), password: Math.random().toString(36).slice(2,10),
+        codigo_gafete: generarCodigoGafete()
+      };
+    });
     try {
-      const pass = Math.random().toString(36).slice(2,10);
-      const cuenta = await crearCuentaHeadCount(r.login_base, r.hc_id, pass);
-      const codigo = generarCodigoGafete();
-      await db.collection('empleados').doc(cuenta.uid).set({
-        nombre: r.nombre, email: cuenta.email, password_texto: pass, rol: 'empleado',
-        comedor: r.comedor, puesto: r.puesto, activo: true, codigo_gafete: codigo,
-        hc_id: r.hc_id, origen: 'head_count'
+      const resultados = await crearEmpleadosHeadCountLote(lote, hoyStr);
+      resultados.forEach(function(res){
+        if(res.ok){
+          nuevosCreados.push({ nombre:res.nombre, codigo_gafete:res.codigo_gafete, puesto:res.puesto, comedor:res.comedor });
+        } else {
+          errores.push((res.nombre || res.hc_id)+': '+res.error);
+        }
       });
-      await db.collection('movimientos_headcount').add({
-        tipo:'alta', nombre:r.nombre, hc_id:r.hc_id, puesto:r.puesto, comedor:r.comedor,
-        fecha:hoyStr, motivo:'head_count_diario', creado_en:new Date()
-      });
-      nuevosCreados.push({ nombre:r.nombre, codigo_gafete:codigo, puesto:r.puesto, comedor:r.comedor });
     } catch(err){
-      console.error('Error al dar de alta', r.nombre, err);
-      if(err && err.code === 'auth/too-many-requests'){
-        detenidoPorLimite = true;
-        errores.push('Firebase pausó la creación de cuentas por volumen. Quedan '+(altas.length-i)+' pendiente(s) — vuelve a subir el mismo archivo en unos 30-60 minutos para terminarlos, sin riesgo de duplicar lo ya hecho.');
-        avanzar();
-        break;
-      }
-      errores.push(r.nombre+': '+traducirErrorAuth(err));
+      console.error('Error al llamar crearEmpleadosHeadCount:', err);
+      errores.push('No se pudo procesar un lote de '+lote.length+' altas: '+(err.message || err));
     }
-    avanzar();
-    if(!detenidoPorLimite && i < altas.length-1) await esperar(350);
+    pasoActual += lote.length;
+    bar.style.width = Math.round((pasoActual/totalPasos)*100)+'%';
   }
 
   // 2) BAJAS + ACTUALIZADOS — en lotes atómicos (máx 450 operaciones por lote)
@@ -1354,11 +1351,39 @@ window.imprimirGafetesLote = function(lista){
   win.document.close();
 };
 
+function renderResumenEmpleados(lista){
+  const cont = document.getElementById('emp-resumen');
+  if(!cont) return;
+  const total = lista.length;
+  const activos = lista.filter(e=>e.activo!==false).length;
+  const inactivos = total - activos;
+  const porComedor = { betel:0, cuauhtemoc:0, intelomas:0 };
+  lista.forEach(e=>{ if(porComedor.hasOwnProperty(e.comedor)) porComedor[e.comedor]++; });
+  const headCount = lista.filter(e=>e.origen==='head_count').length;
+
+  function tile(label, val, color){
+    return '<div style="background:var(--crema);border-radius:10px;padding:.55rem .9rem;text-align:center;min-width:88px">'+
+      '<div style="font-size:1.15rem;font-weight:800;color:'+color+'">'+val+'</div>'+
+      '<div style="font-size:.62rem;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--g2);margin-top:.1rem">'+label+'</div></div>';
+  }
+  cont.innerHTML =
+    tile('Total', total, 'var(--negro)') +
+    tile('Activos', activos, 'var(--v)') +
+    tile('Inactivos', inactivos, 'var(--rojo)') +
+    tile('Betel', porComedor.betel, 'var(--g2)') +
+    tile('Cuauhtémoc', porComedor.cuauhtemoc, 'var(--g2)') +
+    tile('Intelomas', porComedor.intelomas, 'var(--g2)') +
+    tile('Del Head Count', headCount, 'var(--naranja)');
+}
+
 async function cargarEmpleados(){
   if(unsubEmpleados)unsubEmpleados();
   unsubEmpleados=db.collection('empleados').onSnapshot(snap=>{
     document.getElementById('loading-emp').style.display='none';
     const tbody=document.getElementById('tabla-empleados');
+    const lista=[];
+    snap.forEach(d=>lista.push(Object.assign({id:d.id}, d.data())));
+    renderResumenEmpleados(lista);
     if(snap.empty){ tbody.innerHTML='<tr><td colspan="6" style="text-align:center;padding:2rem;color:var(--g3)">Sin empleados registrados</td></tr>'; return; }
     tbody.innerHTML='';
     snap.forEach(d=>{
