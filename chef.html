@@ -220,62 +220,6 @@ html,body{height:100%;overflow:hidden;font-family:'Inter',system-ui,sans-serif;b
 }
 .empty-sub{font-size:.9rem;color:var(--g2);max-width:360px;line-height:1.6}
 
-/* SCANNER INTEGRADO */
-.scanner-indicator{
-  display:flex;align-items:center;gap:.5rem;
-  font-size:.75rem;font-weight:600;
-  color:rgba(255,255,255,.7);
-}
-.scanner-dot{
-  width:8px;height:8px;border-radius:50%;
-  background:#4ade80;
-  box-shadow:0 0 6px #4ade80;
-  animation:blink 2s ease-in-out infinite;
-}
-@keyframes blink{0%,100%{opacity:1}50%{opacity:.3}}
-
-/* OVERLAY ESCANEO */
-.scan-overlay{
-  position:fixed;inset:0;z-index:400;
-  display:none;align-items:center;justify-content:center;
-  background:rgba(0,0,0,.6);backdrop-filter:blur(6px);
-}
-.scan-overlay.on{display:flex}
-.scan-card{
-  background:var(--w);border-radius:24px;
-  padding:2.5rem 2rem;width:90%;max-width:480px;
-  text-align:center;
-  animation:popIn .25s ease;
-}
-@keyframes popIn{from{transform:scale(.9);opacity:0}to{transform:scale(1);opacity:1}}
-.scan-icono{
-  width:72px;height:72px;border-radius:50%;
-  display:flex;align-items:center;justify-content:center;
-  margin:0 auto 1.25rem;
-}
-.scan-icono.ok{background:var(--v)}
-.scan-icono.error{background:#C0392B}
-.scan-icono.ya{background:var(--c)}
-.scan-titulo{
-  font-family:'Cormorant Garamond',serif;
-  font-size:1.75rem;font-weight:700;margin-bottom:.3rem;
-}
-.scan-nombre{font-size:1.1rem;font-weight:700;color:var(--negro);margin-bottom:.2rem}
-.scan-detalle{font-size:.85rem;color:var(--g2);margin-bottom:1.25rem}
-.scan-pedido{
-  background:var(--crema);border-radius:12px;
-  padding:1rem 1.25rem;text-align:left;margin-bottom:1rem;
-}
-.scan-pedido-titulo{font-size:.65rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--g3);margin-bottom:.5rem}
-.scan-platillo{font-size:.9rem;color:var(--negro);padding:.2rem 0;display:flex;align-items:center;gap:.5rem}
-.scan-platillo-dot{width:6px;height:6px;border-radius:50%;background:var(--v);flex-shrink:0}
-.scan-platillo-dot.extra{background:var(--naranja)}
-.scan-hora{
-  display:inline-flex;align-items:center;gap:.4rem;
-  background:var(--cl);color:var(--c);
-  padding:.4rem .85rem;border-radius:20px;
-  font-size:.82rem;font-weight:700;margin-top:.5rem;
-}
 </style>
 </head>
 <body>
@@ -290,10 +234,6 @@ html,body{height:100%;overflow:hidden;font-family:'Inter',system-ui,sans-serif;b
       <span class="topbar-seccion">Cocina</span>
     </div>
     <div class="topbar-right">
-      <div class="scanner-indicator">
-        <div class="scanner-dot"></div>
-        Listo para escanear
-      </div>
       <div style="text-align:right;margin-left:1rem">
         <div class="topbar-hora" id="reloj">--:--</div>
         <div class="topbar-fecha" id="fecha-top">—</div>
@@ -321,40 +261,16 @@ html,body{height:100%;overflow:hidden;font-family:'Inter',system-ui,sans-serif;b
         <span class="status-val" id="cnt-listas">0</span>
       </div>
     </div>
-    <!-- INDICADOR SCANNER -->
-    <div style="display:flex;align-items:center;gap:.6rem;background:rgba(45,80,22,.08);border:1.5px solid var(--v);border-radius:10px;padding:.4rem .85rem">
-      <div style="width:8px;height:8px;border-radius:50%;background:#4ade80;box-shadow:0 0 6px #4ade80;animation:blink 2s ease-in-out infinite"></div>
-      <span id="scan-status" style="font-size:.78rem;font-weight:600;color:var(--v)">Listo para escanear</span>
-    </div>
   </div>
 
   <!-- GRID ÓRDENES -->
   <div class="grid" id="grid"></div>
 
-  <!-- DEBUG -->
-  <div id="debug-scan" style="display:none;position:fixed;bottom:5rem;left:50%;transform:translateX(-50%);background:#000;color:#0f0;font-family:monospace;font-size:1.2rem;font-weight:700;padding:1rem 2rem;border-radius:12px;z-index:999;white-space:nowrap"></div>
 
 </div>
 
 <!-- TOAST -->
 <div class="toast" id="toast"></div>
-
-<!-- OVERLAY ESCANEO -->
-<div class="scan-overlay" id="scan-overlay">
-  <div class="scan-card">
-    <div class="scan-icono" id="scan-icono">
-      <svg id="scan-svg" viewBox="0 0 24 24" width="32" height="32" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
-    </div>
-    <div class="scan-titulo" id="scan-titulo">—</div>
-    <div class="scan-nombre" id="scan-nombre">—</div>
-    <div class="scan-detalle" id="scan-detalle">—</div>
-    <div class="scan-pedido" id="scan-pedido" style="display:none">
-      <div class="scan-pedido-titulo">Pedido</div>
-      <div id="scan-platillos"></div>
-      <div id="scan-hora-wrap"></div>
-    </div>
-  </div>
-</div>
 
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
@@ -385,170 +301,6 @@ setInterval(actualizarReloj,1000);
 let cola = [];
 let completadasLista = [];
 
-// ── SCANNER BLUETOOTH — Android Chrome ──
-// En Android, el lector BT HID necesita un input enfocado
-// readonly evita el teclado táctil pero permite recibir del lector físico
-const scanInput = document.createElement('input');
-scanInput.type = 'text';
-scanInput.readOnly = true;
-scanInput.style.cssText = 'position:fixed;top:0;left:0;width:1px;height:1px;opacity:0;pointer-events:none';
-document.body.appendChild(scanInput);
-
-// Enfocar sin mostrar teclado
-function enfocarScanner() {
-  scanInput.readOnly = false;
-  scanInput.focus();
-  scanInput.readOnly = true;
-}
-enfocarScanner();
-setInterval(enfocarScanner, 1500);
-
-let scanBuffer = '';
-let scanTimer = null;
-
-function procesarBuffer() {
-  let code = scanBuffer.toUpperCase().trim();
-  // Fix COM-598: duplica cada carácter (EEMMPP8888 → EMP88)
-  let dedup = '';
-  for (let i = 0; i < code.length; i += 2) {
-    dedup += code[i];
-  }
-  scanBuffer = '';
-  document.getElementById('scan-status').textContent = dedup || 'Listo para escanear';
-  setTimeout(() => {
-    document.getElementById('scan-status').textContent = 'Listo para escanear';
-  }, 3000);
-  if (dedup.length > 3) procesarScan(dedup);
-}
-
-document.addEventListener('keypress', e => {
-  if (e.key === 'Enter') { clearTimeout(scanTimer); procesarBuffer(); return; }
-  scanBuffer += e.key;
-  // Mostrar deduplicado en tiempo real
-  let preview = '';
-  const raw = scanBuffer.toUpperCase();
-  for (let i = 0; i < raw.length; i += 2) preview += raw[i];
-  document.getElementById('scan-status').textContent = preview || 'Listo para escanear';
-  clearTimeout(scanTimer);
-  scanTimer = setTimeout(procesarBuffer, 800);
-});
-
-scanInput.addEventListener('keypress', e => {
-  if (e.key === 'Enter') { clearTimeout(scanTimer); procesarBuffer(); return; }
-  scanBuffer += e.key;
-  let preview = '';
-  const raw = scanBuffer.toUpperCase();
-  for (let i = 0; i < raw.length; i += 2) preview += raw[i];
-  document.getElementById('scan-status').textContent = preview || 'Listo para escanear';
-  clearTimeout(scanTimer);
-  scanTimer = setTimeout(procesarBuffer, 800);
-});
-
-scanInput.addEventListener('input', () => {
-  const val = scanInput.value;
-  scanInput.value = '';
-  if (val) {
-    scanBuffer += val;
-    let preview = '';
-    const raw = scanBuffer.toUpperCase();
-    for (let i = 0; i < raw.length; i += 2) preview += raw[i];
-    document.getElementById('scan-status').textContent = preview || 'Listo para escanear';
-    clearTimeout(scanTimer);
-    scanTimer = setTimeout(procesarBuffer, 800);
-  }
-});
-
-async function procesarScan(code) {
-  document.getElementById('debug-scan').textContent = 'Código: ' + code;
-  document.getElementById('debug-scan').style.display = 'block';
-
-  // Buscar empleado por código de gafete — API compat directa
-  const empSnap = await db.collection('empleados').where('codigo_gafete','==',code).get();
-
-  if (empSnap.empty) {
-    mostrarScanOverlay('error','Gafete inválido','','No se encontró ningún empleado con este código');
-    return;
-  }
-
-  const empDoc = empSnap.docs[0];
-  const emp = empDoc.data();
-
-  // Buscar órdenes del empleado y filtrar por fecha local
-  const ordSnap = await db.collection('ordenes').where('empleado_uid','==',empDoc.id).get();
-  const ordenes = [];
-  const fechaHoy = hoy();
-  ordSnap.forEach(d => {
-    const data = d.data();
-    if (data.fecha === fechaHoy && data.estado !== 'cancelado') ordenes.push({id:d.id,...data});
-  });
-
-  if (!ordenes.length) {
-    mostrarScanOverlay('error','Sin orden hoy', emp.nombre,'Este empleado no tiene ninguna orden para hoy');
-    return;
-  }
-
-  const orden = ordenes[0];
-
-  if (orden.escaneado) {
-    mostrarScanOverlay('ya','Ya escaneado', emp.nombre,'Este empleado ya pasó por el comedor hoy');
-    return;
-  }
-
-  await db.collection('ordenes').doc(orden.id).update({ escaneado:true, escaneado_en:new Date() });
-
-  mostrarScanOverlay(
-    'ok','¡Bienvenido!', emp.nombre,
-    orden.hora_preorden ? 'Tu comida está siendo preparada para las '+orden.hora_preorden : 'Pasando a cocina ahora',
-    orden.platillos||[], orden.extras||[], orden.hora_preorden||null
-  );
-}
-
-function mostrarScanOverlay(tipo, titulo, nombre, detalle, platillos=[], extras=[], hora=null) {
-  const overlay = document.getElementById('scan-overlay');
-  const icono   = document.getElementById('scan-icono');
-  const svg     = document.getElementById('scan-svg');
-  document.getElementById('scan-titulo').textContent  = titulo;
-  document.getElementById('scan-nombre').textContent  = nombre;
-  document.getElementById('scan-detalle').textContent = detalle;
-
-  icono.className = 'scan-icono ' + tipo;
-  if (tipo === 'ok') {
-    svg.innerHTML = '<polyline points="20 6 9 17 4 12"/>';
-  } else if (tipo === 'error') {
-    svg.innerHTML = '<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>';
-  } else {
-    svg.innerHTML = '<circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>';
-  }
-
-  const pedidoWrap = document.getElementById('scan-pedido');
-  if (tipo === 'ok' && (platillos.length || extras.length)) {
-    pedidoWrap.style.display = 'block';
-    document.getElementById('scan-platillos').innerHTML =
-      platillos.map(p => `<div class="scan-platillo"><div class="scan-platillo-dot"></div>${p}</div>`).join('') +
-      (extras||[]).map(e => `<div class="scan-platillo"><div class="scan-platillo-dot extra"></div>${typeof e==='string'?e:(e.nombre+' (+$'+e.precio+')')}</div>`).join('');
-    const horaWrap = document.getElementById('scan-hora-wrap');
-    horaWrap.innerHTML = hora ? `<div class="scan-hora"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>Lista a las ${hora}</div>` : '';
-  } else {
-    pedidoWrap.style.display = 'none';
-  }
-
-  overlay.classList.add('on');
-  // Cerrar automáticamente
-  clearTimeout(overlay._t);
-  overlay._t = setTimeout(() => {
-    overlay.classList.remove('on');
-    mantenerFoco();
-    render();
-  }, tipo === 'ok' ? 4000 : 2500);
-}
-
-// Cerrar overlay al tocar
-document.getElementById('scan-overlay').addEventListener('click', () => {
-  document.getElementById('scan-overlay').classList.remove('on');
-  mantenerFoco();
-  render();
-});
-
 // ── LISTENER FIRESTORE EN TIEMPO REAL ──
 let _unsubOrdenes = null;
 function suscribirOrdenes() {
@@ -561,14 +313,14 @@ function suscribirOrdenes() {
       // Filtrar por comedor en cliente
       if (data.comedor === _comedor) todasHoy.push({ id: d.id, ...data });
     });
-    todasHoy.sort((a,b) => (a.creado_en?.toMillis?.()||0) - (b.creado_en?.toMillis?.()||0));
-
-    const totalPreordenes = todasHoy.filter(o => o.hora_preorden && o.estado !== 'lista' && o.estado !== 'cancelado').length;
+    // FIFO por hora de escaneo — sea pre-orden o no, ninguna orden entra a cocina
+    // hasta que el empleado escanea su gafete. La pre-orden solo sirve para elegir
+    // el menú con anticipación; el gafete es lo único que dispara la preparación.
+    todasHoy.sort((a,b) => (a.escaneado_en?.toMillis?.()||a.creado_en?.toMillis?.()||0) - (b.escaneado_en?.toMillis?.()||b.creado_en?.toMillis?.()||0));
 
     const nuevasCola = todasHoy.filter(o => {
       if (o.estado === 'lista' || o.estado === 'cancelado') return false;
-      if (!o.hora_preorden) return o.escaneado;
-      return horaAlcanzada(o.hora_preorden, totalPreordenes);
+      return !!o.escaneado;
     });
 
     // Detectar órdenes nuevas para toast
@@ -588,28 +340,6 @@ function suscribirOrdenes() {
     cola = nuevasCola;
     render();
   });
-}
-
-function horaEnMin(horaStr) {
-  if (!horaStr) return 9999;
-  const p = horaStr.replace(' pm','').replace(' am','').split(':');
-  let h = parseInt(p[0]), m = parseInt(p[1]||0);
-  if (horaStr.includes('pm') && h !== 12) h += 12;
-  return h * 60 + m;
-}
-
-// Verificar si la hora de pre-orden ya llegó con anticipación dinámica
-function horaAlcanzada(horaStr, totalPreordenes) {
-  if (!horaStr) return false;
-  const p = horaStr.replace(' pm','').replace(' am','').split(':');
-  let h = parseInt(p[0]), m = parseInt(p[1]||0);
-  if (horaStr.includes('pm') && h !== 12) h += 12;
-  const ahora = new Date();
-  const obj = new Date(ahora.getFullYear(), ahora.getMonth(), ahora.getDate(), h, m, 0);
-  // 1-5 → 10 min, 6-10 → 15 min, 11-15 → 20 min, etc.
-  const anticipacion = 10 + (Math.floor((totalPreordenes - 1) / 5) * 5);
-  const objConAnticipacion = new Date(obj.getTime() - anticipacion * 60000);
-  return ahora >= objConAnticipacion;
 }
 
 // ── MARCAR LISTA ──
@@ -643,31 +373,13 @@ function fmtEspera(ts) {
   if(min===1)return'Hace 1 min';
   return'Hace '+min+' min';
 }
-function cuentaRegresiva(horaStr){
-  if(!horaStr)return null;
-  const p=horaStr.replace(' pm','').replace(' am','').split(':');
-  let h=parseInt(p[0]),m=parseInt(p[1]||0);
-  if(horaStr.includes('pm')&&h!==12)h+=12;
-  const ahora=new Date(),obj=new Date(ahora.getFullYear(),ahora.getMonth(),ahora.getDate(),h,m,0);
-  const diff=Math.floor((obj-ahora)/60000);
-  if(diff<0)return'Ya pasó la hora';
-  if(diff===0)return'¡Ahora!';
-  if(diff<60)return'Faltan '+diff+' min';
-  return'Faltan '+Math.floor(diff/60)+'h '+(diff%60)+'min';
-}
-
 // ── RENDER ──
 function render(){
   const grid = document.getElementById('grid');
   grid.innerHTML = '';
 
-  // Separar y ordenar
-  const preords  = cola.filter(o => !!o.hora_preorden)
-                       .sort((a,b) => horaEnMin(a.hora_preorden) - horaEnMin(b.hora_preorden));
-  const normales = cola.filter(o => !o.hora_preorden);
-
-  document.getElementById('cnt-activa').textContent  = normales.length > 0 ? '1' : preords.length > 0 ? '1' : '0';
-  document.getElementById('cnt-espera').textContent  = Math.max(0, normales.length-1) + preords.length;
+  document.getElementById('cnt-activa').textContent  = cola.length > 0 ? '1' : '0';
+  document.getElementById('cnt-espera').textContent  = Math.max(0, cola.length-1);
   document.getElementById('cnt-listas').textContent  = completadasLista.length;
 
   if (cola.length === 0 && completadasLista.length === 0) {
@@ -676,27 +388,24 @@ function render(){
     grid.appendChild(e); return;
   }
 
-  // Primero pre-órdenes (por hora), luego normales (FIFO)
-  const ordenFinal = [...preords, ...normales];
-
-  ordenFinal.forEach((o, i) => {
+  // FIFO único por orden de escaneo — con pre-orden o sin ella, todas se preparan
+  // en el orden en que el empleado escaneó su gafete, como cualquier otro día.
+  cola.forEach((o, i) => {
     const esPreorden = !!o.hora_preorden;
-    // La primera normal es la activa — pre-órdenes siempre activas
-    const esActiva = esPreorden || (!esPreorden && normales[0]?.id === o.id);
-    const bloqueada = !esPreorden && !esActiva;
+    const esActiva = i === 0;
+    const bloqueada = !esActiva;
 
     const card = document.createElement('div');
-    card.className = 'orden-card' + (esActiva && !bloqueada ? (esPreorden ? '' : ' activa') : (bloqueada ? ' bloqueada' : ''));
-    if (esPreorden) card.style.cssText += 'border:2px solid var(--c)!important;animation:none!important;opacity:1!important;pointer-events:auto!important;filter:none!important;box-shadow:0 4px 20px rgba(74,25,66,.15)!important';
+    card.className = 'orden-card' + (esActiva ? ' activa' : ' bloqueada');
+    if (esPreorden) card.style.cssText += 'border-left:3px solid var(--c)!important';
 
-    const headBg = esPreorden ? 'var(--c)' : 'var(--v)';
-    const badge = esPreorden
-      ? '<span class="card-badge" style="background:rgba(255,255,255,.2);color:white">⏰ Pre-orden</span>'
-      : esActiva
-        ? '<span class="card-badge activa">Preparando</span>'
-        : '<span class="card-badge espera">#'+(normales.indexOf(o)+1)+' en cola</span>';
+    const headBg = 'var(--v)';
+    const badge = esActiva
+      ? '<span class="card-badge activa">Preparando</span>'
+      : '<span class="card-badge espera">#'+(i+1)+' en cola</span>';
+    const preordenTag = esPreorden ? '<span class="card-badge" style="background:rgba(255,255,255,.2);color:white;margin-left:.35rem">⏰ Pre-orden</span>' : '';
 
-    const tiempoTxt = esPreorden ? 'Lista para las '+o.hora_preorden : (esActiva ? 'Preparando ahora' : 'En espera');
+    const tiempoTxt = esActiva ? 'Preparando ahora' : 'En espera';
     const plHTML = (o.platillos||[]).map(p => '<div class="platillo"><div class="platillo-dot"></div>'+p+'</div>').join('');
     let exHTML = '';
     if ((o.extras||[]).length) {
@@ -705,25 +414,18 @@ function render(){
         + '</div>';
     }
 
-    let timerHTML = '';
-    if (esPreorden) {
-      const cr = cuentaRegresiva(o.hora_preorden);
-      const urg = cr && cr.includes('Faltan') && parseInt(cr.replace(/[^0-9]/g,'')) < 15;
-      timerHTML = '<div class="timer-bar" style="background:'+(urg?'var(--naranjal)':'var(--cl)')+';color:'+(urg?'var(--naranja)':'var(--c)')+'"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>Lista para las <strong>'+o.hora_preorden+'</strong> &nbsp;·&nbsp; '+cr+'</div>';
-    } else {
-      timerHTML = '<div class="timer-bar"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>Llegó '+fmtEspera(o.creado_en)+'</div>';
-    }
+    const timerHTML = '<div class="timer-bar"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>Escaneó '+fmtEspera(o.escaneado_en)+'</div>';
 
-    // Botón: activa normal + todas las pre-órdenes
-    const footHTML = (!bloqueada)
-      ? '<div class="card-foot"><button class="btn-lista" data-id="'+o.id+'" style="background:'+(esPreorden?'var(--c)':'var(--v)')+'"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>Marcar como lista</button></div>'
+    // Botón "marcar como lista" solo para la orden activa — se prepara una a la vez
+    const footHTML = esActiva
+      ? '<div class="card-foot"><button class="btn-lista" data-id="'+o.id+'" style="background:var(--v)"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>Marcar como lista</button></div>'
       : '';
 
     card.innerHTML =
       '<div class="card-head" style="background:'+headBg+'">'
         +'<div class="card-num-wrap"><div class="card-num">'+(i+1)+'</div>'
         +'<div><div class="card-empleado">'+(o.empleado_nombre||'—').split(' ').slice(0,2).join(' ')+'</div>'
-        +'<div class="card-tiempo">'+tiempoTxt+'</div></div></div>'+badge
+        +'<div class="card-tiempo">'+tiempoTxt+'</div></div></div>'+badge+preordenTag
       +'</div>'
       +'<div class="card-body">'
         +'<div style="background:var(--vl2);border-radius:8px;padding:.5rem .75rem;margin-bottom:.25rem">'
