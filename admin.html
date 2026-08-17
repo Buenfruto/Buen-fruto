@@ -378,19 +378,19 @@ input[type=file]{display:none}
         <div class="sec-sub">Gestiona el directorio de empleados. Sube un CSV o agrega uno por uno.</div>
 
         <div class="card">
-          <div class="card-head"><span class="card-titulo">Subir empleados por CSV</span></div>
+          <div class="card-head"><span class="card-titulo">Subir empleados por CSV o Excel</span></div>
           <div class="card-body">
-            <p style="font-size:.82rem;color:var(--g2);margin-bottom:1rem">El CSV debe tener columnas: <strong>nombre, email, password</strong></p>
+            <p style="font-size:.82rem;color:var(--g2);margin-bottom:1rem">Columnas requeridas: <strong>nombre, email, password</strong>. Opcionales: puesto, comedor, rol.</p>
             <div class="drop-area" id="drop-area" onclick="document.getElementById('csv-input').click()">
               <div class="drop-icon">
                 <svg viewBox="0 0 24 24" fill="none" stroke="var(--g3)" stroke-width="1.5" stroke-linecap="round">
                   <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="12" x2="12" y2="18"/><polyline points="9 15 12 18 15 15"/>
                 </svg>
               </div>
-              <div class="drop-txt">Arrastra tu CSV aquí o haz clic para seleccionar</div>
-              <div class="drop-sub">nombre, email, password</div>
+              <div class="drop-txt">Arrastra tu archivo CSV o Excel aquí o haz clic para seleccionar</div>
+              <div class="drop-sub">nombre, email, password (.csv, .xlsx, .xls)</div>
             </div>
-            <input type="file" id="csv-input" accept=".csv"/>
+            <input type="file" id="csv-input" accept=".csv,.xlsx,.xls"/>
             <div id="csv-preview" style="display:none;margin-top:1rem">
               <div style="font-size:.82rem;font-weight:600;color:var(--negro);margin-bottom:.5rem" id="csv-info">—</div>
               <div class="progreso-wrap" id="progreso-wrap" style="display:none"><div class="progreso-bar" id="progreso-bar" style="width:0%"></div></div>
@@ -536,6 +536,7 @@ input[type=file]{display:none}
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
 <script src="fb-compat.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script>
 const cfg = {
   apiKey:"AIzaSyDFOypq8OfX1QmZpoZAdsXmqKYauswBjes",
@@ -544,6 +545,34 @@ const cfg = {
   messagingSenderId:"931992831636",
   appId:"1:931992831636:web:65ee6652748f6418dc9681"
 };
+
+// ── APP SECUNDARIA DE FIREBASE ──
+// Crear un empleado registra una cuenta nueva en Firebase Auth. Si usáramos el
+// "auth" principal para eso, la sesión del admin se cerraría (Firebase Auth solo
+// mantiene una sesión activa a la vez por instancia). Por eso usamos una app de
+// Firebase secundaria y aislada, solo para crear cuentas, y luego cerramos su sesión.
+function getAppSecundaria(){
+  try { return firebase.app('Secundaria'); }
+  catch(e){ return firebase.initializeApp(cfg, 'Secundaria'); }
+}
+async function crearEmpleadoAuth(email, pass){
+  const appSec = getAppSecundaria();
+  const authSec = appSec.auth();
+  const cred = await authSec.createUserWithEmailAndPassword(email, pass);
+  const uid = cred.user.uid;
+  await authSec.signOut();
+  return uid;
+}
+function traducirErrorAuth(err){
+  const code = (err && err.code) || '';
+  const mapa = {
+    'auth/email-already-in-use': 'Ese correo ya está registrado.',
+    'auth/invalid-email': 'El correo no es válido.',
+    'auth/weak-password': 'La contraseña debe tener al menos 6 caracteres.',
+    'auth/network-request-failed': 'Error de conexión. Intenta de nuevo.'
+  };
+  return mapa[code] || (err && err.message) || 'Ocurrió un error inesperado.';
+}
 
 const DS = ['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'];
 const MS2 = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
@@ -590,6 +619,27 @@ document.addEventListener('DOMContentLoaded', function(){
     await signOut(auth);
     window.location.href='index.html';
   });
+
+  // Modal de agregar empleado
+  document.getElementById('btn-guardar-emp').addEventListener('click', guardarNuevoEmpleado);
+
+  // Importar empleados por CSV / Excel
+  document.getElementById('csv-input').addEventListener('change', function(e){
+    if(e.target.files && e.target.files[0]) procesarArchivoEmpleados(e.target.files[0]);
+  });
+  document.getElementById('btn-importar').addEventListener('click', importarEmpleadosCSV);
+  const dropArea = document.getElementById('drop-area');
+  ['dragover','dragenter'].forEach(function(evt){
+    dropArea.addEventListener(evt, function(e){ e.preventDefault(); e.stopPropagation(); dropArea.classList.add('drag'); });
+  });
+  ['dragleave','dragend'].forEach(function(evt){
+    dropArea.addEventListener(evt, function(e){ e.preventDefault(); e.stopPropagation(); dropArea.classList.remove('drag'); });
+  });
+  dropArea.addEventListener('drop', function(e){
+    e.preventDefault(); e.stopPropagation();
+    dropArea.classList.remove('drag');
+    if(e.dataTransfer.files && e.dataTransfer.files[0]) procesarArchivoEmpleados(e.dataTransfer.files[0]);
+  });
 });
 
 // ── INICIAR ──
@@ -597,6 +647,7 @@ function iniciarAdmin(){
   document.getElementById('admin-nombre').textContent=perfil.nombre||perfil.email;
   const ahora=new Date();
   document.getElementById('topbar-fecha').textContent=DS[ahora.getDay()]+' '+ahora.getDate()+' de '+MF[ahora.getMonth()];
+  limpiarOrdenesNoEscaneadas();
   cargarDashboard();
   cargarEmpleados();
   initMenuEditor();
@@ -681,6 +732,177 @@ function generarCodigoGafete() {
   return 'EMP' + num;
 }
 
+// ── IMPORTAR EMPLEADOS (CSV / EXCEL) ──
+function normalizarComedor(v){
+  if(!v) return 'betel';
+  const s = String(v).trim().toLowerCase();
+  if(s.indexOf('cuau')>=0) return 'cuauhtemoc';
+  if(s.indexOf('intel')>=0) return 'intelomas';
+  return 'betel';
+}
+function normalizarRol(v){
+  if(!v) return 'empleado';
+  const s = String(v).trim().toLowerCase();
+  if(s.indexOf('admin')>=0) return 'admin';
+  if(s.indexOf('chef')>=0) return 'chef';
+  return 'empleado';
+}
+function quitarAcentos(s){
+  return String(s||'').normalize('NFD').replace(/[̀-ͯ]/g,'');
+}
+function buscarCol(headers, candidatos){
+  for(let i=0;i<headers.length;i++){
+    const h = quitarAcentos(headers[i]).trim().toLowerCase();
+    if(candidatos.indexOf(h)>=0) return i;
+  }
+  return -1;
+}
+function filasARegistros(filas){
+  if(!filas || !filas.length) return [];
+  const headers = filas[0];
+  const iNombre = buscarCol(headers, ['nombre','name','nombre completo']);
+  const iEmail = buscarCol(headers, ['email','correo','correo electronico','e-mail']);
+  const iPass = buscarCol(headers, ['password','contrasena','clave']);
+  const iPuesto = buscarCol(headers, ['puesto','cargo','posicion']);
+  const iComedor = buscarCol(headers, ['comedor','centro','sede']);
+  const iRol = buscarCol(headers, ['rol','role']);
+  const registros = [];
+  for(let r=1;r<filas.length;r++){
+    const fila = filas[r];
+    if(!fila || !fila.length) continue;
+    const val = function(idx){ return idx>=0 && fila[idx]!==undefined && fila[idx]!==null ? String(fila[idx]).trim() : ''; };
+    const nombre = val(iNombre), email = val(iEmail), pass = val(iPass);
+    if(!nombre && !email) continue;
+    registros.push({
+      nombre: nombre,
+      email: email,
+      password: pass,
+      puesto: val(iPuesto),
+      comedor: normalizarComedor(val(iComedor)),
+      rol: normalizarRol(val(iRol))
+    });
+  }
+  return registros;
+}
+function parseCSVTexto(texto){
+  const filas = [];
+  let fila = [], campo = '', enComillas = false;
+  for(let i=0;i<texto.length;i++){
+    const c = texto[i];
+    if(enComillas){
+      if(c === '"'){ if(texto[i+1] === '"'){ campo += '"'; i++; } else enComillas = false; }
+      else campo += c;
+    } else {
+      if(c === '"') enComillas = true;
+      else if(c === ','){ fila.push(campo); campo=''; }
+      else if(c === '\n'){ fila.push(campo); filas.push(fila); fila=[]; campo=''; }
+      else if(c === '\r'){ /* ignorar */ }
+      else campo += c;
+    }
+  }
+  if(campo.length || fila.length){ fila.push(campo); filas.push(fila); }
+  return filas.filter(function(f){ return f.some(function(c){ return String(c).trim()!==''; }); });
+}
+function mostrarPreviewCSV(){
+  const info = document.getElementById('csv-info');
+  const preview = document.getElementById('csv-preview');
+  const msg = document.getElementById('csv-msg');
+  msg.style.display='none';
+  const registros = csvData.filter(function(r){ return r.nombre && r.email; });
+  if(!csvData.length || !registros.length){
+    info.textContent = 'No se encontraron filas válidas. Verifica que el archivo tenga columnas nombre, email y password.';
+    preview.style.display='block';
+    document.getElementById('btn-importar').style.display='none';
+    return;
+  }
+  document.getElementById('btn-importar').style.display='inline-flex';
+  const incompletos = csvData.length - registros.length;
+  info.textContent = registros.length + ' empleado(s) listos para importar' + (incompletos ? ' ('+incompletos+' fila(s) con datos incompletos serán omitidas)' : '') + '.';
+  preview.style.display='block';
+}
+function procesarArchivoEmpleados(file){
+  const msg = document.getElementById('csv-msg');
+  msg.style.display='none';
+  const nombre = file.name.toLowerCase();
+  const esExcel = nombre.endsWith('.xlsx') || nombre.endsWith('.xls');
+  const reader = new FileReader();
+  reader.onload = function(e){
+    try {
+      let filas;
+      if(esExcel){
+        const wb = XLSX.read(new Uint8Array(e.target.result), {type:'array'});
+        const hoja = wb.Sheets[wb.SheetNames[0]];
+        filas = XLSX.utils.sheet_to_json(hoja, {header:1, defval:''});
+      } else {
+        filas = parseCSVTexto(String(e.target.result));
+      }
+      csvData = filasARegistros(filas);
+      mostrarPreviewCSV();
+    } catch(err){
+      console.error('Error al leer archivo de empleados:', err);
+      msg.textContent = 'No se pudo leer el archivo. Verifica que sea un CSV o Excel válido.';
+      msg.className = 'msg err';
+      msg.style.display='block';
+    }
+  };
+  if(esExcel) reader.readAsArrayBuffer(file);
+  else reader.readAsText(file, 'UTF-8');
+}
+window.cancelarCSV=function(){
+  csvData = [];
+  document.getElementById('csv-input').value = '';
+  document.getElementById('csv-preview').style.display='none';
+  document.getElementById('progreso-wrap').style.display='none';
+  document.getElementById('progreso-bar').style.width='0%';
+  const msg = document.getElementById('csv-msg');
+  msg.style.display='none'; msg.textContent=''; msg.className='msg';
+};
+async function importarEmpleadosCSV(){
+  const registros = csvData.filter(function(r){ return r.nombre && r.email; });
+  if(!registros.length) return;
+  const btn = document.getElementById('btn-importar');
+  const wrap = document.getElementById('progreso-wrap');
+  const bar = document.getElementById('progreso-bar');
+  const msg = document.getElementById('csv-msg');
+  btn.disabled = true;
+  wrap.style.display='block';
+  msg.style.display='none';
+  let ok = 0;
+  const errores = [];
+  for(let i=0;i<registros.length;i++){
+    const r = registros[i];
+    const pass = r.password && r.password.length>=6 ? r.password : Math.random().toString(36).slice(2,10);
+    try {
+      const uid = await crearEmpleadoAuth(r.email, pass);
+      await db.collection('empleados').doc(uid).set({
+        nombre: r.nombre,
+        email: r.email,
+        password_texto: pass,
+        rol: r.rol || 'empleado',
+        comedor: r.comedor || 'betel',
+        puesto: r.puesto || 'Empleado',
+        activo: true,
+        codigo_gafete: generarCodigoGafete()
+      });
+      ok++;
+    } catch(err){
+      console.error('Error al importar empleado', r.email, err);
+      errores.push(r.email + ': ' + traducirErrorAuth(err));
+    }
+    bar.style.width = Math.round(((i+1)/registros.length)*100) + '%';
+  }
+  btn.disabled = false;
+  msg.style.display='block';
+  if(errores.length){
+    msg.className = 'msg err';
+    msg.textContent = ok + ' importado(s) correctamente. ' + errores.length + ' fallaron: ' + errores.slice(0,5).join(' | ') + (errores.length>5 ? ' …' : '');
+  } else {
+    msg.className = 'msg ok';
+    msg.textContent = ok + ' empleado(s) importado(s) correctamente.';
+  }
+  setTimeout(function(){ window.cancelarCSV(); }, errores.length ? 7000 : 2500);
+}
+
 async function cargarEmpleados(){
   if(unsubEmpleados)unsubEmpleados();
   unsubEmpleados=db.collection('empleados').onSnapshot(snap=>{
@@ -713,6 +935,71 @@ window.eliminarEmpleado=async function(uid, nombre){
   if(!confirm('¿Eliminar a '+nombre+'? Esto no se puede deshacer.'))return;
   await deleteDoc(doc(db,'empleados',uid));
 };
+
+window.toggleActivo=async function(uid, activoActual){
+  try {
+    await updateDoc(doc(db,'empleados',uid), { activo: !activoActual });
+  } catch(e) {
+    console.error('Error al cambiar estado de empleado:', e);
+    alert('No se pudo actualizar el estado del empleado.');
+  }
+};
+
+// ── MODAL AGREGAR EMPLEADO ──
+window.mostrarModalEmpleado=function(){
+  document.getElementById('modal-emp-titulo').textContent='Nuevo empleado';
+  document.getElementById('emp-nombre').value='';
+  document.getElementById('emp-email').value='';
+  document.getElementById('emp-pass').value='';
+  document.getElementById('emp-puesto').value='';
+  document.getElementById('emp-comedor').value='betel';
+  document.getElementById('emp-rol').value='empleado';
+  const msg=document.getElementById('emp-msg');
+  msg.style.display='none'; msg.className='msg'; msg.textContent='';
+  const btn=document.getElementById('btn-guardar-emp');
+  btn.disabled=false; btn.textContent='Guardar';
+  document.getElementById('modal-emp').style.display='flex';
+};
+window.cerrarModalEmp=function(){
+  document.getElementById('modal-emp').style.display='none';
+};
+
+async function guardarNuevoEmpleado(){
+  const nombre = document.getElementById('emp-nombre').value.trim();
+  const email = document.getElementById('emp-email').value.trim();
+  const pass = document.getElementById('emp-pass').value;
+  const puesto = document.getElementById('emp-puesto').value.trim();
+  const comedor = document.getElementById('emp-comedor').value;
+  const rol = document.getElementById('emp-rol').value;
+  const msg = document.getElementById('emp-msg');
+  function mostrarMsg(txt, ok){
+    msg.textContent=txt; msg.className='msg '+(ok?'ok':'err'); msg.style.display='block';
+  }
+  if(!nombre || !email || !pass){ mostrarMsg('Completa nombre, correo y contraseña.', false); return; }
+  if(pass.length < 6){ mostrarMsg('La contraseña debe tener al menos 6 caracteres.', false); return; }
+  const btn = document.getElementById('btn-guardar-emp');
+  btn.disabled = true; btn.textContent = 'Guardando...';
+  try {
+    const uid = await crearEmpleadoAuth(email, pass);
+    await db.collection('empleados').doc(uid).set({
+      nombre: nombre,
+      email: email,
+      password_texto: pass,
+      rol: rol,
+      comedor: comedor,
+      puesto: puesto || 'Empleado',
+      activo: true,
+      codigo_gafete: generarCodigoGafete()
+    });
+    mostrarMsg('Empleado creado correctamente.', true);
+    setTimeout(function(){ document.getElementById('modal-emp').style.display='none'; }, 900);
+  } catch(e) {
+    console.error('Error al crear empleado:', e);
+    mostrarMsg(traducirErrorAuth(e), false);
+  } finally {
+    btn.disabled = false; btn.textContent = 'Guardar';
+  }
+}
 
 window.imprimirGafete=function(uid, nombre, codigo, puesto, comedor){
   var iniciales = nombre.split(' ').map(function(x){return x[0];}).slice(0,2).join('').toUpperCase();
@@ -772,6 +1059,33 @@ window.cancelarOrdenAdmin=async function(id){
   if(!confirm('¿Cancelar esta orden? El empleado podrá volver a pedir.'))return;
   await updateDoc(doc(db,'ordenes',id),{estado:'cancelado',escaneado:false,cancelado_en:new Date()});
 };
+
+// ── AUTO-CANCELAR ÓRDENES NO ESCANEADAS (días ya cerrados) ──
+// Regla de negocio: si el empleado no escaneó su gafete, esa comida nunca se cobra.
+// Se le da oportunidad de escanear hasta que el día termine; una vez que el día
+// ya pasó y sigue sin escanear, se marca como cancelada igual que una cancelación
+// manual — automáticamente deja de contar en Dashboard, Reportes y el historial
+// del empleado, porque todos esos ya excluyen estado==='cancelado'.
+async function limpiarOrdenesNoEscaneadas(){
+  try {
+    const hoyStr = hoy();
+    const snap = await db.collection('ordenes').where('escaneado','==',false).get();
+    const pendientes = [];
+    snap.forEach(d=>{
+      const o = d.data();
+      if(o.estado !== 'cancelado' && o.fecha < hoyStr) pendientes.push(d.ref);
+    });
+    if(!pendientes.length) return;
+    const batch = db.batch();
+    pendientes.forEach(ref=>{
+      batch.update(ref, { estado:'cancelado', cancelado_en:new Date(), motivo_cancelacion:'no_escaneado' });
+    });
+    await batch.commit();
+    console.log('[BuenFruto] '+pendientes.length+' orden(es) sin escanear de días pasados marcadas como canceladas (no cobradas).');
+  } catch(e) {
+    console.error('Error al limpiar órdenes sin escanear:', e);
+  }
+}
 
 // ── REPORTE ──
 let _reporteRaw = [];
