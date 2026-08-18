@@ -2269,20 +2269,40 @@ function agregarOrdenesPorEmpleado(docs, comedorFiltro){
   (docs||[]).forEach(o=>{
     if(o.estado === 'cancelado') return;
     if(comedorFiltro !== 'todos' && o.comedor !== comedorFiltro) return;
-    if(!porEmp[o.empleado_uid]) porEmp[o.empleado_uid] = { nombre: o.empleado_nombre||'—', iniciales: (o.empleado_nombre||'??').split(' ').map(x=>x[0]).slice(0,2).join(''), dias:[] };
-    const extras = (o.extras||[]).map(e=>typeof e==='string'?e:(e.nombre+' $'+e.precio)).join(', ');
+    if(!porEmp[o.empleado_uid]) porEmp[o.empleado_uid] = { uid: o.empleado_uid, nombre: o.empleado_nombre||'—', iniciales: (o.empleado_nombre||'??').split(' ').map(x=>x[0]).slice(0,2).join(''), dias:[] };
+    // Extras se separa en nombres (texto) y costo (numérico) en vez de un
+    // solo string combinado — así el reporte puede tener una columna
+    // "Extras" y otra "Costo extras" por separado.
+    const extrasTexto = (o.extras||[]).map(e=>typeof e==='string'?e:e.nombre).join(', ');
+    const costoExtras = (o.extras||[]).reduce((s,e)=>s+(typeof e==='string'?0:(Number(e.precio)||0)), 0);
     const subsidio = 45;
     const pagoEmp = Number(o.cargo) || 0; // blindaje: un dato mal formado nunca debe volverse "$NaN.00" en el total
     porEmp[o.empleado_uid].dias.push({
       fecha: o.fecha,
       platillos: (o.platillos||[]).join(', ')||'—',
-      extras: extras||'—',
+      extras: extrasTexto||'—',
+      costo_extras: costoExtras,
       pago_empleado: pagoEmp,
       subsidio_empresa: subsidio,
       total_dia: pagoEmp + subsidio
     });
   });
-  return Object.values(porEmp);
+  const lista = Object.values(porEmp);
+  // ID B360 real del Head Count (o el código de gafete si no vino de Head
+  // Count) — se busca en el padrón de empleados vivo, por uid.
+  lista.forEach(function(emp){ emp.id_empleado = buscarIdEmpleado(emp.uid); });
+  return lista;
+}
+
+// Busca el ID B360 (o ID Plata / login, lo que se haya guardado como hc_id
+// al importar el Head Count) de un empleado por su uid. Si el empleado no
+// vino de Head Count usa su código de gafete como respaldo, y si ya no
+// existe en el padrón (por ejemplo, se dio de baja y se borró) muestra "—".
+function buscarIdEmpleado(uid){
+  if (!uid) return '—';
+  const e = _empleadosListaCache.find(function(x){ return x.id === uid; });
+  if (!e) return '—';
+  return e.hc_id || e.codigo_gafete || '—';
 }
 
 // Si el empleado tuvo una alta o baja de Head Count registrada dentro del
@@ -2604,6 +2624,7 @@ function renderizarReporte(){
     const bg = color+'18';
     const mov = indicativoMovimiento(emp.nombre, _repMovDocs);
     const movBadge = mov ? `<span style="display:inline-block;margin-left:.5rem;font-size:.65rem;font-weight:700;padding:.15rem .55rem;border-radius:20px;background:${mov.tipo==='alta'?'var(--vl)':'var(--rojol)'};color:${mov.tipo==='alta'?'var(--v)':'var(--rojo)'}">${mov.texto}</span>` : '';
+    const idBadge = `<span style="display:inline-block;margin-left:.5rem;font-size:.65rem;font-weight:700;padding:.15rem .55rem;border-radius:20px;background:var(--crema);color:var(--g2);font-family:monospace">ID ${emp.id_empleado||'—'}</span>`;
 
     html += `
     <div style="margin-bottom:1.75rem">
@@ -2611,7 +2632,7 @@ function renderizarReporte(){
         <div style="display:flex;align-items:center;gap:10px">
           <div style="width:32px;height:32px;border-radius:50%;background:${bg};display:flex;align-items:center;justify-content:center;font-size:.75rem;font-weight:700;color:${color};flex-shrink:0">${emp.iniciales}</div>
           <div>
-            <div style="font-size:.88rem;font-weight:700;color:var(--negro)">${emp.nombre}${movBadge}</div>
+            <div style="font-size:.88rem;font-weight:700;color:var(--negro)">${emp.nombre}${idBadge}${movBadge}</div>
             <div style="font-size:.72rem;color:var(--g3)">${emp.dias.length} comida${emp.dias.length!==1?'s':''} en este período</div>
           </div>
         </div>
@@ -2627,6 +2648,7 @@ function renderizarReporte(){
             <th style="text-align:left;padding:.45rem .75rem;font-size:.65rem;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--g3);background:var(--crema)">Fecha</th>
             <th style="text-align:left;padding:.45rem .75rem;font-size:.65rem;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--g3);background:var(--crema)">Platillos</th>
             <th style="text-align:left;padding:.45rem .75rem;font-size:.65rem;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--g3);background:var(--crema)">Extras</th>
+            <th style="text-align:right;padding:.45rem .75rem;font-size:.65rem;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--g3);background:var(--crema)">Costo extras</th>
             <th style="text-align:right;padding:.45rem .75rem;font-size:.65rem;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--g3);background:var(--crema)">Empleado</th>
             <th style="text-align:right;padding:.45rem .75rem;font-size:.65rem;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--g3);background:var(--crema)">Empresa</th>
             <th style="text-align:right;padding:.45rem .75rem;font-size:.65rem;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--g3);background:var(--crema)">Total día</th>
@@ -2645,6 +2667,7 @@ function renderizarReporte(){
             </td>
             <td style="padding:.65rem .75rem;color:var(--negro)">${d.platillos}</td>
             <td style="padding:.65rem .75rem;color:${d.extras==='—'?'var(--g3)':'var(--naranja)'}">${d.extras}</td>
+            <td style="padding:.65rem .75rem;text-align:right;color:${d.costo_extras?'var(--naranja)':'var(--g3)'}">${d.costo_extras?('$'+d.costo_extras+'.00'):'—'}</td>
             <td style="padding:.65rem .75rem;text-align:right;font-weight:600;color:var(--negro)">$${d.pago_empleado}.00</td>
             <td style="padding:.65rem .75rem;text-align:right;color:var(--v)">$${d.subsidio_empresa}.00</td>
             <td style="padding:.65rem .75rem;text-align:right;font-weight:700;color:var(--negro)">$${d.total_dia}.00</td>
@@ -2653,7 +2676,7 @@ function renderizarReporte(){
 
     html += `
           <tr style="background:var(--crema)">
-            <td colspan="3" style="padding:.55rem .75rem;font-weight:700;font-size:.78rem;color:var(--g2)">Subtotal ${emp.nombre.split(' ')[0]}</td>
+            <td colspan="4" style="padding:.55rem .75rem;font-weight:700;font-size:.78rem;color:var(--g2)">Subtotal ${emp.nombre.split(' ')[0]}</td>
             <td style="padding:.55rem .75rem;text-align:right;font-weight:800;color:var(--negro)">$${tEmp}.00</td>
             <td style="padding:.55rem .75rem;text-align:right;font-weight:700;color:var(--v)">$${tEmpresa}.00</td>
             <td style="padding:.55rem .75rem;text-align:right;font-weight:800;color:var(--negro)">$${tTotal}.00</td>
@@ -2761,7 +2784,7 @@ async function construirWorkbookReporte(datosPorEmpleado, opts){
   wb.created = new Date();
   const ws = wb.addWorksheet('Reporte', { views: [{ state:'frozen', ySplit: 4 }] });
 
-  ws.mergeCells('A1:G1');
+  ws.mergeCells('A1:I1');
   const titulo = ws.getCell('A1');
   titulo.value = 'Buen Fruto — Reporte '+etiquetaTipo+' de comedor';
   titulo.font = { name:'Arial', size:15, bold:true, color:{argb:BLANCO} };
@@ -2769,21 +2792,21 @@ async function construirWorkbookReporte(datosPorEmpleado, opts){
   titulo.fill = { type:'pattern', pattern:'solid', fgColor:{argb:VERDE} };
   ws.getRow(1).height = 26;
 
-  ws.mergeCells('A2:G2');
+  ws.mergeCells('A2:I2');
   const subtitulo = ws.getCell('A2');
   subtitulo.value = tituloRango + '   ·   Generado: ' + new Date().toLocaleString('es-MX');
   subtitulo.font = { name:'Arial', size:10, italic:true, color:{argb:'FF666666'} };
   ws.getRow(2).height = 18;
   ws.getRow(3).height = 6;
 
-  const encabezados = ['Empleado','Fecha','Platillos','Extras','Pago empleado','Subsidio empresa','Total día'];
+  const encabezados = ['ID','Empleado','Fecha','Platillos','Extras','Costo extras','Pago empleado','Subsidio empresa','Total día'];
   const filaEnc = ws.getRow(4);
   encabezados.forEach(function(h, i){
     const cell = filaEnc.getCell(i+1);
     cell.value = h;
     cell.font = { name:'Arial', size:10, bold:true, color:{argb:BLANCO} };
     cell.fill = { type:'pattern', pattern:'solid', fgColor:{argb:VERDE} };
-    cell.alignment = { vertical:'middle', horizontal: i>=4 ? 'right' : 'left' };
+    cell.alignment = { vertical:'middle', horizontal: i>=6 ? 'right' : 'left' };
   });
   filaEnc.height = 20;
 
@@ -2795,37 +2818,41 @@ async function construirWorkbookReporte(datosPorEmpleado, opts){
     emp.dias.forEach(function(d){
       const dt = new Date(d.fecha+'T12:00:00');
       const r = ws.getRow(fila);
-      r.getCell(1).value = emp.nombre;
-      r.getCell(2).value = DS2[dt.getDay()]+' '+dt.getDate()+' '+MS2[dt.getMonth()];
-      r.getCell(3).value = d.platillos;
-      r.getCell(4).value = d.extras;
-      r.getCell(5).value = d.pago_empleado;
-      r.getCell(6).value = d.subsidio_empresa;
-      r.getCell(7).value = d.total_dia;
+      r.getCell(1).value = emp.id_empleado || '—';
+      r.getCell(2).value = emp.nombre;
+      r.getCell(3).value = DS2[dt.getDay()]+' '+dt.getDate()+' '+MS2[dt.getMonth()];
+      r.getCell(4).value = d.platillos;
+      r.getCell(5).value = d.extras;
+      r.getCell(6).value = d.costo_extras;
+      r.getCell(7).value = d.pago_empleado;
+      r.getCell(8).value = d.subsidio_empresa;
+      r.getCell(9).value = d.total_dia;
       const bg = fila % 2 === 0 ? CREMA : BLANCO;
-      for (let c=1;c<=7;c++){
+      for (let c=1;c<=9;c++){
         const cell = r.getCell(c);
         cell.font = { name:'Arial', size:10 };
         cell.fill = { type:'pattern', pattern:'solid', fgColor:{argb:bg} };
-        if (c>=5) { cell.numFmt = '$#,##0'; cell.alignment = { horizontal:'right' }; }
+        if (c>=6) { cell.numFmt = '$#,##0'; cell.alignment = { horizontal:'right' }; }
       }
       fila++;
     });
 
     const tEmp = emp.dias.reduce(function(s,d){ return s+d.pago_empleado; }, 0);
     const tEmpresa = emp.dias.reduce(function(s,d){ return s+d.subsidio_empresa; }, 0);
+    const tCostoExtras = emp.dias.reduce(function(s,d){ return s+d.costo_extras; }, 0);
     const rSub = ws.getRow(fila);
     const mov = indicativoMovimiento(emp.nombre, movDocs);
-    rSub.getCell(1).value = 'Subtotal '+emp.nombre.split(' ')[0] + (mov ? ' — '+mov.texto : '');
-    rSub.getCell(4).value = emp.dias.length+' comida'+(emp.dias.length!==1?'s':'');
-    rSub.getCell(5).value = tEmp;
-    rSub.getCell(6).value = tEmpresa;
-    rSub.getCell(7).value = tEmp+tEmpresa;
-    for (let c=1;c<=7;c++){
+    rSub.getCell(2).value = 'Subtotal '+emp.nombre.split(' ')[0] + (mov ? ' — '+mov.texto : '');
+    rSub.getCell(5).value = emp.dias.length+' comida'+(emp.dias.length!==1?'s':'');
+    rSub.getCell(6).value = tCostoExtras;
+    rSub.getCell(7).value = tEmp;
+    rSub.getCell(8).value = tEmpresa;
+    rSub.getCell(9).value = tEmp+tEmpresa;
+    for (let c=1;c<=9;c++){
       const cell = rSub.getCell(c);
       cell.font = { name:'Arial', size:10, bold:true };
       cell.fill = { type:'pattern', pattern:'solid', fgColor:{argb:DORADO} };
-      if (c>=5) { cell.numFmt = '$#,##0'; cell.alignment = { horizontal:'right' }; }
+      if (c>=6) { cell.numFmt = '$#,##0'; cell.alignment = { horizontal:'right' }; }
     }
     fila++;
   });
@@ -2834,20 +2861,20 @@ async function construirWorkbookReporte(datosPorEmpleado, opts){
   const gtEmpresa = datosPorEmpleado.reduce(function(s,e){ return s+e.dias.reduce(function(ss,d){ return ss+d.subsidio_empresa; },0); },0);
   fila++;
   const rTotal = ws.getRow(fila);
-  rTotal.getCell(1).value = 'TOTAL GENERAL';
-  rTotal.getCell(5).value = gtEmp;
-  rTotal.getCell(6).value = gtEmpresa;
-  rTotal.getCell(7).value = gtEmp + gtEmpresa;
-  for (let c=1;c<=7;c++){
+  rTotal.getCell(2).value = 'TOTAL GENERAL';
+  rTotal.getCell(7).value = gtEmp;
+  rTotal.getCell(8).value = gtEmpresa;
+  rTotal.getCell(9).value = gtEmp + gtEmpresa;
+  for (let c=1;c<=9;c++){
     const cell = rTotal.getCell(c);
     cell.font = { name:'Arial', size:11, bold:true, color:{argb:BLANCO} };
     cell.fill = { type:'pattern', pattern:'solid', fgColor:{argb:VERDE} };
-    if (c>=5) { cell.numFmt = '$#,##0'; cell.alignment = { horizontal:'right' }; }
+    if (c>=6) { cell.numFmt = '$#,##0'; cell.alignment = { horizontal:'right' }; }
   }
   rTotal.height = 22;
 
   ws.columns = [
-    { width: 26 }, { width: 14 }, { width: 34 }, { width: 26 }, { width: 15 }, { width: 16 }, { width: 13 }
+    { width: 14 }, { width: 26 }, { width: 14 }, { width: 34 }, { width: 22 }, { width: 14 }, { width: 15 }, { width: 16 }, { width: 13 }
   ];
 
   return wb;
@@ -2925,7 +2952,7 @@ window.descargarPlantillaReporte = async function(){
     wb.created = new Date();
     const ws = wb.addWorksheet('Plantilla', { views: [{ state:'frozen', ySplit: 4 }] });
 
-    ws.mergeCells('A1:G1');
+    ws.mergeCells('A1:I1');
     const titulo = ws.getCell('A1');
     titulo.value = 'Buen Fruto — Plantilla de reporte de comedor';
     titulo.font = { name:'Arial', size:15, bold:true, color:{argb:BLANCO} };
@@ -2933,52 +2960,54 @@ window.descargarPlantillaReporte = async function(){
     titulo.fill = { type:'pattern', pattern:'solid', fgColor:{argb:VERDE} };
     ws.getRow(1).height = 26;
 
-    ws.mergeCells('A2:G2');
+    ws.mergeCells('A2:I2');
     const subtitulo = ws.getCell('A2');
     subtitulo.value = 'Formato de referencia — llena las filas en blanco a mano si lo necesitas';
     subtitulo.font = { name:'Arial', size:10, italic:true, color:{argb:'FF666666'} };
     ws.getRow(2).height = 18;
     ws.getRow(3).height = 6;
 
-    const encabezados = ['Empleado','Fecha','Platillos','Extras','Pago empleado','Subsidio empresa','Total día'];
+    const encabezados = ['ID','Empleado','Fecha','Platillos','Extras','Costo extras','Pago empleado','Subsidio empresa','Total día'];
     const filaEnc = ws.getRow(4);
     encabezados.forEach(function(h, i){
       const cell = filaEnc.getCell(i+1);
       cell.value = h;
       cell.font = { name:'Arial', size:10, bold:true, color:{argb:BLANCO} };
       cell.fill = { type:'pattern', pattern:'solid', fgColor:{argb:VERDE} };
-      cell.alignment = { vertical:'middle', horizontal: i>=4 ? 'right' : 'left' };
+      cell.alignment = { vertical:'middle', horizontal: i>=6 ? 'right' : 'left' };
     });
     filaEnc.height = 20;
 
     const rEj = ws.getRow(5);
-    rEj.getCell(1).value = 'Ejemplo: Juan Pérez';
-    rEj.getCell(2).value = 'Lun 18 ago';
-    rEj.getCell(3).value = 'Pollo asado, Arroz';
-    rEj.getCell(4).value = 'Postre $15';
-    rEj.getCell(5).value = 45;
-    rEj.getCell(6).value = 45;
-    rEj.getCell(7).value = 90;
-    for (let c=1;c<=7;c++){
+    rEj.getCell(1).value = '12345';
+    rEj.getCell(2).value = 'Ejemplo: Juan Pérez';
+    rEj.getCell(3).value = 'Lun 18 ago';
+    rEj.getCell(4).value = 'Pollo asado, Arroz';
+    rEj.getCell(5).value = 'Postre';
+    rEj.getCell(6).value = 15;
+    rEj.getCell(7).value = 45;
+    rEj.getCell(8).value = 45;
+    rEj.getCell(9).value = 90;
+    for (let c=1;c<=9;c++){
       const cell = rEj.getCell(c);
       cell.font = { name:'Arial', size:10, italic:true, color:{argb:'FF999999'} };
       cell.fill = { type:'pattern', pattern:'solid', fgColor:{argb:CREMA} };
-      if (c>=5) { cell.numFmt = '$#,##0'; cell.alignment = { horizontal:'right' }; }
+      if (c>=6) { cell.numFmt = '$#,##0'; cell.alignment = { horizontal:'right' }; }
     }
 
     for (let f=6; f<=20; f++){
       const r = ws.getRow(f);
       const bg = f % 2 === 0 ? CREMA : BLANCO;
-      for (let c=1;c<=7;c++){
+      for (let c=1;c<=9;c++){
         const cell = r.getCell(c);
         cell.font = { name:'Arial', size:10 };
         cell.fill = { type:'pattern', pattern:'solid', fgColor:{argb:bg} };
-        if (c>=5) cell.numFmt = '$#,##0';
+        if (c>=6) cell.numFmt = '$#,##0';
       }
     }
 
     ws.columns = [
-      { width: 26 }, { width: 14 }, { width: 34 }, { width: 26 }, { width: 15 }, { width: 16 }, { width: 13 }
+      { width: 14 }, { width: 26 }, { width: 14 }, { width: 34 }, { width: 22 }, { width: 14 }, { width: 15 }, { width: 16 }, { width: 13 }
     ];
 
     await descargarWorkbook(wb, 'Plantilla_Reporte_Buen_Fruto.xlsx');
