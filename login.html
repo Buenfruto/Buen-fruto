@@ -239,11 +239,10 @@ html,body{height:100%;font-family:'Inter',system-ui,sans-serif;background:var(--
       <div class="login-tagline">La pausa que te mereces, cada día</div>
     </div>
     <div class="login-form">
-      <div class="campo"><label>Correo electrónico</label><input type="email" id="inp-email" placeholder="tucorreo@empresa.com" autocomplete="email"/></div>
+      <div class="campo"><label>Usuario</label><input type="email" id="inp-email" placeholder="tu.usuario@empresa.com" autocomplete="email"/></div>
       <div class="campo"><label>Contraseña</label><input type="password" id="inp-pass" placeholder="••••••••" autocomplete="current-password"/></div>
       <button class="btn-fill" id="btn-login">Entrar</button>
-      <div class="err" id="login-err">Correo o contraseña incorrectos</div>
-      <div style="position:fixed;bottom:.5rem;right:.75rem;font-size:.6rem;color:red;font-size:.9rem;font-weight:bold;font-family:monospace">v49</div>
+      <div class="err" id="login-err">Usuario o contraseña incorrectos</div>
     </div>
   </div>
 </div>
@@ -464,7 +463,7 @@ window.hacerLogin = function() {
     err.style.display = 'block';
     err.style.background = '#FDEDEC';
     err.style.color = '#C0392B';
-    err.textContent = 'Ingresa tu correo y contraseña';
+    err.textContent = 'Ingresa tu usuario y contraseña';
     return;
   }
   err.style.display = 'none';
@@ -481,7 +480,7 @@ window.hacerLogin = function() {
       btn.textContent = 'Entrar';
       btn.disabled = false;
       if (e.code === 'auth/invalid-credential' || e.code === 'auth/wrong-password' || e.code === 'auth/user-not-found') {
-        err.textContent = 'Correo o contraseña incorrectos';
+        err.textContent = 'Usuario o contraseña incorrectos';
       } else if (e.code === 'auth/too-many-requests') {
         err.textContent = 'Cuenta bloqueada temporalmente. Intenta en unos minutos.';
       } else {
@@ -518,7 +517,7 @@ auth.onAuthStateChanged(function(user) {
     .then(function(snap) {
       if (!snap.exists) {
         var err = document.getElementById('login-err');
-        if (err) { err.style.display = 'block'; err.style.background = '#FDEDEC'; err.style.color = '#C0392B'; err.textContent = 'UID: ' + user.uid; }
+        if (err) { err.style.display = 'block'; err.style.background = '#FDEDEC'; err.style.color = '#C0392B'; err.textContent = 'Tu cuenta no está registrada como empleado. Contacta a tu administrador.'; }
         auth.signOut(); pg('pg-login'); return;
       }
       perfil = snap.data();
@@ -611,7 +610,7 @@ function renderInicio() {
           <div style="background:var(--vl);border-radius:var(--rs);padding:1.25rem;text-align:center;margin-bottom:.85rem">
             <div style="font-size:2rem;margin-bottom:.5rem">🪪</div>
             <div style="font-size:.9rem;font-weight:700;color:var(--v)">Presenta tu gafete al llegar al comedor</div>
-            <div style="font-size:.75rem;color:var(--g2);margin-top:.25rem">El chef escaneará tu gafete y empezará a preparar</div>
+            <div style="font-size:.75rem;color:var(--g2);margin-top:.25rem">Escanéalo tú mismo en la estación del comedor y la cocina empezará a preparar</div>
           </div>
           <div style="background:var(--crema);border-radius:var(--rs);padding:.75rem 1rem">
             <div style="font-size:.65rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--g3);margin-bottom:.4rem">Tu pedido</div>
@@ -619,6 +618,7 @@ function renderInicio() {
             ${(o.extras||[]).map(e=>`<div style="font-size:.82rem;color:var(--naranja);font-weight:600;padding:.15rem 0">• ${e.nombre} (+$${e.precio})</div>`).join('')}
           </div>
           ${o.hora_preorden && o.fecha === hoy() ? `<button class="btn-ghost" style="margin-top:.75rem" onclick="usarAhora('${o.id}')">Cancelar pre-orden agendada — escanear gafete al llegar</button>` : ''}
+          ${!o.escaneado ? `<button class="btn-ghost" style="margin-top:.75rem;color:var(--rojo)" onclick="cancelarPedidoEmpleado('${o.id}')">Cancelar este pedido</button>` : ''}
         </div>
       </div>`;
     return;
@@ -803,6 +803,13 @@ window.usarAhora = async function(ordenId) {
   await updateDoc(doc(db, 'ordenes', ordenId), { hora_preorden: null, tipo: 'momento' });
 };
 
+// El empleado solo puede cancelar su propio pedido mientras nadie lo haya
+// escaneado todavía — una vez escaneado, la cocina ya lo está preparando.
+window.cancelarPedidoEmpleado = async function(ordenId) {
+  if (!confirm('¿Cancelar este pedido? Podrás volver a pedir cuando quieras.')) return;
+  await updateDoc(doc(db, 'ordenes', ordenId), { estado: 'cancelado', cancelado_en: serverTimestamp() });
+};
+
 async function crearOrden(fecha, horaPreorden) {
   if (!buffetHoy && extrasHoy.length === 0 && fecha === hoy()) return;
   const bc = newBarcode();
@@ -984,6 +991,15 @@ function renderPedidos() {
       btnU.textContent = 'Cancelar pre-orden agendada — escanear gafete al llegar';
       btnU.addEventListener('click', () => updateDoc(doc(db, 'ordenes', o.id), { hora_preorden: null, tipo: 'momento' }));
       card.appendChild(btnU);
+    }
+    // Solo se puede cancelar mientras nadie haya escaneado el gafete todavía.
+    if (!cancelada && !o.escaneado) {
+      const btnC = document.createElement('button');
+      btnC.className = 'btn-ghost';
+      btnC.style.cssText = 'display:block;margin:.25rem 1.1rem 1.1rem;width:calc(100% - 2.2rem);font-size:.82rem;padding:.7rem;color:var(--rojo)';
+      btnC.textContent = 'Cancelar este pedido';
+      btnC.addEventListener('click', () => window.cancelarPedidoEmpleado(o.id));
+      card.appendChild(btnC);
     }
     lista.appendChild(card);
   });
