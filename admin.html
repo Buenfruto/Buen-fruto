@@ -275,9 +275,6 @@ input[type=file]{display:none}
         <svg viewBox="0 0 24 24"><path d="M3 2v7c0 1.1.9 2 2 2h4a2 2 0 0 0 2-2V2"/><path d="M7 2v20"/><path d="M21 15V2"/><path d="M18 2v3a2 2 0 0 0 2 2h1"/><path d="M21 22H9"/></svg>Menús
       </div>
       <div class="nav-sep"></div>
-      <div class="nav-item" data-sec="ordenes" onclick="irSec('ordenes',this)">
-        <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>Órdenes hoy
-      </div>
       <div class="nav-item" data-sec="reportes" onclick="irSec('reportes',this)">
         <svg viewBox="0 0 24 24"><line x1="12" y1="20" x2="12" y2="10"/><line x1="18" y1="20" x2="18" y2="4"/><line x1="6" y1="20" x2="6" y2="16"/></svg>Reportes
       </div>
@@ -491,27 +488,6 @@ input[type=file]{display:none}
           </div>
           <div class="card-body" id="menu-editor-body">
             <div style="text-align:center;padding:2rem;color:var(--g3)">Selecciona un día para editar su menú</div>
-          </div>
-        </div>
-      </div>
-
-      <!-- ÓRDENES HOY -->
-      <div class="seccion" id="sec-ordenes">
-        <div class="sec-titulo">Órdenes</div>
-        <div class="sec-sub" id="ordenes-fecha">—</div>
-        <div style="display:flex;gap:.5rem;margin-bottom:1rem;flex-wrap:wrap">
-          <button class="btn btn-outline btn-sm comedor-btn active" onclick="filtrarComedor('todos',this)">Todos</button>
-          <button class="btn btn-outline btn-sm comedor-btn" onclick="filtrarComedor('betel',this)">Betel</button>
-          <button class="btn btn-outline btn-sm comedor-btn" onclick="filtrarComedor('cuauhtemoc',this)">Cuauhtémoc</button>
-          <button class="btn btn-outline btn-sm comedor-btn" onclick="filtrarComedor('intelomas',this)">Intelomas</button>
-        </div>
-        <div class="card">
-          <div class="card-body" style="padding:0">
-            <div class="tabla-wrap"><table>
-              <thead><tr><th>Fecha</th><th>Empleado</th><th>Platillos</th><th>Extras</th><th>Tipo</th><th>Total</th><th>Estado</th><th>Acción</th></tr></thead>
-              <tbody id="tabla-ordenes"></tbody>
-            </table></div>
-            <div class="loading" id="loading-ordenes"><div style="padding:1.5rem;display:flex;align-items:center;gap:.5rem"><div class="spinner"></div>Cargando...</div></div>
           </div>
         </div>
       </div>
@@ -795,9 +771,8 @@ window.irSec=function(sec,el){
   el.classList.add('on');
   document.querySelectorAll('.seccion').forEach(s=>s.classList.remove('on'));
   document.getElementById('sec-'+sec).classList.add('on');
-  const titulos={dashboard:'Dashboard',empleados:'Empleados',menus:'Menús de la semana',ordenes:'Órdenes',reportes:'Reportes'};
+  const titulos={dashboard:'Dashboard',empleados:'Empleados',menus:'Menús de la semana',reportes:'Reportes'};
   document.getElementById('topbar-titulo').textContent=titulos[sec]||sec;
-  if(sec==='ordenes')cargarOrdenesHoy();
   if(sec==='reportes')cargarReporte();
 };
 
@@ -2200,14 +2175,7 @@ const MS_R = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov',
 const MF_R = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
 
 // ── FILTROS DE COMEDOR ──
-let _filtroComedor = 'todos';
 let _repComedor = 'todos';
-
-window.filtrarComedor = function(comedor, btn) {
-  _filtroComedor = comedor;
-  document.querySelectorAll('.comedor-btn').forEach(b => b.classList.remove('active'));
-  btn.classList.add('active');
-};
 
 window.setRepComedor = function(comedor, btn) {
   _repComedor = comedor;
@@ -2347,13 +2315,6 @@ function renderHistorialMensual(){
   }
   cont.innerHTML = html;
 }
-
-window.eliminarOrdenAdmin = async function(id, nombre, fecha) {
-  if (!confirm(`¿Eliminar definitivamente la orden de ${nombre} del ${fecha}?\n\nEsta acción NO se puede deshacer.`)) return;
-  try {
-    await db.collection('ordenes').doc(id).delete();
-  } catch(e) { alert('Error al eliminar: ' + e.message); }
-};
 
 window.exportarCSVCompleto = async function() {
   const snap = await db.collection('ordenes').get();
