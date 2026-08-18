@@ -533,16 +533,21 @@ input[type=file]{display:none}
             <span id="periodo-menu-label">📆 Esta semana</span>
             <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>
           </button>
-          <div id="periodo-menu" style="display:none;position:absolute;top:calc(100% + 6px);left:0;background:var(--w);border:1px solid var(--borde2);border-radius:12px;box-shadow:0 10px 28px rgba(0,0,0,.14);min-width:250px;z-index:30;padding:.5rem">
+          <div id="periodo-menu" style="display:none;position:absolute;top:calc(100% + 6px);left:0;background:var(--w);border:1px solid var(--borde2);border-radius:12px;box-shadow:0 10px 28px rgba(0,0,0,.14);min-width:260px;max-height:70vh;overflow-y:auto;z-index:30;padding:.5rem">
             <div style="font-size:.64rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--g3);padding:.5rem .6rem .3rem">Reporte principal</div>
             <button type="button" class="periodo-opcion on" data-periodo="semana-actual" onclick="elegirPeriodo('semana-actual')">📆 Esta semana <span class="badge badge-v" style="margin-left:.5rem;font-size:.6rem">Principal</span></button>
             <div style="font-size:.64rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--g3);padding:.6rem .6rem .3rem;border-top:1px solid var(--borde2);margin-top:.35rem">Otros períodos</div>
             <button type="button" class="periodo-opcion" data-periodo="hoy" onclick="elegirPeriodo('hoy')">☀️ Hoy</button>
             <button type="button" class="periodo-opcion" data-periodo="semana-pasada" onclick="elegirPeriodo('semana-pasada')">📆 Semana pasada</button>
+            <button type="button" class="periodo-opcion" data-periodo="semana-2" onclick="elegirPeriodo('semana-2')">📆 Hace 2 semanas</button>
+            <button type="button" class="periodo-opcion" data-periodo="semana-3" onclick="elegirPeriodo('semana-3')">📆 Hace 3 semanas</button>
+            <div style="font-size:.64rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--g3);padding:.6rem .6rem .3rem;border-top:1px solid var(--borde2);margin-top:.35rem">Historial mensual (últimos 6 meses)</div>
             <button type="button" class="periodo-opcion" data-periodo="mes-actual" onclick="elegirPeriodo('mes-actual')">🗓️ Este mes</button>
             <button type="button" class="periodo-opcion" data-periodo="mes-1" onclick="elegirPeriodo('mes-1')">🗓️ Mes pasado</button>
             <button type="button" class="periodo-opcion" data-periodo="mes-2" onclick="elegirPeriodo('mes-2')">🗓️ Hace 2 meses</button>
             <button type="button" class="periodo-opcion" data-periodo="mes-3" onclick="elegirPeriodo('mes-3')">🗓️ Hace 3 meses</button>
+            <button type="button" class="periodo-opcion" data-periodo="mes-4" onclick="elegirPeriodo('mes-4')">🗓️ Hace 4 meses</button>
+            <button type="button" class="periodo-opcion" data-periodo="mes-5" onclick="elegirPeriodo('mes-5')">🗓️ Hace 5 meses</button>
           </div>
         </div>
 
@@ -555,6 +560,9 @@ input[type=file]{display:none}
             <div style="display:flex;gap:.5rem;flex-wrap:wrap">
               <button class="btn btn-outline btn-sm" id="btn-recalcular-reporte" onclick="recalcularReporte()" title="Vuelve a conectar el reporte desde cero">
                 🔄 Recalcular
+              </button>
+              <button class="btn btn-v btn-sm" id="btn-excel-reporte" onclick="descargarReporteExcel()">
+                📊 Descargar Excel
               </button>
               <button class="btn btn-outline btn-sm" onclick="exportarCSV()">
                 <svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>Exportar CSV
@@ -613,6 +621,7 @@ input[type=file]{display:none}
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js"></script>
 <script>
 const cfg = {
   apiKey:"AIzaSyDFOypq8OfX1QmZpoZAdsXmqKYauswBjes",
@@ -2207,10 +2216,14 @@ const PERIODO_LABELS = {
   'hoy':            '☀️ Hoy',
   'semana-actual':  '📆 Esta semana',
   'semana-pasada':  '📆 Semana pasada',
+  'semana-2':       '📆 Hace 2 semanas',
+  'semana-3':       '📆 Hace 3 semanas',
   'mes-actual':     '🗓️ Este mes',
   'mes-1':          '🗓️ Mes pasado',
   'mes-2':          '🗓️ Hace 2 meses',
-  'mes-3':          '🗓️ Hace 3 meses'
+  'mes-3':          '🗓️ Hace 3 meses',
+  'mes-4':          '🗓️ Hace 4 meses',
+  'mes-5':          '🗓️ Hace 5 meses'
 };
 
 function tipoPeriodo(p){
@@ -2251,14 +2264,15 @@ function getRango() {
     desde = hoy(); hasta = hoy();
   } else if (_periodoActual === 'semana-actual') {
     desde = getDias()[0]; hasta = getDias()[getDias().length-1];
-  } else if (_periodoActual === 'semana-pasada') {
+  } else if (_periodoActual === 'semana-pasada' || _periodoActual === 'semana-2' || _periodoActual === 'semana-3') {
+    const semanasAtras = { 'semana-pasada': 1, 'semana-2': 2, 'semana-3': 3 }[_periodoActual];
     const lun = new Date(getDias()[0]+'T12:00:00');
-    lun.setDate(lun.getDate()-7);
+    lun.setDate(lun.getDate() - 7*semanasAtras);
     const vie = new Date(lun); vie.setDate(lun.getDate()+4);
     desde = lun.toISOString().slice(0,10); hasta = vie.toISOString().slice(0,10);
   } else {
     const meses = {
-      'mes-actual': 0, 'mes-1': 1, 'mes-2': 2, 'mes-3': 3
+      'mes-actual': 0, 'mes-1': 1, 'mes-2': 2, 'mes-3': 3, 'mes-4': 4, 'mes-5': 5
     };
     const offset = meses[_periodoActual] || 0;
     const d = new Date(hoyD.getFullYear(), hoyD.getMonth() - offset, 1);
@@ -2742,6 +2756,130 @@ window.exportarCSV = function(){
   const url  = URL.createObjectURL(blob);
   const a    = document.createElement('a');
   a.href=url; a.download='Reporte_Buen_Fruto_'+desde+'_al_'+hasta+'.csv'; a.click();
+};
+
+// ── DESCARGA DEL REPORTE EN EXCEL, CON FORMATO ──
+// Mismos datos que "Exportar CSV" (usa el mismo _reporteRaw ya calculado, así
+// que siempre coinciden), pero como un .xlsx con colores, encabezados en
+// negritas, columnas de dinero con formato de moneda y subtotales resaltados
+// — para que se pueda abrir y entender de un vistazo, no solo procesar.
+window.descargarReporteExcel = async function(){
+  if(!_reporteRaw.length){ alert('No hay datos en este período para exportar.'); return; }
+  const btn = document.getElementById('btn-excel-reporte');
+  if (btn) { btn.disabled = true; btn.textContent = 'Generando…'; }
+  try {
+    const desde = _reporteRangoDesde, hasta = _reporteRangoHasta, tipo = _reporteRangoTipo;
+    const etiquetaTipo = tipo==='dia' ? 'Diario' : tipo==='semana' ? 'Semanal' : 'Mensual';
+    const tituloRango = tipo==='dia' ? ('Hoy, '+desde) : ('Del '+desde+' al '+hasta);
+
+    const VERDE = 'FF5C6B4A', DORADO = 'FFE8C84A', CREMA = 'FFF5F0E8', BLANCO = 'FFFFFFFF';
+
+    const wb = new ExcelJS.Workbook();
+    wb.creator = 'Buen Fruto';
+    wb.created = new Date();
+    const ws = wb.addWorksheet('Reporte', { views: [{ state:'frozen', ySplit: 4 }] });
+
+    ws.mergeCells('A1:G1');
+    const titulo = ws.getCell('A1');
+    titulo.value = 'Buen Fruto — Reporte '+etiquetaTipo+' de comedor';
+    titulo.font = { name:'Arial', size:15, bold:true, color:{argb:BLANCO} };
+    titulo.alignment = { vertical:'middle' };
+    titulo.fill = { type:'pattern', pattern:'solid', fgColor:{argb:VERDE} };
+    ws.getRow(1).height = 26;
+
+    ws.mergeCells('A2:G2');
+    const subtitulo = ws.getCell('A2');
+    subtitulo.value = tituloRango + '   ·   Generado: ' + new Date().toLocaleString('es-MX');
+    subtitulo.font = { name:'Arial', size:10, italic:true, color:{argb:'FF666666'} };
+    ws.getRow(2).height = 18;
+    ws.getRow(3).height = 6;
+
+    const encabezados = ['Empleado','Fecha','Platillos','Extras','Pago empleado','Subsidio empresa','Total día'];
+    const filaEnc = ws.getRow(4);
+    encabezados.forEach(function(h, i){
+      const cell = filaEnc.getCell(i+1);
+      cell.value = h;
+      cell.font = { name:'Arial', size:10, bold:true, color:{argb:BLANCO} };
+      cell.fill = { type:'pattern', pattern:'solid', fgColor:{argb:VERDE} };
+      cell.alignment = { vertical:'middle', horizontal: i>=4 ? 'right' : 'left' };
+    });
+    filaEnc.height = 20;
+
+    const DS2 = ['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'];
+    const MS2 = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
+    let fila = 5;
+
+    _reporteRaw.forEach(function(emp){
+      emp.dias.forEach(function(d){
+        const dt = new Date(d.fecha+'T12:00:00');
+        const r = ws.getRow(fila);
+        r.getCell(1).value = emp.nombre;
+        r.getCell(2).value = DS2[dt.getDay()]+' '+dt.getDate()+' '+MS2[dt.getMonth()];
+        r.getCell(3).value = d.platillos;
+        r.getCell(4).value = d.extras;
+        r.getCell(5).value = d.pago_empleado;
+        r.getCell(6).value = d.subsidio_empresa;
+        r.getCell(7).value = d.total_dia;
+        const bg = fila % 2 === 0 ? CREMA : BLANCO;
+        for (let c=1;c<=7;c++){
+          const cell = r.getCell(c);
+          cell.font = { name:'Arial', size:10 };
+          cell.fill = { type:'pattern', pattern:'solid', fgColor:{argb:bg} };
+          if (c>=5) { cell.numFmt = '$#,##0'; cell.alignment = { horizontal:'right' }; }
+        }
+        fila++;
+      });
+
+      const tEmp = emp.dias.reduce(function(s,d){ return s+d.pago_empleado; }, 0);
+      const tEmpresa = emp.dias.reduce(function(s,d){ return s+d.subsidio_empresa; }, 0);
+      const rSub = ws.getRow(fila);
+      rSub.getCell(1).value = 'Subtotal '+emp.nombre.split(' ')[0];
+      rSub.getCell(4).value = emp.dias.length+' comida'+(emp.dias.length!==1?'s':'');
+      rSub.getCell(5).value = tEmp;
+      rSub.getCell(6).value = tEmpresa;
+      rSub.getCell(7).value = tEmp+tEmpresa;
+      for (let c=1;c<=7;c++){
+        const cell = rSub.getCell(c);
+        cell.font = { name:'Arial', size:10, bold:true };
+        cell.fill = { type:'pattern', pattern:'solid', fgColor:{argb:DORADO} };
+        if (c>=5) { cell.numFmt = '$#,##0'; cell.alignment = { horizontal:'right' }; }
+      }
+      fila++;
+    });
+
+    const gtEmp = _reporteRaw.reduce(function(s,e){ return s+e.dias.reduce(function(ss,d){ return ss+d.pago_empleado; },0); },0);
+    const gtEmpresa = _reporteRaw.reduce(function(s,e){ return s+e.dias.reduce(function(ss,d){ return ss+d.subsidio_empresa; },0); },0);
+    fila++;
+    const rTotal = ws.getRow(fila);
+    rTotal.getCell(1).value = 'TOTAL GENERAL';
+    rTotal.getCell(5).value = gtEmp;
+    rTotal.getCell(6).value = gtEmpresa;
+    rTotal.getCell(7).value = gtEmp + gtEmpresa;
+    for (let c=1;c<=7;c++){
+      const cell = rTotal.getCell(c);
+      cell.font = { name:'Arial', size:11, bold:true, color:{argb:BLANCO} };
+      cell.fill = { type:'pattern', pattern:'solid', fgColor:{argb:VERDE} };
+      if (c>=5) { cell.numFmt = '$#,##0'; cell.alignment = { horizontal:'right' }; }
+    }
+    rTotal.height = 22;
+
+    ws.columns = [
+      { width: 26 }, { width: 14 }, { width: 34 }, { width: 26 }, { width: 15 }, { width: 16 }, { width: 13 }
+    ];
+
+    const buffer = await wb.xlsx.writeBuffer();
+    const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'Reporte_Buen_Fruto_'+desde+'_al_'+hasta+'.xlsx';
+    a.click();
+  } catch(err) {
+    console.error('Error al generar el Excel del reporte:', err);
+    alert('No se pudo generar el Excel: ' + err.message);
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = '📊 Descargar Excel'; }
+  }
 };
 </script>
 </body>
