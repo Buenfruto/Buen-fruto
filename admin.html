@@ -562,10 +562,7 @@ input[type=file]{display:none}
                 🔄 Recalcular
               </button>
               <button class="btn btn-v btn-sm" id="btn-excel-reporte" onclick="descargarReporteExcel()">
-                📊 Descargar Excel
-              </button>
-              <button class="btn btn-outline btn-sm" onclick="exportarCSV()">
-                <svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>Exportar CSV
+                📥 Descargar reporte
               </button>
               <button class="btn btn-outline btn-sm" onclick="exportarCSVCompleto()" title="Respaldo completo de todos los datos">
                 <svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>Respaldo completo
@@ -2878,7 +2875,7 @@ window.descargarReporteExcel = async function(){
     console.error('Error al generar el Excel del reporte:', err);
     alert('No se pudo generar el Excel: ' + err.message);
   } finally {
-    if (btn) { btn.disabled = false; btn.textContent = '📊 Descargar Excel'; }
+    if (btn) { btn.disabled = false; btn.textContent = '📥 Descargar reporte'; }
   }
 };
 </script>
