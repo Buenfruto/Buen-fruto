@@ -456,6 +456,29 @@ input[type=file]{display:none}
         <div class="sec-titulo">Menús de la semana</div>
         <div class="sec-sub">Captura el menú de cada día. Los empleados lo verán en su app.</div>
 
+        <!-- SUBIR MENÚ POR EXCEL -->
+        <div class="card" style="margin-bottom:1.25rem">
+          <div class="card-head"><span class="card-titulo">Subir menú de la semana (Excel)</span></div>
+          <div class="card-body">
+            <p style="font-size:.82rem;color:var(--g2);margin-bottom:1rem">El chef llena la plantilla cada semana con el menú de lunes a viernes y tú solo la subes aquí — la app se actualiza sola, sin necesidad de capturar cada platillo a mano.</p>
+            <div style="margin-bottom:1rem">
+              <button class="btn btn-outline btn-sm" onclick="descargarPlantillaMenuSemana()">📥 Descargar plantilla de esta semana</button>
+            </div>
+            <div class="drop-area" id="menu-drop-area" onclick="document.getElementById('menu-input').click()">
+              <div class="drop-icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="var(--g3)" stroke-width="1.5" stroke-linecap="round">
+                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="12" x2="12" y2="18"/><polyline points="9 15 12 18 15 15"/>
+                </svg>
+              </div>
+              <div class="drop-txt">Arrastra el Excel del menú aquí o haz clic para seleccionar</div>
+              <div class="drop-sub">Día, Nombre del menú, Platillos, Extras</div>
+            </div>
+            <input type="file" id="menu-input" accept=".csv,.xlsx,.xls"/>
+            <div id="menu-import-preview" style="display:none;margin-top:1.25rem"></div>
+            <div class="msg" id="menu-import-msg"></div>
+          </div>
+        </div>
+
         <div class="dia-selector" id="dia-selector"></div>
 
         <div class="card" id="menu-editor">
@@ -696,6 +719,23 @@ document.addEventListener('DOMContentLoaded', function(){
     e.preventDefault(); e.stopPropagation();
     hcDropArea.classList.remove('drag');
     if(e.dataTransfer.files && e.dataTransfer.files[0]) procesarArchivoHeadCount(e.dataTransfer.files[0]);
+  });
+
+  // Menú semanal por Excel
+  document.getElementById('menu-input').addEventListener('change', function(e){
+    if(e.target.files && e.target.files[0]) procesarArchivoMenuSemana(e.target.files[0]);
+  });
+  const menuDropArea = document.getElementById('menu-drop-area');
+  ['dragover','dragenter'].forEach(function(evt){
+    menuDropArea.addEventListener(evt, function(e){ e.preventDefault(); e.stopPropagation(); menuDropArea.classList.add('drag'); });
+  });
+  ['dragleave','dragend'].forEach(function(evt){
+    menuDropArea.addEventListener(evt, function(e){ e.preventDefault(); e.stopPropagation(); menuDropArea.classList.remove('drag'); });
+  });
+  menuDropArea.addEventListener('drop', function(e){
+    e.preventDefault(); e.stopPropagation();
+    menuDropArea.classList.remove('drag');
+    if(e.dataTransfer.files && e.dataTransfer.files[0]) procesarArchivoMenuSemana(e.dataTransfer.files[0]);
   });
 });
 
@@ -1869,6 +1909,229 @@ async function borrarMenuDia(){
   } catch(e){
     console.error('Error al borrar menú:', e);
     alert('No se pudo borrar el menú.');
+  }
+}
+
+// ── SUBIR MENÚ DE LA SEMANA POR EXCEL ──
+// El chef llena una plantilla (Día, Nombre del menú, Platillos, Extras) y el
+// admin solo la sube — mismo patrón de "vista previa antes de aplicar" que el
+// Head Count de empleados, pero aquí cada fila reemplaza el menú de un día
+// de la semana ACTUAL (lunes a viernes), igual que ya hace el editor manual
+// de arriba. Se identifica el día por su NOMBRE (Lunes..Viernes), no por una
+// fecha en la celda, para no depender de cómo Excel formatee esa columna.
+const DIAS_LARGOS = ['Lunes','Martes','Miércoles','Jueves','Viernes'];
+let menuImportDiff = null;
+
+window.descargarPlantillaMenuSemana = function(){
+  const dias = getDias();
+  const filas = [
+    ['Día','Fecha','Nombre del menú','Platillos (separados por coma)','Extras (Nombre $Precio, separados por coma)']
+  ];
+  DIAS_LARGOS.forEach(function(nombreDia, i){
+    filas.push([nombreDia, dias[i], '', '', '']);
+  });
+  filas.push(['Ejemplo (esta fila se ignora)', '', 'Buffet variado', 'Pollo asado, Arroz, Frijoles, Ensalada', 'Postre $15, Refresco $10']);
+  const ws = XLSX.utils.aoa_to_sheet(filas);
+  ws['!cols'] = [{wch:22},{wch:12},{wch:24},{wch:42},{wch:36}];
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Menú semanal');
+  XLSX.writeFile(wb, 'plantilla_menu_semana_'+dias[0]+'.xlsx');
+};
+
+function parseMenuSemanaFilas(filas){
+  if(!filas || !filas.length) return { filas: [], ignoradas: 0 };
+  const headers = filas[0];
+  const iDia = buscarCol(headers, ['dia','día']);
+  const iNombre = buscarCol(headers, ['nombre del menu','nombre del menú','nombre','menu','menú']);
+  const iPlatillos = buscarCol(headers, ['platillos (separados por coma)','platillos']);
+  const iExtras = buscarCol(headers, ['extras (nombre $precio, separados por coma)','extras']);
+
+  const dias = getDias();
+  const mapaDias = {};
+  DIAS_LARGOS.forEach(function(nombreDia, i){ mapaDias[quitarAcentos(nombreDia).toLowerCase()] = dias[i]; });
+  // Acepta también abreviaturas comunes por si el chef las usa.
+  const abreviaturas = {lun:0, mar:1, mie:2, jue:3, vie:4};
+  Object.keys(abreviaturas).forEach(function(ab){ mapaDias[ab] = dias[abreviaturas[ab]]; });
+
+  const resultado = [];
+  let ignoradas = 0;
+  for(let r=1;r<filas.length;r++){
+    const fila = filas[r];
+    if(!fila || !fila.length) continue;
+    function val(idx){ return idx>=0 && fila[idx]!==undefined && fila[idx]!==null ? String(fila[idx]).trim() : ''; }
+    const diaTxt = val(iDia);
+    const fecha = mapaDias[quitarAcentos(diaTxt).toLowerCase()];
+    const nombre = val(iNombre);
+    if(!fecha){ if(diaTxt) ignoradas++; continue; } // día no reconocible (ej. la fila de ejemplo) — se ignora
+    if(!nombre) continue; // día reconocido pero sin nombre de menú — no hay nada que guardar ese día
+
+    const platillos = val(iPlatillos).split(',').map(function(p){ return p.trim(); }).filter(Boolean);
+    const extrasTxt = val(iExtras);
+    const extras = extrasTxt ? extrasTxt.split(',').map(function(e){
+      const m = e.trim().match(/^(.+?)\s*\$?\s*([\d.]+)\s*$/);
+      if(m) return { nombre: m[1].trim(), precio: Number(m[2])||0 };
+      return { nombre: e.trim(), precio: 0 };
+    }).filter(function(e){ return e.nombre; }) : [];
+
+    resultado.push({ fecha: fecha, dia: diaTxt, nombre: nombre, platillos: platillos, extras: extras });
+  }
+  return { filas: resultado, ignoradas: ignoradas };
+}
+
+function procesarArchivoMenuSemana(file){
+  const msg = document.getElementById('menu-import-msg');
+  msg.style.display='none';
+  const nombreArchivo = file.name.toLowerCase();
+  const esExcel = nombreArchivo.endsWith('.xlsx') || nombreArchivo.endsWith('.xls');
+  const reader = new FileReader();
+  reader.onload = function(e){
+    try {
+      let filas;
+      if(esExcel){
+        const wb = XLSX.read(new Uint8Array(e.target.result), {type:'array'});
+        const hoja = wb.Sheets[wb.SheetNames[0]];
+        filas = XLSX.utils.sheet_to_json(hoja, {header:1, defval:''});
+      } else {
+        filas = parseCSVTexto(String(e.target.result));
+      }
+      const resultado = parseMenuSemanaFilas(filas);
+      if(!resultado.filas.length){
+        msg.textContent = 'No se encontraron días válidos. Verifica que la columna "Día" tenga Lunes, Martes, Miércoles, Jueves o Viernes, y que cada fila tenga un nombre de menú.';
+        msg.className = 'msg err'; msg.style.display='block';
+        return;
+      }
+      calcularDiffMenuSemana(resultado.filas, resultado.ignoradas);
+    } catch(err){
+      console.error('Error al leer el Excel de menú:', err);
+      msg.textContent = 'No se pudo leer el archivo. Verifica que sea un Excel o CSV válido.';
+      msg.className = 'msg err'; msg.style.display='block';
+    }
+  };
+  if(esExcel) reader.readAsArrayBuffer(file);
+  else reader.readAsText(file, 'UTF-8');
+}
+
+function menusIguales(a, b){
+  if(!a || !b) return false;
+  if(a.nombre !== b.nombre) return false;
+  const pa = a.platillos||[], pb = b.platillos||[];
+  if(pa.length !== pb.length || pa.some(function(p,i){ return p !== pb[i]; })) return false;
+  const ea = a.extras||[], eb = b.extras||[];
+  if(ea.length !== eb.length) return false;
+  for(let i=0;i<ea.length;i++){ if(ea[i].nombre!==eb[i].nombre || ea[i].precio!==eb[i].precio) return false; }
+  return true;
+}
+
+function calcularDiffMenuSemana(filasNuevas, ignoradas){
+  const nuevos = [], actualizados = [], sinCambios = [];
+  filasNuevas.forEach(function(f){
+    const actual = menusSemanaAdmin[f.fecha];
+    const propuesto = { nombre: f.nombre, platillos: f.platillos, extras: f.extras };
+    if(!actual || !actual.nombre){ nuevos.push({ fecha:f.fecha, dia:f.dia, despues:propuesto }); }
+    else if(!menusIguales(actual, propuesto)){ actualizados.push({ fecha:f.fecha, dia:f.dia, antes:actual, despues:propuesto }); }
+    else { sinCambios.push({ fecha:f.fecha, dia:f.dia, despues:propuesto }); }
+  });
+  menuImportDiff = { nuevos:nuevos, actualizados:actualizados, sinCambios:sinCambios, ignoradas:ignoradas };
+  renderPreviewMenuSemana();
+}
+
+function fmtPlatillosExtras(m){
+  const platillos = (m.platillos||[]).join(', ') || '—';
+  const extras = (m.extras||[]).length ? m.extras.map(function(e){ return e.nombre+' $'+e.precio; }).join(', ') : 'Sin extras';
+  return escHtml(m.nombre)+' — '+escHtml(platillos)+' · Extras: '+escHtml(extras);
+}
+
+function renderPreviewMenuSemana(){
+  const preview = document.getElementById('menu-import-preview');
+  preview.style.display = 'block';
+  const nuevos = menuImportDiff.nuevos, actualizados = menuImportDiff.actualizados, sinCambios = menuImportDiff.sinCambios;
+
+  function statTile(label,val,color){
+    return '<div style="background:var(--crema);border-radius:12px;padding:.85rem 1rem;text-align:center">'+
+      '<div style="font-size:1.4rem;font-weight:800;color:'+color+'">'+val+'</div>'+
+      '<div style="font-size:.66rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--g2);margin-top:.2rem">'+label+'</div></div>';
+  }
+  function listaHtml(items, getTexto){
+    if(!items.length) return '<div style="font-size:.78rem;color:var(--g3);padding:.3rem 0">Ninguno</div>';
+    return items.map(function(it){
+      return '<div style="font-size:.8rem;padding:.3rem 0;border-bottom:1px solid var(--borde2)"><b>'+escHtml(it.dia)+'</b> — '+getTexto(it)+'</div>';
+    }).join('');
+  }
+  function detalle(titulo, items, getTexto){
+    if(!items.length) return '';
+    return '<details open style="margin-bottom:.85rem"><summary style="cursor:pointer;font-size:.82rem;font-weight:700;color:var(--negro);padding:.3rem 0">'+titulo+' ('+items.length+')</summary><div style="padding:.4rem .2rem">'+listaHtml(items, getTexto)+'</div></details>';
+  }
+
+  preview.innerHTML =
+    '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:.75rem;margin-bottom:1.25rem">' +
+      statTile('Nuevos', nuevos.length, 'var(--v)') +
+      statTile('Actualizados', actualizados.length, 'var(--naranja)') +
+      statTile('Sin cambios', sinCambios.length, 'var(--g2)') +
+      (menuImportDiff.ignoradas ? statTile('Filas ignoradas', menuImportDiff.ignoradas, 'var(--rojo)') : '') +
+    '</div>' +
+    detalle('Días nuevos', nuevos, function(it){ return fmtPlatillosExtras(it.despues); }) +
+    detalle('Días que van a cambiar', actualizados, function(it){ return 'Antes: '+fmtPlatillosExtras(it.antes)+'<br>Después: '+fmtPlatillosExtras(it.despues); }) +
+    detalle('Sin cambios (no se tocan)', sinCambios, function(it){ return fmtPlatillosExtras(it.despues); }) +
+    '<div style="display:flex;gap:.75rem;margin-top:1.25rem;flex-wrap:wrap;align-items:center">' +
+      '<button class="btn btn-v" id="btn-aplicar-menu"'+((nuevos.length+actualizados.length)===0?' disabled':'')+'>Aplicar cambios</button>' +
+      '<button class="btn btn-outline" id="btn-cancelar-menu">Cancelar</button>' +
+    '</div>';
+
+  document.getElementById('btn-aplicar-menu').addEventListener('click', aplicarCambiosMenuSemana);
+  document.getElementById('btn-cancelar-menu').addEventListener('click', cancelarMenuSemana);
+}
+
+window.cancelarMenuSemana = function(){
+  menuImportDiff = null;
+  document.getElementById('menu-input').value = '';
+  document.getElementById('menu-import-preview').style.display='none';
+  document.getElementById('menu-import-preview').innerHTML = '';
+  const msg = document.getElementById('menu-import-msg');
+  msg.style.display='none'; msg.textContent=''; msg.className='msg';
+};
+function cancelarMenuSemana(){ window.cancelarMenuSemana(); }
+
+async function aplicarCambiosMenuSemana(){
+  const cambios = menuImportDiff.nuevos.concat(menuImportDiff.actualizados);
+  const btn = document.getElementById('btn-aplicar-menu');
+  const btnCancelar = document.getElementById('btn-cancelar-menu');
+  const msg = document.getElementById('menu-import-msg');
+  btn.disabled = true; btnCancelar.disabled = true; btn.textContent = 'Guardando...';
+
+  try {
+    const batch = db.batch();
+    cambios.forEach(function(c){
+      batch.set(db.collection('menus').doc(c.fecha), c.despues);
+    });
+    await batch.commit();
+    cambios.forEach(function(c){ menusSemanaAdmin[c.fecha] = c.despues; });
+
+    msg.textContent = cambios.length+' día(s) de menú actualizado(s) correctamente.';
+    msg.className = 'msg ok'; msg.style.display='block';
+
+    document.getElementById('menu-import-preview').style.display='none';
+    document.getElementById('menu-input').value = '';
+    menuImportDiff = null;
+
+    // Refresca de inmediato el selector de días y, si el día que se está
+    // viendo cambió, también el formulario del editor — sin que el admin
+    // tenga que recargar la página ("la app se actualiza solita").
+    renderDiaSelectorAdmin();
+    if(diaMenuSel){
+      const data = menusSemanaAdmin[diaMenuSel];
+      const badge = document.getElementById('menu-editor-badge');
+      const tieneMenu = !!(data && data.nombre);
+      badge.textContent = tieneMenu ? 'Disponible' : 'Sin definir';
+      badge.className = 'badge ' + (tieneMenu ? 'badge-v' : 'badge-g');
+      platillosBuf = (data && data.platillos) ? data.platillos.slice() : [];
+      extrasList = (data && data.extras) ? data.extras.map(function(e){ return {nombre:e.nombre, precio:e.precio}; }) : [];
+      renderMenuEditorForm(data);
+    }
+  } catch(err){
+    console.error('Error al aplicar menú de la semana:', err);
+    msg.textContent = 'No se pudo guardar el menú: ' + err.message;
+    msg.className = 'msg err'; msg.style.display='block';
+    btn.disabled = false; btnCancelar.disabled = false; btn.textContent = 'Aplicar cambios';
   }
 }
 
