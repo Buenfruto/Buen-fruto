@@ -684,14 +684,25 @@ const MS2 = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','
 const MS = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
 const MF = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
 
-function hoy(){ const d=new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+function hoy(){ return fechaLocal(new Date()); }
+// Formatea un objeto Date como YYYY-MM-DD usando sus componentes LOCALES.
+// Nunca usar toISOString() para esto: convierte a UTC, y en la tarde/noche
+// en México eso adelanta la fecha un día (el bug de "sábado 22").
+function fechaLocal(d){ return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
 function fmtF(f){ const d=new Date(f+'T12:00:00'); return DS[d.getDay()]+' '+d.getDate()+' de '+MS[d.getMonth()]; }
+// Los 5 días (lunes a viernes) de la semana actual, SIEMPRE — el comedor no
+// opera sábados ni domingos. Las fechas se arman con componentes locales
+// (como hoy()), NUNCA con toISOString(): toISOString() convierte a UTC, y en
+// la tarde/noche en México eso adelantaba la fecha un día — así un viernes
+// terminaba guardado/mostrado como "sábado" (el bug de "sábado 22" en menús
+// y reportes, y la razón por la que lo que el admin publicaba para hoy
+// quedaba guardado bajo la fecha de mañana y el empleado nunca lo veía).
 function getDias(){
   const h=new Date(),dia=h.getDay(),lun=new Date(h);
   if(dia===0)lun.setDate(h.getDate()+1);
   else if(dia===6)lun.setDate(h.getDate()+2);
   else lun.setDate(h.getDate()-(dia-1));
-  return Array.from({length:5},(_,i)=>{const d=new Date(lun);d.setDate(lun.getDate()+i);return d.toISOString().slice(0,10);});
+  return Array.from({length:5},(_,i)=>{const d=new Date(lun);d.setDate(lun.getDate()+i);return fechaLocal(d);});
 }
 
 let perfil=null, unsubOrdenes=null, unsubEmpleados=null;
@@ -2260,7 +2271,7 @@ function getRango() {
     const lun = new Date(getDias()[0]+'T12:00:00');
     lun.setDate(lun.getDate() - 7*semanasAtras);
     const vie = new Date(lun); vie.setDate(lun.getDate()+4);
-    desde = lun.toISOString().slice(0,10); hasta = vie.toISOString().slice(0,10);
+    desde = fechaLocal(lun); hasta = fechaLocal(vie);
   }
   return { desde, hasta };
 }
@@ -2275,8 +2286,8 @@ function rangoMes(offsetMeses){
   const d = new Date(hoyD.getFullYear(), hoyD.getMonth() - offsetMeses, 1);
   const fin = new Date(d.getFullYear(), d.getMonth()+1, 0);
   return {
-    desde: d.toISOString().slice(0,10),
-    hasta: fin.toISOString().slice(0,10),
+    desde: fechaLocal(d),
+    hasta: fechaLocal(fin),
     etiqueta: MESES_LARGOS_CAP[d.getMonth()]+' '+d.getFullYear()
   };
 }
