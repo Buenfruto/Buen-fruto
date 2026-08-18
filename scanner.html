@@ -313,7 +313,10 @@ function agregarHistorial(nombre,tipo){
     </div>`).join('');
 }
 
-function hoy(){ return new Date().toISOString().slice(0,10); }
+// OJO: NUNCA usar toISOString() aquí — convierte a UTC, y en la tarde/noche
+// en México eso adelanta la fecha un día, haciendo que el escáner busque las
+// órdenes de "mañana" en vez de las de hoy y rechace a empleados válidos.
+function hoy(){ const d=new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
 </script>
 </body>
 </html>
