@@ -127,6 +127,9 @@ html,body{height:100%;font-family:'Inter',system-ui,sans-serif;background:var(--
 .btn-danger{background:var(--rojol);color:var(--rojo)}
 .btn-danger:hover{background:#fbd9d6}
 .periodo-btn.active{background:var(--v)!important;color:#fff!important;border-color:var(--v)!important}
+.periodo-opcion{display:flex;align-items:center;width:100%;text-align:left;background:none;border:none;border-radius:8px;padding:.55rem .6rem;font-size:.82rem;font-family:inherit;color:var(--negro);cursor:pointer}
+.periodo-opcion:hover{background:var(--crema)}
+.periodo-opcion.on{background:var(--vl);color:var(--v);font-weight:700}
 .btn-elim{background:#F5F0E8;color:#C0392B;border:none;border-radius:6px;padding:.3rem .65rem;font-size:.75rem;font-weight:700;cursor:pointer}
 .btn-elim:hover{background:#F5F0E8;color:#fff}
 .btn-sm{padding:.45rem .85rem;font-size:.78rem}
@@ -525,19 +528,34 @@ input[type=file]{display:none}
         </div>
 
         <!-- Selector de período -->
-        <div style="display:flex;gap:.5rem;flex-wrap:wrap;margin-bottom:1rem">
-          <button class="btn btn-outline btn-sm periodo-btn active" onclick="setPeriodo('semana-actual')">Esta semana</button>
-          <button class="btn btn-outline btn-sm periodo-btn" onclick="setPeriodo('semana-pasada')">Semana pasada</button>
-          <button class="btn btn-outline btn-sm periodo-btn" onclick="setPeriodo('mes-actual')">Este mes</button>
-          <button class="btn btn-outline btn-sm periodo-btn" onclick="setPeriodo('mes-1')">Mes pasado</button>
-          <button class="btn btn-outline btn-sm periodo-btn" onclick="setPeriodo('mes-2')">Hace 2 meses</button>
-          <button class="btn btn-outline btn-sm periodo-btn" onclick="setPeriodo('mes-3')">Hace 3 meses</button>
+        <div style="position:relative;margin-bottom:1rem;display:inline-block" id="periodo-dropdown-wrap">
+          <button class="btn btn-outline btn-sm" id="btn-periodo-menu" onclick="togglePeriodoMenu(event)" style="display:inline-flex;align-items:center;gap:.5rem">
+            <span id="periodo-menu-label">📆 Esta semana</span>
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>
+          </button>
+          <div id="periodo-menu" style="display:none;position:absolute;top:calc(100% + 6px);left:0;background:var(--w);border:1px solid var(--borde2);border-radius:12px;box-shadow:0 10px 28px rgba(0,0,0,.14);min-width:250px;z-index:30;padding:.5rem">
+            <div style="font-size:.64rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--g3);padding:.5rem .6rem .3rem">Reporte principal</div>
+            <button type="button" class="periodo-opcion on" data-periodo="semana-actual" onclick="elegirPeriodo('semana-actual')">📆 Esta semana <span class="badge badge-v" style="margin-left:.5rem;font-size:.6rem">Principal</span></button>
+            <div style="font-size:.64rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--g3);padding:.6rem .6rem .3rem;border-top:1px solid var(--borde2);margin-top:.35rem">Otros períodos</div>
+            <button type="button" class="periodo-opcion" data-periodo="hoy" onclick="elegirPeriodo('hoy')">☀️ Hoy</button>
+            <button type="button" class="periodo-opcion" data-periodo="semana-pasada" onclick="elegirPeriodo('semana-pasada')">📆 Semana pasada</button>
+            <button type="button" class="periodo-opcion" data-periodo="mes-actual" onclick="elegirPeriodo('mes-actual')">🗓️ Este mes</button>
+            <button type="button" class="periodo-opcion" data-periodo="mes-1" onclick="elegirPeriodo('mes-1')">🗓️ Mes pasado</button>
+            <button type="button" class="periodo-opcion" data-periodo="mes-2" onclick="elegirPeriodo('mes-2')">🗓️ Hace 2 meses</button>
+            <button type="button" class="periodo-opcion" data-periodo="mes-3" onclick="elegirPeriodo('mes-3')">🗓️ Hace 3 meses</button>
+          </div>
         </div>
 
         <div class="card">
-          <div class="card-head">
-            <span class="card-titulo" id="reporte-rango">—</span>
-            <div style="display:flex;gap:.5rem">
+          <div class="card-head" style="flex-wrap:wrap;gap:.5rem">
+            <div style="display:flex;align-items:center;gap:.6rem;flex-wrap:wrap">
+              <span class="card-titulo" id="reporte-rango">—</span>
+              <span id="reporte-estado" style="font-size:.7rem;font-weight:700;padding:.2rem .6rem;border-radius:20px;white-space:nowrap">—</span>
+            </div>
+            <div style="display:flex;gap:.5rem;flex-wrap:wrap">
+              <button class="btn btn-outline btn-sm" id="btn-recalcular-reporte" onclick="recalcularReporte()" title="Vuelve a conectar el reporte desde cero">
+                🔄 Recalcular
+              </button>
               <button class="btn btn-outline btn-sm" onclick="exportarCSV()">
                 <svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>Exportar CSV
               </button>
@@ -546,6 +564,7 @@ input[type=file]{display:none}
               </button>
             </div>
           </div>
+          <div id="reporte-alerta" style="display:none"></div>
           <div class="card-body" id="reporte-body" style="padding:1.5rem">
             <div class="loading" id="loading-reporte" style="display:flex"><div class="spinner"></div>&nbsp;Calculando reporte...</div>
           </div>
@@ -697,6 +716,7 @@ document.addEventListener('DOMContentLoaded', function(){
     if(unsubEmpleados)unsubEmpleados();
     if(_unsubReporteOrdenes)_unsubReporteOrdenes();
     if(_unsubReporteMov)_unsubReporteMov();
+    _reporteLoadToken++; // invalida cualquier reintento pendiente del reporte
     await signOut(auth);
     window.location.href='index.html';
   });
@@ -2136,10 +2156,26 @@ async function aplicarCambiosMenuSemana(){
 }
 
 // ── REPORTE ──
+// Esta es la parte que absolutamente no se puede caer: si un día Firestore
+// tarda, se desconecta o da un error de permisos, el reporte NUNCA debe
+// quedarse pegado en "Calculando..." sin ninguna explicación ni recurso.
+// Por eso, además de los listeners en vivo, hay: (1) reintentos automáticos
+// con espera creciente, (2) un vigilante que detecta si se quedó "colgado"
+// sin dato ni error, (3) un respaldo guardado en este navegador de la última
+// vez que sí cargó, que se muestra de inmediato mientras se reconecta, y
+// (4) un indicador visible de si lo que se ve es en vivo, una copia local,
+// o si algo falló — y un botón para forzar "Recalcular" en cualquier momento.
 let _reporteRaw = [];
 let _unsubReporteOrdenes = null, _unsubReporteMov = null;
 let _repOrdenesDocs = null, _repMovDocs = null;
-let _reporteRangoDesde = null, _reporteRangoHasta = null, _reporteRangoEsSemana = true;
+let _reporteRangoDesde = null, _reporteRangoHasta = null, _reporteRangoTipo = 'semana'; // 'dia' | 'semana' | 'mes'
+let _reporteLoadToken = 0;
+let _reporteReintentos = 0;
+let _reporteEsRespaldoActual = false;
+let _reporteDesdeCache = false;
+let REPORTE_MAX_REINTENTOS = 3;
+let REPORTE_RETRY_BASE_MS = 3000;   // 3s, 6s, 9s — mutable para poder acelerarlo en pruebas
+let REPORTE_WATCHDOG_MS = 8000;     // si no llega ni dato ni error en este tiempo, se trata como fallo
 const DS_R = ['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'];
 const MS_R = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
 const MF_R = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
@@ -2164,17 +2200,56 @@ window.setRepComedor = function(comedor, btn) {
 // ── PERÍODO DE REPORTE ──
 let _periodoActual = 'semana-actual';
 
-function setPeriodo(p) {
-  _periodoActual = p;
-  document.querySelectorAll('.periodo-btn').forEach(b => b.classList.remove('active'));
-  event.target.classList.add('active');
-  cargarReporte();
+// Los tres tipos de reporte que existen. "semana-actual" es el PRINCIPAL — es
+// el que se selecciona solo al entrar a la sección y el que trae el badge
+// "Principal" en el menú, porque es como opera el comedor (ciclos semanales).
+const PERIODO_LABELS = {
+  'hoy':            '☀️ Hoy',
+  'semana-actual':  '📆 Esta semana',
+  'semana-pasada':  '📆 Semana pasada',
+  'mes-actual':     '🗓️ Este mes',
+  'mes-1':          '🗓️ Mes pasado',
+  'mes-2':          '🗓️ Hace 2 meses',
+  'mes-3':          '🗓️ Hace 3 meses'
+};
+
+function tipoPeriodo(p){
+  if (p === 'hoy') return 'dia';
+  if (p.indexOf('semana') === 0) return 'semana';
+  return 'mes';
 }
+
+window.togglePeriodoMenu = function(e){
+  if (e) e.stopPropagation();
+  const menu = document.getElementById('periodo-menu');
+  menu.style.display = (menu.style.display === 'none' || !menu.style.display) ? 'block' : 'none';
+};
+
+window.elegirPeriodo = function(p){
+  _periodoActual = p;
+  document.getElementById('periodo-menu-label').textContent = PERIODO_LABELS[p];
+  document.getElementById('periodo-menu').style.display = 'none';
+  document.querySelectorAll('.periodo-opcion').forEach(function(b){
+    b.classList.toggle('on', b.getAttribute('data-periodo') === p);
+  });
+  cargarReporte();
+};
+
+// Cierra el menú desplegable si se hace clic fuera de él.
+document.addEventListener('click', function(e){
+  const wrap = document.getElementById('periodo-dropdown-wrap');
+  if (wrap && !wrap.contains(e.target)) {
+    const menu = document.getElementById('periodo-menu');
+    if (menu) menu.style.display = 'none';
+  }
+});
 
 function getRango() {
   const hoyD = new Date();
   let desde, hasta;
-  if (_periodoActual === 'semana-actual') {
+  if (_periodoActual === 'hoy') {
+    desde = hoy(); hasta = hoy();
+  } else if (_periodoActual === 'semana-actual') {
     desde = getDias()[0]; hasta = getDias()[getDias().length-1];
   } else if (_periodoActual === 'semana-pasada') {
     const lun = new Date(getDias()[0]+'T12:00:00');
@@ -2224,7 +2299,7 @@ window.exportarCSVCompleto = async function() {
   a.download='respaldo_completo_buen_fruto_'+hoy()+'.csv'; a.click();
 };
 
-function cargarReporte(){
+function cargarReporte(esReintento){
   // Se cierra cualquier listener anterior (cambio de período/comedor o
   // re-entrada a la sección) antes de abrir los nuevos, para no ir
   // acumulando suscripciones activas de Firestore.
@@ -2232,20 +2307,50 @@ function cargarReporte(){
   if (_unsubReporteMov) { _unsubReporteMov(); _unsubReporteMov = null; }
   _repOrdenesDocs = null;
   _repMovDocs = null;
+  _reporteEsRespaldoActual = false;
+  if (!esReintento) _reporteReintentos = 0; // un reintento automático NO reinicia el contador, o nunca se daría por vencido
+  const miToken = ++_reporteLoadToken;
 
   const body = document.getElementById('reporte-body');
-  body.innerHTML = '<div class="loading" style="display:flex"><div class="spinner"></div>&nbsp;Calculando reporte...</div>';
+  ocultarAlertaReporte();
 
   const { desde, hasta } = getRango();
-  const esSemana = _periodoActual.startsWith('semana');
+  const tipo = tipoPeriodo(_periodoActual); // 'dia' | 'semana' | 'mes'
   _reporteRangoDesde = desde;
   _reporteRangoHasta = hasta;
-  _reporteRangoEsSemana = esSemana;
+  _reporteRangoTipo = tipo;
 
   const d0 = new Date(desde+'T12:00:00'), d1 = new Date(hasta+'T12:00:00');
-  document.getElementById('reporte-rango').textContent = esSemana
-    ? 'Semana del '+d0.getDate()+' de '+MS_R[d0.getMonth()]+' al '+d1.getDate()+' de '+MS_R[d1.getMonth()]
-    : MS_R[d0.getMonth()]+' '+d0.getFullYear();
+  document.getElementById('reporte-rango').textContent =
+    tipo === 'dia' ? ('Hoy, '+DS_R[d0.getDay()]+' '+d0.getDate()+' de '+MS_R[d0.getMonth()]) :
+    tipo === 'semana' ? ('Semana del '+d0.getDate()+' de '+MS_R[d0.getMonth()]+' al '+d1.getDate()+' de '+MS_R[d1.getMonth()]) :
+    (MS_R[d0.getMonth()]+' '+d0.getFullYear());
+
+  // Mientras se conecta con Firestore: si ya existe un respaldo guardado en
+  // este navegador para este mismo período y filtro, se muestra de
+  // inmediato — así nunca se ve una pantalla vacía ni un "Calculando..."
+  // eterno, ni siquiera si la conexión tarda o llega a fallar del todo.
+  const respaldo = cargarRespaldoReporte(desde, hasta, _repComedor);
+  if (respaldo) {
+    _repOrdenesDocs = respaldo.ordenes;
+    _repMovDocs = respaldo.movimientos;
+    _reporteEsRespaldoActual = true;
+    renderizarReporte();
+  } else {
+    body.innerHTML = '<div class="loading" style="display:flex"><div class="spinner"></div>&nbsp;Calculando reporte...</div>';
+    mostrarEstadoReporte('sincronizando', '🟡 Conectando…');
+  }
+
+  // Vigilante: si tras varios segundos ni llegó un dato en vivo ni un error
+  // explícito de Firestore (una conexión que se queda "colgada" sin avisar
+  // es más común de lo que parece), se trata igual que una falla — nunca se
+  // deja al reporte esperando para siempre sin ningún recurso visible.
+  setTimeout(function(){
+    if (miToken !== _reporteLoadToken) return;
+    if (_repOrdenesDocs === null || _repMovDocs === null || _reporteEsRespaldoActual) {
+      _reporteFallo(miToken, new Error('Se agotó el tiempo de espera de Firestore'), 'watchdog');
+    }
+  }, REPORTE_WATCHDOG_MS);
 
   // Reporte en vivo: se abren dos listeners de Firestore acotados al rango
   // de fechas del período seleccionado (nunca se lee el historial completo,
@@ -2255,23 +2360,146 @@ function cargarReporte(){
   // personal — lo vuelve a dibujar automáticamente al instante, sin
   // necesidad de refrescar la página ni volver a pedir el reporte.
   _unsubReporteOrdenes = db.collection('ordenes').where('fecha','>=',desde).where('fecha','<=',hasta)
-    .onSnapshot(snap => {
+    .onSnapshot({includeMetadataChanges:true}, snap => {
+      if (miToken !== _reporteLoadToken) return;
+      _reporteReintentos = 0;
+      _reporteEsRespaldoActual = false;
       _repOrdenesDocs = [];
       snap.forEach(d => _repOrdenesDocs.push(d.data()));
+      _reporteDesdeCache = !!(snap.metadata && snap.metadata.fromCache);
       renderizarReporte();
-    }, e => {
-      console.error('Error en listener de reporte (ordenes):', e);
-      body.innerHTML = '<div style="padding:2rem;color:#C0392B">Error al cargar reporte: ' + e.message + '</div>';
-    });
+    }, e => _reporteFallo(miToken, e, 'ordenes'));
 
   _unsubReporteMov = db.collection('movimientos_headcount').where('fecha','>=',desde).where('fecha','<=',hasta)
-    .onSnapshot(snap => {
+    .onSnapshot({includeMetadataChanges:true}, snap => {
+      if (miToken !== _reporteLoadToken) return;
+      _reporteReintentos = 0;
+      _reporteEsRespaldoActual = false;
       _repMovDocs = [];
       snap.forEach(d => _repMovDocs.push(d.data()));
       renderizarReporte();
-    }, e => {
-      console.error('Error en listener de reporte (movimientos):', e);
-    });
+    }, e => _reporteFallo(miToken, e, 'movimientos'));
+}
+
+// Punto único de manejo de fallas (error de Firestore o vigilante colgado):
+// reintenta solo unas cuantas veces con espera creciente y, si de plano no
+// hay manera de conectar, lo dice claramente y deja un botón para forzar un
+// nuevo intento — nunca se queda en silencio.
+function _reporteFallo(token, err, tipo){
+  if (token !== _reporteLoadToken) return; // esta carga ya fue reemplazada por una más nueva
+  console.error('Reporte: fallo ('+tipo+'):', err);
+  _reporteReintentos++;
+  if (_reporteReintentos <= REPORTE_MAX_REINTENTOS) {
+    mostrarEstadoReporte('reintentando', '🟠 Reconectando… ('+_reporteReintentos+'/'+REPORTE_MAX_REINTENTOS+')');
+    const espera = REPORTE_RETRY_BASE_MS * _reporteReintentos;
+    setTimeout(function(){
+      if (token !== _reporteLoadToken) return;
+      cargarReporte(true);
+    }, espera);
+  } else {
+    const hayDatos = !!(_repOrdenesDocs && _repMovDocs);
+    mostrarEstadoReporte('error', '🔴 Sin conexión');
+    mostrarAlertaReporte('error', 'No se pudo conectar con el reporte en este momento.' + (hayDatos ? ' Se están mostrando los últimos datos disponibles — pueden no ser los más recientes.' : ' Verifica tu conexión a internet.'), true);
+    if (!hayDatos) {
+      document.getElementById('reporte-body').innerHTML = '<div style="text-align:center;padding:3rem;color:#C0392B">No se pudo cargar el reporte.<br>Verifica tu conexión e intenta de nuevo con "Recalcular".</div>';
+    }
+  }
+}
+
+window.recalcularReporte = function(){
+  cargarReporte(false);
+};
+
+function mostrarEstadoReporte(tipo, texto){
+  const el = document.getElementById('reporte-estado');
+  if (!el) return;
+  const estilos = {
+    vivo:          { bg:'#E3F3EC', color:'#1f7a4d' },
+    cache:         { bg:'#FDF2E3', color:'#a3670f' },
+    sincronizando: { bg:'#EEEEE8', color:'#666' },
+    reintentando:  { bg:'#FDF2E3', color:'#a3670f' },
+    error:         { bg:'#FBE9E7', color:'#C0392B' }
+  };
+  const s = estilos[tipo] || estilos.sincronizando;
+  el.style.background = s.bg;
+  el.style.color = s.color;
+  el.textContent = texto;
+}
+
+function mostrarAlertaReporte(tipo, texto, conBotonReintentar){
+  const el = document.getElementById('reporte-alerta');
+  if (!el) return;
+  const colores = {
+    info:  { bg:'#FDF2E3', color:'#8a5a00', borde:'#f0d9a8' },
+    error: { bg:'#FBE9E7', color:'#a33',    borde:'#f3c6c0' }
+  };
+  const c = colores[tipo] || colores.info;
+  el.style.cssText = 'display:flex;justify-content:space-between;align-items:center;gap:.75rem;'
+    + 'margin:1rem 1.5rem 0;padding:.7rem 1rem;border-radius:10px;font-size:.82rem;'
+    + 'background:'+c.bg+';color:'+c.color+';border:1px solid '+c.borde;
+  el.innerHTML = '<span>'+texto+'</span>' + (conBotonReintentar ? '<button class="btn btn-outline btn-sm" onclick="recalcularReporte()" style="white-space:nowrap">Reintentar ahora</button>' : '');
+}
+
+function ocultarAlertaReporte(){
+  const el = document.getElementById('reporte-alerta');
+  if (!el) return;
+  el.style.display = 'none';
+  el.innerHTML = '';
+}
+
+// ── Respaldo local del reporte ──
+// Después de cada carga real y exitosa se guarda una copia de los datos
+// crudos (órdenes + movimientos) en este navegador. Si el día de mañana
+// Firestore no responde por lo que sea — reglas mal configuradas, un corte
+// de internet, lo que sea — el reporte se puede seguir viendo (aunque no
+// esté al minuto) en vez de quedar completamente en blanco.
+function _claveRespaldoReporte(desde, hasta, comedor){
+  return 'bf_reporte_backup_'+desde+'_'+hasta+'_'+comedor;
+}
+
+function guardarRespaldoReporte(desde, hasta, comedor, ordenes, movimientos){
+  try {
+    const payload = { ordenes: ordenes, movimientos: movimientos, guardadoEn: new Date().toISOString() };
+    localStorage.setItem(_claveRespaldoReporte(desde, hasta, comedor), JSON.stringify(payload));
+  } catch(e) {
+    // localStorage puede fallar (modo privado, cuota llena, etc.) — no es
+    // grave, el reporte en vivo sigue funcionando igual sin el respaldo.
+    console.warn('No se pudo guardar el respaldo local del reporte:', e);
+  }
+}
+
+function cargarRespaldoReporte(desde, hasta, comedor){
+  try {
+    const raw = localStorage.getItem(_claveRespaldoReporte(desde, hasta, comedor));
+    if (!raw) return null;
+    const data = JSON.parse(raw);
+    if (!data || !Array.isArray(data.ordenes) || !Array.isArray(data.movimientos)) return null;
+    const fechaGuardado = new Date(data.guardadoEn);
+    const texto = isNaN(fechaGuardado) ? '' : (fechaGuardado.toLocaleDateString('es-MX')+' '+fechaGuardado.toLocaleTimeString('es-MX', {hour:'2-digit',minute:'2-digit'}));
+    return { ordenes: data.ordenes, movimientos: data.movimientos, guardadoEnTexto: texto };
+  } catch(e) {
+    console.warn('No se pudo leer el respaldo local del reporte:', e);
+    return null;
+  }
+}
+
+// Se llama justo después de dibujar el reporte con éxito (con datos o sin
+// ellos) para decidir qué dice el indicador de estado y si hay que guardar
+// un respaldo nuevo. Si lo que se dibujó fue el propio respaldo (todavía no
+// llega nada en vivo), no se sobreescribe el respaldo ni se avisa "en vivo".
+function _reporteMarcarExito(desde, hasta){
+  if (_reporteEsRespaldoActual) {
+    mostrarEstadoReporte('cache', '🟡 Copia local — conectando…');
+    return;
+  }
+  guardarRespaldoReporte(desde, hasta, _repComedor, _repOrdenesDocs, _repMovDocs);
+  if (_reporteDesdeCache) {
+    mostrarEstadoReporte('cache', '🟠 Sin conexión');
+    mostrarAlertaReporte('info', 'Sin conexión con el servidor en este momento — mostrando la última copia sincronizada. Se actualizará sola en cuanto vuelva la conexión.');
+  } else {
+    mostrarEstadoReporte('vivo', '🟢 En vivo');
+    ocultarAlertaReporte();
+  }
 }
 
 function renderizarReporte(){
@@ -2280,7 +2508,7 @@ function renderizarReporte(){
   if (_repOrdenesDocs === null || _repMovDocs === null) return;
 
   const body = document.getElementById('reporte-body');
-  const desde = _reporteRangoDesde, hasta = _reporteRangoHasta, esSemana = _reporteRangoEsSemana;
+  const desde = _reporteRangoDesde, hasta = _reporteRangoHasta, tipo = _reporteRangoTipo;
   const d0 = new Date(desde+'T12:00:00'), d1 = new Date(hasta+'T12:00:00');
 
   try {
@@ -2321,7 +2549,7 @@ function renderizarReporte(){
     if(!porEmp[o.empleado_uid]) porEmp[o.empleado_uid] = { nombre: o.empleado_nombre||'—', iniciales: (o.empleado_nombre||'??').split(' ').map(x=>x[0]).slice(0,2).join(''), dias:[] };
     const extras = (o.extras||[]).map(e=>typeof e==='string'?e:(e.nombre+' $'+e.precio)).join(', ');
     const subsidio = 45;
-    const pagoEmp = o.cargo;
+    const pagoEmp = Number(o.cargo) || 0; // blindaje: un dato mal formado nunca debe volverse "$NaN.00" en el total
     porEmp[o.empleado_uid].dias.push({
       fecha: o.fecha,
       platillos: (o.platillos||[]).join(', ')||'—',
@@ -2336,6 +2564,7 @@ function renderizarReporte(){
 
   if(!_reporteRaw.length){
     body.innerHTML = movimientosHtml() + '<div style="text-align:center;padding:3rem;color:var(--g3)">Sin órdenes en este período</div>';
+    _reporteMarcarExito(desde, hasta);
     return;
   }
 
@@ -2354,9 +2583,9 @@ function renderizarReporte(){
   <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:1.5rem;padding-bottom:1rem;border-bottom:1.5px solid var(--borde)">
     <div>
       <div style="font-size:.68rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--g3);margin-bottom:.3rem">Buen Fruto — Betel</div>
-      <div style="font-size:1.1rem;font-weight:700;color:var(--negro)">Reporte ${esSemana?'semanal':'mensual'} de comedor</div>
+      <div style="font-size:1.1rem;font-weight:700;color:var(--negro)">Reporte ${tipo==='dia'?'diario':tipo==='semana'?'semanal':'mensual'} de comedor</div>
       <div style="font-size:.78rem;color:var(--g2);margin-top:.2rem">
-        ${esSemana ? ('Semana del '+d0.getDate()+' de '+MS_R[d0.getMonth()]+' al '+d1.getDate()+' de '+MS_R[d1.getMonth()]) : (MF_R[d0.getMonth()]+' '+d0.getFullYear())} &nbsp;·&nbsp;
+        ${tipo==='dia' ? ('Hoy, '+DS_R[d0.getDay()]+' '+d0.getDate()+' de '+MS_R[d0.getMonth()]) : tipo==='semana' ? ('Semana del '+d0.getDate()+' de '+MS_R[d0.getMonth()]+' al '+d1.getDate()+' de '+MS_R[d1.getMonth()]) : (MF_R[d0.getMonth()]+' '+d0.getFullYear())} &nbsp;·&nbsp;
         Generado ${DS_R[ahora.getDay()]} ${ahora.getDate()} ${MS_R[ahora.getMonth()]}, ${ahora.getHours()}:${String(ahora.getMinutes()).padStart(2,'0')} ${ahora.getHours()<12?'am':'pm'}
       </div>
     </div>
@@ -2454,15 +2683,18 @@ function renderizarReporte(){
   </div>`;
 
   body.innerHTML = html;
+  _reporteMarcarExito(desde, hasta);
 
   } catch(e) {
-    body.innerHTML = '<div style="padding:2rem;color:#C0392B">Error al cargar reporte: ' + e.message + '</div>';
+    body.innerHTML = '<div style="padding:2rem;color:#C0392B">Error al procesar el reporte: ' + e.message + '</div>';
+    mostrarEstadoReporte('error', '🔴 Error');
+    mostrarAlertaReporte('error', 'Ocurrió un error inesperado al calcular el reporte. Prueba "Recalcular"; si sigue pasando, avísale a soporte.', true);
     console.error('renderizarReporte error:', e);
   }
 }
 
 window.exportarCSV = function(){
-  if(!_reporteRaw.length) return;
+  if(!_reporteRaw.length){ alert('No hay datos en este período para exportar.'); return; }
   var DS2 = ['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'];
   var MS2_exp = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
   // Usa el rango del período que está realmente seleccionado/visible en el
@@ -2471,11 +2703,12 @@ window.exportarCSV = function(){
   // exportado, lo cual etiquetaba mal el CSV.
   const desde = _reporteRangoDesde;
   const hasta = _reporteRangoHasta;
-  const esSemana = _reporteRangoEsSemana;
+  const tipo = _reporteRangoTipo;
+  const etiquetaTipo = tipo==='dia' ? 'DIARIO' : tipo==='semana' ? 'SEMANAL' : 'MENSUAL';
 
   let rows = [
-    ['REPORTE '+(esSemana?'SEMANAL':'MENSUAL')+' BUEN FRUTO'],
-    [(esSemana?'Semana':'Período')+': '+desde+' al '+hasta],
+    ['REPORTE '+etiquetaTipo+' BUEN FRUTO'],
+    [(tipo==='dia'?'Día':tipo==='semana'?'Semana':'Período')+': '+desde+' al '+hasta],
     ['Generado: '+new Date().toLocaleString('es-MX')],
     [],
     ['Empleado','Fecha','Platillos','Extras','Pago empleado','Subsidio empresa','Total día']
