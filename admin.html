@@ -2317,6 +2317,20 @@ function agregarOrdenesPorEmpleado(docs, comedorFiltro){
   return Object.values(porEmp);
 }
 
+// Si el empleado tuvo una alta o baja de Head Count registrada dentro del
+// mismo período del reporte, arma un textito indicativo ("Entró el mar 18
+// ago" / "Salió el jue 20 ago") para ponerlo junto a su nombre. Se empareja
+// por nombre porque los movimientos de Head Count no guardan empleado_uid
+// (una baja borra al empleado, así que ese uid ya no existiría).
+function indicativoMovimiento(nombreEmp, movDocs){
+  if (!movDocs || !movDocs.length) return null;
+  const m = movDocs.find(function(mv){ return mv.nombre === nombreEmp; });
+  if (!m) return null;
+  const d = new Date(m.fecha+'T12:00:00');
+  const dia = DS_R[d.getDay()]+' '+d.getDate()+' '+MS_R[d.getMonth()];
+  return { tipo: m.tipo, texto: (m.tipo === 'alta' ? 'Entró el ' : 'Salió el ') + dia };
+}
+
 // Dibuja la lista de los últimos 6 meses en la tarjeta de "Historial
 // mensual", cada uno con su propio botón de descarga independiente del
 // período seleccionado arriba en el reporte en vivo.
@@ -2579,39 +2593,17 @@ function renderizarReporte(){
 
   try {
 
-  const altasSemana = [], bajasSemana = [];
-  _repMovDocs.forEach(m=>{
-    if(m.tipo === 'alta') altasSemana.push(m); else if(m.tipo === 'baja') bajasSemana.push(m);
-  });
-  function movimientosHtml(){
-    if(!altasSemana.length && !bajasSemana.length) return '';
-    function filaMov(m, color){
-      return `<div style="display:flex;justify-content:space-between;padding:.4rem 0;border-bottom:1px solid var(--borde2);font-size:.82rem">
-        <span style="font-weight:600;color:var(--negro)">${m.nombre}</span>
-        <span style="color:${color}">${m.puesto||'—'} · ${m.comedor||'—'} · ${m.fecha}</span>
-      </div>`;
-    }
-    return `
-    <div style="margin-bottom:1.75rem;background:var(--crema);border-radius:12px;padding:1.1rem 1.25rem">
-      <div style="font-size:.9rem;font-weight:700;color:var(--negro);margin-bottom:.75rem">Altas y bajas de personal en este período (Head Count)</div>
-      <div style="display:flex;gap:1.5rem;flex-wrap:wrap">
-        <div style="flex:1;min-width:220px">
-          <div style="font-size:.68rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--v);margin-bottom:.4rem">Altas (${altasSemana.length})</div>
-          ${altasSemana.length ? altasSemana.map(m=>filaMov(m,'var(--g2)')).join('') : '<div style="font-size:.8rem;color:var(--g3)">Ninguna</div>'}
-        </div>
-        <div style="flex:1;min-width:220px">
-          <div style="font-size:.68rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--rojo);margin-bottom:.4rem">Bajas (${bajasSemana.length})</div>
-          ${bajasSemana.length ? bajasSemana.map(m=>filaMov(m,'var(--g2)')).join('') : '<div style="font-size:.8rem;color:var(--g3)">Ninguna</div>'}
-        </div>
-      </div>
-    </div>`;
-  }
+  // Nota: las órdenes se guardan con el nombre del empleado ya incluido en
+  // el propio documento (empleado_nombre), no se buscan contra el padrón de
+  // empleados activos — así que un empleado que entró o salió a media
+  // semana igual aparece correctamente en el reporte con lo que consumió
+  // mientras estuvo activo, sin necesidad de una caja aparte de altas/bajas.
 
   // Agrupar por empleado (excluye canceladas y aplica el filtro de comedor activo)
   _reporteRaw = agregarOrdenesPorEmpleado(_repOrdenesDocs, _repComedor);
 
   if(!_reporteRaw.length){
-    body.innerHTML = movimientosHtml() + '<div style="text-align:center;padding:3rem;color:var(--g3)">Sin órdenes en este período</div>';
+    body.innerHTML = '<div style="text-align:center;padding:3rem;color:var(--g3)">Sin órdenes en este período</div>';
     _reporteMarcarExito(desde, hasta);
     return;
   }
@@ -2623,8 +2615,6 @@ function renderizarReporte(){
 
   const COLORS = ['#1a5c96','#6b3fa0','#0f6e56','#993c1d','#854f0b'];
   let html = '';
-
-  html += movimientosHtml();
 
   // Encabezado del reporte
   html += `
@@ -2651,6 +2641,8 @@ function renderizarReporte(){
     const tEmpresa = emp.dias.reduce((s,d)=>s+d.subsidio_empresa,0);
     const tTotal   = tEmp + tEmpresa;
     const bg = color+'18';
+    const mov = indicativoMovimiento(emp.nombre, _repMovDocs);
+    const movBadge = mov ? `<span style="display:inline-block;margin-left:.5rem;font-size:.65rem;font-weight:700;padding:.15rem .55rem;border-radius:20px;background:${mov.tipo==='alta'?'var(--vl)':'var(--rojol)'};color:${mov.tipo==='alta'?'var(--v)':'var(--rojo)'}">${mov.texto}</span>` : '';
 
     html += `
     <div style="margin-bottom:1.75rem">
@@ -2658,7 +2650,7 @@ function renderizarReporte(){
         <div style="display:flex;align-items:center;gap:10px">
           <div style="width:32px;height:32px;border-radius:50%;background:${bg};display:flex;align-items:center;justify-content:center;font-size:.75rem;font-weight:700;color:${color};flex-shrink:0">${emp.iniciales}</div>
           <div>
-            <div style="font-size:.88rem;font-weight:700;color:var(--negro)">${emp.nombre}</div>
+            <div style="font-size:.88rem;font-weight:700;color:var(--negro)">${emp.nombre}${movBadge}</div>
             <div style="font-size:.72rem;color:var(--g3)">${emp.dias.length} comida${emp.dias.length!==1?'s':''} en este período</div>
           </div>
         </div>
@@ -2800,7 +2792,7 @@ window.exportarCSV = function(){
 // La usan tanto "Descargar reporte" (período seleccionado arriba) como cada
 // mes del Historial mensual, así el formato siempre es idéntico.
 async function construirWorkbookReporte(datosPorEmpleado, opts){
-  const etiquetaTipo = opts.etiquetaTipo, tituloRango = opts.tituloRango;
+  const etiquetaTipo = opts.etiquetaTipo, tituloRango = opts.tituloRango, movDocs = opts.movDocs;
   const VERDE = 'FF5C6B4A', DORADO = 'FFE8C84A', CREMA = 'FFF5F0E8', BLANCO = 'FFFFFFFF';
 
   const wb = new ExcelJS.Workbook();
@@ -2862,7 +2854,8 @@ async function construirWorkbookReporte(datosPorEmpleado, opts){
     const tEmp = emp.dias.reduce(function(s,d){ return s+d.pago_empleado; }, 0);
     const tEmpresa = emp.dias.reduce(function(s,d){ return s+d.subsidio_empresa; }, 0);
     const rSub = ws.getRow(fila);
-    rSub.getCell(1).value = 'Subtotal '+emp.nombre.split(' ')[0];
+    const mov = indicativoMovimiento(emp.nombre, movDocs);
+    rSub.getCell(1).value = 'Subtotal '+emp.nombre.split(' ')[0] + (mov ? ' — '+mov.texto : '');
     rSub.getCell(4).value = emp.dias.length+' comida'+(emp.dias.length!==1?'s':'');
     rSub.getCell(5).value = tEmp;
     rSub.getCell(6).value = tEmpresa;
@@ -2920,7 +2913,7 @@ window.descargarReporteExcel = async function(){
     const desde = _reporteRangoDesde, hasta = _reporteRangoHasta, tipo = _reporteRangoTipo;
     const etiquetaTipo = tipo==='dia' ? 'Diario' : 'Semanal';
     const tituloRango = tipo==='dia' ? ('Hoy, '+desde) : ('Del '+desde+' al '+hasta);
-    const wb = await construirWorkbookReporte(_reporteRaw, { etiquetaTipo, tituloRango });
+    const wb = await construirWorkbookReporte(_reporteRaw, { etiquetaTipo, tituloRango, movDocs: _repMovDocs });
     await descargarWorkbook(wb, 'Reporte_Buen_Fruto_'+desde+'_al_'+hasta+'.xlsx');
   } catch(err) {
     console.error('Error al generar el Excel del reporte:', err);
@@ -2938,12 +2931,17 @@ window.descargarReporteMes = async function(offsetMeses, btnEl){
   if (btnEl) { btnEl.disabled = true; btnEl.textContent = 'Generando…'; }
   try {
     const { desde, hasta, etiqueta } = rangoMes(offsetMeses);
-    const snap = await db.collection('ordenes').where('fecha','>=',desde).where('fecha','<=',hasta).get();
+    const [snapOrdenes, snapMov] = await Promise.all([
+      db.collection('ordenes').where('fecha','>=',desde).where('fecha','<=',hasta).get(),
+      db.collection('movimientos_headcount').where('fecha','>=',desde).where('fecha','<=',hasta).get()
+    ]);
     const docs = [];
-    snap.forEach(d => docs.push(d.data()));
+    snapOrdenes.forEach(d => docs.push(d.data()));
+    const movDocs = [];
+    snapMov.forEach(d => movDocs.push(d.data()));
     const datos = agregarOrdenesPorEmpleado(docs, _repComedor);
     if (!datos.length) { alert('No hay órdenes registradas en '+etiqueta+'.'); return; }
-    const wb = await construirWorkbookReporte(datos, { etiquetaTipo: 'Mensual', tituloRango: etiqueta });
+    const wb = await construirWorkbookReporte(datos, { etiquetaTipo: 'Mensual', tituloRango: etiqueta, movDocs });
     await descargarWorkbook(wb, 'Reporte_Buen_Fruto_'+etiqueta.replace(' ','_')+'.xlsx');
   } catch(err) {
     console.error('Error al generar el Excel del historial:', err);
