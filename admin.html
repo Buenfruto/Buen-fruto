@@ -424,6 +424,7 @@ input[type=file]{display:none}
           <div class="card-head">
             <span class="card-titulo">Directorio de empleados</span>
             <div style="display:flex;gap:.5rem;flex-wrap:wrap">
+              <button class="btn btn-outline btn-sm" id="btn-excel-emp" onclick="descargarExcelEmpleados()">📊 Descargar Excel</button>
               <button class="btn btn-outline btn-sm" id="btn-gafetes-hoy" onclick="descargarGafetesDeHoy()">📄 Gafetes de hoy</button>
               <button class="btn btn-outline btn-sm" id="btn-gafetes-todos" onclick="descargarTodosLosGafetes()">📄 Todos los gafetes</button>
               <button class="btn btn-v btn-sm" onclick="mostrarModalEmpleado()">
@@ -1272,6 +1273,42 @@ async function generarGafetesPDF(lista, nombreArchivo){
 
   doc.save(nombreArchivo);
 }
+
+// ── DESCARGA DE CREDENCIALES EN EXCEL ──
+window.descargarExcelEmpleados = async function(){
+  const btn = document.getElementById('btn-excel-emp');
+  if (btn) { btn.disabled = true; btn.textContent = 'Generando…'; }
+  try {
+    const comedorLabels = { betel:'Betel', cuauhtemoc:'Cuauhtémoc', intelomas:'Intelomas' };
+    const snap = await db.collection('empleados').get();
+    const filas = [];
+    snap.forEach(function(d){
+      const e = d.data();
+      filas.push({
+        'Nombre': e.nombre || '',
+        'Usuario': e.email || '',
+        'Contraseña': e.password_texto || '',
+        'Código de gafete': e.codigo_gafete || '',
+        'Puesto': e.puesto || '',
+        'Comedor': comedorLabels[e.comedor] || e.comedor || '',
+        'Rol': e.rol || '',
+        'Estado': e.activo !== false ? 'Activo' : 'Inactivo'
+      });
+    });
+    if (!filas.length) { alert('No hay empleados registrados.'); return; }
+    filas.sort(function(a, b){ return (a['Nombre']||'').localeCompare(b['Nombre']||''); });
+    const ws = XLSX.utils.json_to_sheet(filas);
+    ws['!cols'] = [{wch:28},{wch:26},{wch:16},{wch:16},{wch:16},{wch:14},{wch:10},{wch:10}];
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Empleados');
+    XLSX.writeFile(wb, 'empleados_buen_fruto_' + hoy() + '.xlsx');
+  } catch (err) {
+    console.error('Error al generar el Excel de empleados:', err);
+    alert('No se pudo generar el Excel: ' + err.message);
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = '📊 Descargar Excel'; }
+  }
+};
 
 window.descargarTodosLosGafetes = async function(){
   const btn = document.getElementById('btn-gafetes-todos');
