@@ -438,14 +438,29 @@ function mkTicketHTML(buf, ext, pls) {
   h += `<div class="t-div"></div><div class="t-row tot"><span class="l">Total a pagar</span><span class="v">$${cg}.00</span></div>`;
   return h;
 }
+// Los 5 días (lunes a viernes) de la semana actual, SIEMPRE — el comedor no
+// opera sábados ni domingos. Las fechas se arman con los componentes locales
+// (como hoy()), NUNCA con toISOString(), porque toISOString() convierte a
+// UTC: en la tarde/noche en México eso adelanta la fecha un día y corría
+// viernes a "sábado" (justo el bug reportado: el menú/reporte del viernes
+// aparecía fechado sábado, y lo que el admin publicaba para "hoy" quedaba
+// guardado bajo la fecha de mañana, por lo que el empleado nunca lo veía).
 function getDias() {
   const hoyD = new Date(), dia = hoyD.getDay();
   const lunes = new Date(hoyD);
   if (dia === 0) lunes.setDate(hoyD.getDate() + 1);
   else if (dia === 6) lunes.setDate(hoyD.getDate() + 2);
   else lunes.setDate(hoyD.getDate() - (dia - 1));
-  const todos = Array.from({length: 5}, (_, i) => { const d = new Date(lunes); d.setDate(lunes.getDate() + i); return d.toISOString().slice(0,10); });
-  return todos.filter(f => f >= hoy()); // solo hoy y futuros
+  return Array.from({length: 5}, (_, i) => {
+    const d = new Date(lunes);
+    d.setDate(lunes.getDate() + i);
+    return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+  });
+}
+// Igual que getDias(), pero solo hoy y los días futuros de la semana — se usa
+// para las pestañas de días y para impedir ordenar/ver un día que ya pasó.
+function diasFuturos() {
+  return getDias().filter(f => f >= hoy());
 }
 
 // ── LOGIN ──
@@ -827,8 +842,9 @@ async function crearOrden(fecha, horaPreorden) {
 const unsubMenus = [];
 async function cargarMenuSemana() {
   document.getElementById('menu-det-contenido').innerHTML = '<div class="loading"><div class="spinner"></div>Cargando menús...</div>';
-  const dias = getDias();
-  const d0 = new Date(dias[0]+'T12:00:00'), d4 = new Date(dias[4]+'T12:00:00');
+  const diasSemana = getDias(); // siempre los 5 días completos (lunes a viernes) de esta semana
+  const dias = diasFuturos(); // solo hoy y futuros — lo que se muestra/se puede ordenar
+  const d0 = new Date(diasSemana[0]+'T12:00:00'), d4 = new Date(diasSemana[diasSemana.length-1]+'T12:00:00');
   document.getElementById('subtitulo-semana').textContent = `${d0.getDate()} de ${MS[d0.getMonth()]} – ${d4.getDate()} de ${MS[d4.getMonth()]}`;
   // Cancelar suscripciones anteriores
   unsubMenus.forEach(u => u());
@@ -853,7 +869,7 @@ function renderDiasTabs() {
   const wrap = document.getElementById('dias-tabs');
   if (!wrap) return;
   wrap.innerHTML = '';
-  const dias = getDias();
+  const dias = diasFuturos();
   dias.forEach((f, i) => {
     const d = new Date(f+'T12:00:00');
     const tieneOrden = !!ordenes[f];
@@ -867,7 +883,7 @@ function renderDiasTabs() {
 
 function selDia(i) {
   document.querySelectorAll('.dia-tab').forEach((t, j) => t.classList.toggle('on', j === i));
-  const dias = getDias(), fecha = dias[i];
+  const dias = diasFuturos(), fecha = dias[i];
   const menu = menusSemana[i];
   const esHoy = fecha === hoy();
   const tieneOrden = !!(ordenes[fecha] && ordenes[fecha].estado !== 'cancelado');
