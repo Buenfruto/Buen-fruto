@@ -541,13 +541,6 @@ input[type=file]{display:none}
             <button type="button" class="periodo-opcion" data-periodo="semana-pasada" onclick="elegirPeriodo('semana-pasada')">📆 Semana pasada</button>
             <button type="button" class="periodo-opcion" data-periodo="semana-2" onclick="elegirPeriodo('semana-2')">📆 Hace 2 semanas</button>
             <button type="button" class="periodo-opcion" data-periodo="semana-3" onclick="elegirPeriodo('semana-3')">📆 Hace 3 semanas</button>
-            <div style="font-size:.64rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--g3);padding:.6rem .6rem .3rem;border-top:1px solid var(--borde2);margin-top:.35rem">Historial mensual (últimos 6 meses)</div>
-            <button type="button" class="periodo-opcion" data-periodo="mes-actual" onclick="elegirPeriodo('mes-actual')">🗓️ Este mes</button>
-            <button type="button" class="periodo-opcion" data-periodo="mes-1" onclick="elegirPeriodo('mes-1')">🗓️ Mes pasado</button>
-            <button type="button" class="periodo-opcion" data-periodo="mes-2" onclick="elegirPeriodo('mes-2')">🗓️ Hace 2 meses</button>
-            <button type="button" class="periodo-opcion" data-periodo="mes-3" onclick="elegirPeriodo('mes-3')">🗓️ Hace 3 meses</button>
-            <button type="button" class="periodo-opcion" data-periodo="mes-4" onclick="elegirPeriodo('mes-4')">🗓️ Hace 4 meses</button>
-            <button type="button" class="periodo-opcion" data-periodo="mes-5" onclick="elegirPeriodo('mes-5')">🗓️ Hace 5 meses</button>
           </div>
         </div>
 
@@ -561,11 +554,11 @@ input[type=file]{display:none}
               <button class="btn btn-outline btn-sm" id="btn-recalcular-reporte" onclick="recalcularReporte()" title="Vuelve a conectar el reporte desde cero">
                 🔄 Recalcular
               </button>
-              <button class="btn btn-v btn-sm" id="btn-excel-reporte" onclick="descargarReporteExcel()">
-                📥 Descargar reporte
+              <button class="btn btn-outline btn-sm" id="btn-plantilla-reporte" onclick="descargarPlantillaReporte()">
+                📥 Descargar plantilla
               </button>
-              <button class="btn btn-outline btn-sm" onclick="exportarCSVCompleto()" title="Respaldo completo de todos los datos">
-                <svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>Respaldo completo
+              <button class="btn btn-v btn-sm" id="btn-excel-reporte" onclick="descargarReporteExcel()">
+                📊 Descargar reporte
               </button>
             </div>
           </div>
@@ -573,6 +566,14 @@ input[type=file]{display:none}
           <div class="card-body" id="reporte-body" style="padding:1.5rem">
             <div class="loading" id="loading-reporte" style="display:flex"><div class="spinner"></div>&nbsp;Calculando reporte...</div>
           </div>
+        </div>
+
+        <div class="card" style="margin-top:1.25rem">
+          <div class="card-head">
+            <span class="card-titulo">🗓️ Historial mensual</span>
+            <span style="font-size:.72rem;color:var(--g3)">Últimos 6 meses, mes por mes</span>
+          </div>
+          <div class="card-body" id="historial-mensual-lista" style="padding:.25rem 1.5rem 1rem"></div>
         </div>
       </div>
 
@@ -774,6 +775,7 @@ function iniciarAdmin(){
   cargarDashboard();
   cargarEmpleados();
   initMenuEditor();
+  renderHistorialMensual();
 }
 
 // ── NAVEGACIÓN ──
@@ -2214,19 +2216,12 @@ const PERIODO_LABELS = {
   'semana-actual':  '📆 Esta semana',
   'semana-pasada':  '📆 Semana pasada',
   'semana-2':       '📆 Hace 2 semanas',
-  'semana-3':       '📆 Hace 3 semanas',
-  'mes-actual':     '🗓️ Este mes',
-  'mes-1':          '🗓️ Mes pasado',
-  'mes-2':          '🗓️ Hace 2 meses',
-  'mes-3':          '🗓️ Hace 3 meses',
-  'mes-4':          '🗓️ Hace 4 meses',
-  'mes-5':          '🗓️ Hace 5 meses'
+  'semana-3':       '📆 Hace 3 semanas'
 };
 
 function tipoPeriodo(p){
   if (p === 'hoy') return 'dia';
-  if (p.indexOf('semana') === 0) return 'semana';
-  return 'mes';
+  return 'semana';
 }
 
 window.togglePeriodoMenu = function(e){
@@ -2255,28 +2250,77 @@ document.addEventListener('click', function(e){
 });
 
 function getRango() {
-  const hoyD = new Date();
   let desde, hasta;
   if (_periodoActual === 'hoy') {
     desde = hoy(); hasta = hoy();
   } else if (_periodoActual === 'semana-actual') {
     desde = getDias()[0]; hasta = getDias()[getDias().length-1];
-  } else if (_periodoActual === 'semana-pasada' || _periodoActual === 'semana-2' || _periodoActual === 'semana-3') {
-    const semanasAtras = { 'semana-pasada': 1, 'semana-2': 2, 'semana-3': 3 }[_periodoActual];
+  } else {
+    const semanasAtras = { 'semana-pasada': 1, 'semana-2': 2, 'semana-3': 3 }[_periodoActual] || 0;
     const lun = new Date(getDias()[0]+'T12:00:00');
     lun.setDate(lun.getDate() - 7*semanasAtras);
     const vie = new Date(lun); vie.setDate(lun.getDate()+4);
     desde = lun.toISOString().slice(0,10); hasta = vie.toISOString().slice(0,10);
-  } else {
-    const meses = {
-      'mes-actual': 0, 'mes-1': 1, 'mes-2': 2, 'mes-3': 3, 'mes-4': 4, 'mes-5': 5
-    };
-    const offset = meses[_periodoActual] || 0;
-    const d = new Date(hoyD.getFullYear(), hoyD.getMonth() - offset, 1);
-    const fin = new Date(d.getFullYear(), d.getMonth()+1, 0);
-    desde = d.toISOString().slice(0,10); hasta = fin.toISOString().slice(0,10);
   }
   return { desde, hasta };
+}
+
+const MESES_LARGOS_CAP = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+
+// Rango de fechas (primer y último día) del mes que está "offsetMeses" meses
+// atrás del actual (0 = este mes, 1 = mes pasado, etc). Lo usa la lista de
+// Historial mensual para generar y etiquetar cada descarga.
+function rangoMes(offsetMeses){
+  const hoyD = new Date();
+  const d = new Date(hoyD.getFullYear(), hoyD.getMonth() - offsetMeses, 1);
+  const fin = new Date(d.getFullYear(), d.getMonth()+1, 0);
+  return {
+    desde: d.toISOString().slice(0,10),
+    hasta: fin.toISOString().slice(0,10),
+    etiqueta: MESES_LARGOS_CAP[d.getMonth()]+' '+d.getFullYear()
+  };
+}
+
+// Agrupa un arreglo de documentos de "ordenes" por empleado (excluye
+// canceladas y aplica el filtro de comedor). La usa tanto el reporte en vivo
+// (renderizarReporte) como cada descarga del Historial mensual, que hace su
+// propia consulta puntual a Firestore en vez de depender del listener vivo.
+function agregarOrdenesPorEmpleado(docs, comedorFiltro){
+  const porEmp = {};
+  (docs||[]).forEach(o=>{
+    if(o.estado === 'cancelado') return;
+    if(comedorFiltro !== 'todos' && o.comedor !== comedorFiltro) return;
+    if(!porEmp[o.empleado_uid]) porEmp[o.empleado_uid] = { nombre: o.empleado_nombre||'—', iniciales: (o.empleado_nombre||'??').split(' ').map(x=>x[0]).slice(0,2).join(''), dias:[] };
+    const extras = (o.extras||[]).map(e=>typeof e==='string'?e:(e.nombre+' $'+e.precio)).join(', ');
+    const subsidio = 45;
+    const pagoEmp = Number(o.cargo) || 0; // blindaje: un dato mal formado nunca debe volverse "$NaN.00" en el total
+    porEmp[o.empleado_uid].dias.push({
+      fecha: o.fecha,
+      platillos: (o.platillos||[]).join(', ')||'—',
+      extras: extras||'—',
+      pago_empleado: pagoEmp,
+      subsidio_empresa: subsidio,
+      total_dia: pagoEmp + subsidio
+    });
+  });
+  return Object.values(porEmp);
+}
+
+// Dibuja la lista de los últimos 6 meses en la tarjeta de "Historial
+// mensual", cada uno con su propio botón de descarga independiente del
+// período seleccionado arriba en el reporte en vivo.
+function renderHistorialMensual(){
+  const cont = document.getElementById('historial-mensual-lista');
+  if (!cont) return;
+  let html = '';
+  for (let i=0; i<=5; i++){
+    const { etiqueta } = rangoMes(i);
+    html += '<div style="display:flex;align-items:center;justify-content:space-between;padding:.65rem 0;border-bottom:1px solid var(--borde2)">'
+      + '<span style="font-size:.88rem;color:var(--negro)">'+etiqueta+(i===0?' <span style="color:var(--g3);font-size:.75rem">(mes actual)</span>':'')+'</span>'
+      + '<button type="button" class="btn btn-outline btn-sm" onclick="descargarReporteMes('+i+', this)">📥 Descargar</button>'
+      + '</div>';
+  }
+  cont.innerHTML = html;
 }
 
 window.eliminarOrdenAdmin = async function(id, nombre, fecha) {
@@ -2553,25 +2597,7 @@ function renderizarReporte(){
   }
 
   // Agrupar por empleado (excluye canceladas y aplica el filtro de comedor activo)
-  const porEmp = {};
-  _repOrdenesDocs.forEach(o=>{
-    if(o.estado === 'cancelado') return; // ignorar canceladas
-    if(_repComedor !== 'todos' && o.comedor !== _repComedor) return;
-    if(!porEmp[o.empleado_uid]) porEmp[o.empleado_uid] = { nombre: o.empleado_nombre||'—', iniciales: (o.empleado_nombre||'??').split(' ').map(x=>x[0]).slice(0,2).join(''), dias:[] };
-    const extras = (o.extras||[]).map(e=>typeof e==='string'?e:(e.nombre+' $'+e.precio)).join(', ');
-    const subsidio = 45;
-    const pagoEmp = Number(o.cargo) || 0; // blindaje: un dato mal formado nunca debe volverse "$NaN.00" en el total
-    porEmp[o.empleado_uid].dias.push({
-      fecha: o.fecha,
-      platillos: (o.platillos||[]).join(', ')||'—',
-      extras: extras||'—',
-      pago_empleado: pagoEmp,
-      subsidio_empresa: subsidio,
-      total_dia: pagoEmp + subsidio
-    });
-  });
-
-  _reporteRaw = Object.values(porEmp);
+  _reporteRaw = agregarOrdenesPorEmpleado(_repOrdenesDocs, _repComedor);
 
   if(!_reporteRaw.length){
     body.innerHTML = movimientosHtml() + '<div style="text-align:center;padding:3rem;color:var(--g3)">Sin órdenes en este período</div>';
@@ -2756,29 +2782,182 @@ window.exportarCSV = function(){
 };
 
 // ── DESCARGA DEL REPORTE EN EXCEL, CON FORMATO ──
-// Mismos datos que "Exportar CSV" (usa el mismo _reporteRaw ya calculado, así
-// que siempre coinciden), pero como un .xlsx con colores, encabezados en
-// negritas, columnas de dinero con formato de moneda y subtotales resaltados
-// — para que se pueda abrir y entender de un vistazo, no solo procesar.
+// Construye (sin descargar) un Workbook de ExcelJS con el formato/marca Buen
+// Fruto (verde/dorado, encabezados en negritas, columnas de dinero con
+// formato de moneda, subtotales resaltados) a partir de datos YA agregados
+// por empleado (mismo formato que _reporteRaw / agregarOrdenesPorEmpleado).
+// La usan tanto "Descargar reporte" (período seleccionado arriba) como cada
+// mes del Historial mensual, así el formato siempre es idéntico.
+async function construirWorkbookReporte(datosPorEmpleado, opts){
+  const etiquetaTipo = opts.etiquetaTipo, tituloRango = opts.tituloRango;
+  const VERDE = 'FF5C6B4A', DORADO = 'FFE8C84A', CREMA = 'FFF5F0E8', BLANCO = 'FFFFFFFF';
+
+  const wb = new ExcelJS.Workbook();
+  wb.creator = 'Buen Fruto';
+  wb.created = new Date();
+  const ws = wb.addWorksheet('Reporte', { views: [{ state:'frozen', ySplit: 4 }] });
+
+  ws.mergeCells('A1:G1');
+  const titulo = ws.getCell('A1');
+  titulo.value = 'Buen Fruto — Reporte '+etiquetaTipo+' de comedor';
+  titulo.font = { name:'Arial', size:15, bold:true, color:{argb:BLANCO} };
+  titulo.alignment = { vertical:'middle' };
+  titulo.fill = { type:'pattern', pattern:'solid', fgColor:{argb:VERDE} };
+  ws.getRow(1).height = 26;
+
+  ws.mergeCells('A2:G2');
+  const subtitulo = ws.getCell('A2');
+  subtitulo.value = tituloRango + '   ·   Generado: ' + new Date().toLocaleString('es-MX');
+  subtitulo.font = { name:'Arial', size:10, italic:true, color:{argb:'FF666666'} };
+  ws.getRow(2).height = 18;
+  ws.getRow(3).height = 6;
+
+  const encabezados = ['Empleado','Fecha','Platillos','Extras','Pago empleado','Subsidio empresa','Total día'];
+  const filaEnc = ws.getRow(4);
+  encabezados.forEach(function(h, i){
+    const cell = filaEnc.getCell(i+1);
+    cell.value = h;
+    cell.font = { name:'Arial', size:10, bold:true, color:{argb:BLANCO} };
+    cell.fill = { type:'pattern', pattern:'solid', fgColor:{argb:VERDE} };
+    cell.alignment = { vertical:'middle', horizontal: i>=4 ? 'right' : 'left' };
+  });
+  filaEnc.height = 20;
+
+  const DS2 = ['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'];
+  const MS2 = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
+  let fila = 5;
+
+  datosPorEmpleado.forEach(function(emp){
+    emp.dias.forEach(function(d){
+      const dt = new Date(d.fecha+'T12:00:00');
+      const r = ws.getRow(fila);
+      r.getCell(1).value = emp.nombre;
+      r.getCell(2).value = DS2[dt.getDay()]+' '+dt.getDate()+' '+MS2[dt.getMonth()];
+      r.getCell(3).value = d.platillos;
+      r.getCell(4).value = d.extras;
+      r.getCell(5).value = d.pago_empleado;
+      r.getCell(6).value = d.subsidio_empresa;
+      r.getCell(7).value = d.total_dia;
+      const bg = fila % 2 === 0 ? CREMA : BLANCO;
+      for (let c=1;c<=7;c++){
+        const cell = r.getCell(c);
+        cell.font = { name:'Arial', size:10 };
+        cell.fill = { type:'pattern', pattern:'solid', fgColor:{argb:bg} };
+        if (c>=5) { cell.numFmt = '$#,##0'; cell.alignment = { horizontal:'right' }; }
+      }
+      fila++;
+    });
+
+    const tEmp = emp.dias.reduce(function(s,d){ return s+d.pago_empleado; }, 0);
+    const tEmpresa = emp.dias.reduce(function(s,d){ return s+d.subsidio_empresa; }, 0);
+    const rSub = ws.getRow(fila);
+    rSub.getCell(1).value = 'Subtotal '+emp.nombre.split(' ')[0];
+    rSub.getCell(4).value = emp.dias.length+' comida'+(emp.dias.length!==1?'s':'');
+    rSub.getCell(5).value = tEmp;
+    rSub.getCell(6).value = tEmpresa;
+    rSub.getCell(7).value = tEmp+tEmpresa;
+    for (let c=1;c<=7;c++){
+      const cell = rSub.getCell(c);
+      cell.font = { name:'Arial', size:10, bold:true };
+      cell.fill = { type:'pattern', pattern:'solid', fgColor:{argb:DORADO} };
+      if (c>=5) { cell.numFmt = '$#,##0'; cell.alignment = { horizontal:'right' }; }
+    }
+    fila++;
+  });
+
+  const gtEmp = datosPorEmpleado.reduce(function(s,e){ return s+e.dias.reduce(function(ss,d){ return ss+d.pago_empleado; },0); },0);
+  const gtEmpresa = datosPorEmpleado.reduce(function(s,e){ return s+e.dias.reduce(function(ss,d){ return ss+d.subsidio_empresa; },0); },0);
+  fila++;
+  const rTotal = ws.getRow(fila);
+  rTotal.getCell(1).value = 'TOTAL GENERAL';
+  rTotal.getCell(5).value = gtEmp;
+  rTotal.getCell(6).value = gtEmpresa;
+  rTotal.getCell(7).value = gtEmp + gtEmpresa;
+  for (let c=1;c<=7;c++){
+    const cell = rTotal.getCell(c);
+    cell.font = { name:'Arial', size:11, bold:true, color:{argb:BLANCO} };
+    cell.fill = { type:'pattern', pattern:'solid', fgColor:{argb:VERDE} };
+    if (c>=5) { cell.numFmt = '$#,##0'; cell.alignment = { horizontal:'right' }; }
+  }
+  rTotal.height = 22;
+
+  ws.columns = [
+    { width: 26 }, { width: 14 }, { width: 34 }, { width: 26 }, { width: 15 }, { width: 16 }, { width: 13 }
+  ];
+
+  return wb;
+}
+
+// Convierte un Workbook de ExcelJS ya armado en una descarga real (.xlsx).
+async function descargarWorkbook(wb, nombreArchivo){
+  const buffer = await wb.xlsx.writeBuffer();
+  const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = nombreArchivo;
+  a.click();
+}
+
+// Descarga el reporte del período que esté seleccionado arriba (Hoy, Esta
+// semana, Semana pasada, etc.) ya calculado con datos reales.
 window.descargarReporteExcel = async function(){
   if(!_reporteRaw.length){ alert('No hay datos en este período para exportar.'); return; }
   const btn = document.getElementById('btn-excel-reporte');
   if (btn) { btn.disabled = true; btn.textContent = 'Generando…'; }
   try {
     const desde = _reporteRangoDesde, hasta = _reporteRangoHasta, tipo = _reporteRangoTipo;
-    const etiquetaTipo = tipo==='dia' ? 'Diario' : tipo==='semana' ? 'Semanal' : 'Mensual';
+    const etiquetaTipo = tipo==='dia' ? 'Diario' : 'Semanal';
     const tituloRango = tipo==='dia' ? ('Hoy, '+desde) : ('Del '+desde+' al '+hasta);
+    const wb = await construirWorkbookReporte(_reporteRaw, { etiquetaTipo, tituloRango });
+    await descargarWorkbook(wb, 'Reporte_Buen_Fruto_'+desde+'_al_'+hasta+'.xlsx');
+  } catch(err) {
+    console.error('Error al generar el Excel del reporte:', err);
+    alert('No se pudo generar el Excel: ' + err.message);
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = '📊 Descargar reporte'; }
+  }
+};
 
-    const VERDE = 'FF5C6B4A', DORADO = 'FFE8C84A', CREMA = 'FFF5F0E8', BLANCO = 'FFFFFFFF';
+// Descarga el reporte de un mes específico del Historial mensual (últimos 6
+// meses), sin depender de lo que esté seleccionado arriba: hace su propia
+// consulta puntual (una sola vez, no un listener en vivo) a Firestore.
+window.descargarReporteMes = async function(offsetMeses, btnEl){
+  const original = btnEl ? btnEl.textContent : null;
+  if (btnEl) { btnEl.disabled = true; btnEl.textContent = 'Generando…'; }
+  try {
+    const { desde, hasta, etiqueta } = rangoMes(offsetMeses);
+    const snap = await db.collection('ordenes').where('fecha','>=',desde).where('fecha','<=',hasta).get();
+    const docs = [];
+    snap.forEach(d => docs.push(d.data()));
+    const datos = agregarOrdenesPorEmpleado(docs, _repComedor);
+    if (!datos.length) { alert('No hay órdenes registradas en '+etiqueta+'.'); return; }
+    const wb = await construirWorkbookReporte(datos, { etiquetaTipo: 'Mensual', tituloRango: etiqueta });
+    await descargarWorkbook(wb, 'Reporte_Buen_Fruto_'+etiqueta.replace(' ','_')+'.xlsx');
+  } catch(err) {
+    console.error('Error al generar el Excel del historial:', err);
+    alert('No se pudo generar el Excel: ' + err.message);
+  } finally {
+    if (btnEl) { btnEl.disabled = false; btnEl.textContent = original; }
+  }
+};
 
+// Plantilla en blanco del reporte (mismo formato/marca que el reporte real,
+// con encabezados y una fila de ejemplo) para usarla como referencia o
+// llenarla a mano — no depende de datos de Firestore ni del período elegido.
+window.descargarPlantillaReporte = async function(){
+  const btn = document.getElementById('btn-plantilla-reporte');
+  if (btn) { btn.disabled = true; btn.textContent = 'Generando…'; }
+  try {
+    const VERDE = 'FF5C6B4A', CREMA = 'FFF5F0E8', BLANCO = 'FFFFFFFF';
     const wb = new ExcelJS.Workbook();
     wb.creator = 'Buen Fruto';
     wb.created = new Date();
-    const ws = wb.addWorksheet('Reporte', { views: [{ state:'frozen', ySplit: 4 }] });
+    const ws = wb.addWorksheet('Plantilla', { views: [{ state:'frozen', ySplit: 4 }] });
 
     ws.mergeCells('A1:G1');
     const titulo = ws.getCell('A1');
-    titulo.value = 'Buen Fruto — Reporte '+etiquetaTipo+' de comedor';
+    titulo.value = 'Buen Fruto — Plantilla de reporte de comedor';
     titulo.font = { name:'Arial', size:15, bold:true, color:{argb:BLANCO} };
     titulo.alignment = { vertical:'middle' };
     titulo.fill = { type:'pattern', pattern:'solid', fgColor:{argb:VERDE} };
@@ -2786,7 +2965,7 @@ window.descargarReporteExcel = async function(){
 
     ws.mergeCells('A2:G2');
     const subtitulo = ws.getCell('A2');
-    subtitulo.value = tituloRango + '   ·   Generado: ' + new Date().toLocaleString('es-MX');
+    subtitulo.value = 'Formato de referencia — llena las filas en blanco a mano si lo necesitas';
     subtitulo.font = { name:'Arial', size:10, italic:true, color:{argb:'FF666666'} };
     ws.getRow(2).height = 18;
     ws.getRow(3).height = 6;
@@ -2802,80 +2981,42 @@ window.descargarReporteExcel = async function(){
     });
     filaEnc.height = 20;
 
-    const DS2 = ['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'];
-    const MS2 = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
-    let fila = 5;
-
-    _reporteRaw.forEach(function(emp){
-      emp.dias.forEach(function(d){
-        const dt = new Date(d.fecha+'T12:00:00');
-        const r = ws.getRow(fila);
-        r.getCell(1).value = emp.nombre;
-        r.getCell(2).value = DS2[dt.getDay()]+' '+dt.getDate()+' '+MS2[dt.getMonth()];
-        r.getCell(3).value = d.platillos;
-        r.getCell(4).value = d.extras;
-        r.getCell(5).value = d.pago_empleado;
-        r.getCell(6).value = d.subsidio_empresa;
-        r.getCell(7).value = d.total_dia;
-        const bg = fila % 2 === 0 ? CREMA : BLANCO;
-        for (let c=1;c<=7;c++){
-          const cell = r.getCell(c);
-          cell.font = { name:'Arial', size:10 };
-          cell.fill = { type:'pattern', pattern:'solid', fgColor:{argb:bg} };
-          if (c>=5) { cell.numFmt = '$#,##0'; cell.alignment = { horizontal:'right' }; }
-        }
-        fila++;
-      });
-
-      const tEmp = emp.dias.reduce(function(s,d){ return s+d.pago_empleado; }, 0);
-      const tEmpresa = emp.dias.reduce(function(s,d){ return s+d.subsidio_empresa; }, 0);
-      const rSub = ws.getRow(fila);
-      rSub.getCell(1).value = 'Subtotal '+emp.nombre.split(' ')[0];
-      rSub.getCell(4).value = emp.dias.length+' comida'+(emp.dias.length!==1?'s':'');
-      rSub.getCell(5).value = tEmp;
-      rSub.getCell(6).value = tEmpresa;
-      rSub.getCell(7).value = tEmp+tEmpresa;
-      for (let c=1;c<=7;c++){
-        const cell = rSub.getCell(c);
-        cell.font = { name:'Arial', size:10, bold:true };
-        cell.fill = { type:'pattern', pattern:'solid', fgColor:{argb:DORADO} };
-        if (c>=5) { cell.numFmt = '$#,##0'; cell.alignment = { horizontal:'right' }; }
-      }
-      fila++;
-    });
-
-    const gtEmp = _reporteRaw.reduce(function(s,e){ return s+e.dias.reduce(function(ss,d){ return ss+d.pago_empleado; },0); },0);
-    const gtEmpresa = _reporteRaw.reduce(function(s,e){ return s+e.dias.reduce(function(ss,d){ return ss+d.subsidio_empresa; },0); },0);
-    fila++;
-    const rTotal = ws.getRow(fila);
-    rTotal.getCell(1).value = 'TOTAL GENERAL';
-    rTotal.getCell(5).value = gtEmp;
-    rTotal.getCell(6).value = gtEmpresa;
-    rTotal.getCell(7).value = gtEmp + gtEmpresa;
+    const rEj = ws.getRow(5);
+    rEj.getCell(1).value = 'Ejemplo: Juan Pérez';
+    rEj.getCell(2).value = 'Lun 18 ago';
+    rEj.getCell(3).value = 'Pollo asado, Arroz';
+    rEj.getCell(4).value = 'Postre $15';
+    rEj.getCell(5).value = 45;
+    rEj.getCell(6).value = 45;
+    rEj.getCell(7).value = 90;
     for (let c=1;c<=7;c++){
-      const cell = rTotal.getCell(c);
-      cell.font = { name:'Arial', size:11, bold:true, color:{argb:BLANCO} };
-      cell.fill = { type:'pattern', pattern:'solid', fgColor:{argb:VERDE} };
+      const cell = rEj.getCell(c);
+      cell.font = { name:'Arial', size:10, italic:true, color:{argb:'FF999999'} };
+      cell.fill = { type:'pattern', pattern:'solid', fgColor:{argb:CREMA} };
       if (c>=5) { cell.numFmt = '$#,##0'; cell.alignment = { horizontal:'right' }; }
     }
-    rTotal.height = 22;
+
+    for (let f=6; f<=20; f++){
+      const r = ws.getRow(f);
+      const bg = f % 2 === 0 ? CREMA : BLANCO;
+      for (let c=1;c<=7;c++){
+        const cell = r.getCell(c);
+        cell.font = { name:'Arial', size:10 };
+        cell.fill = { type:'pattern', pattern:'solid', fgColor:{argb:bg} };
+        if (c>=5) cell.numFmt = '$#,##0';
+      }
+    }
 
     ws.columns = [
       { width: 26 }, { width: 14 }, { width: 34 }, { width: 26 }, { width: 15 }, { width: 16 }, { width: 13 }
     ];
 
-    const buffer = await wb.xlsx.writeBuffer();
-    const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'Reporte_Buen_Fruto_'+desde+'_al_'+hasta+'.xlsx';
-    a.click();
+    await descargarWorkbook(wb, 'Plantilla_Reporte_Buen_Fruto.xlsx');
   } catch(err) {
-    console.error('Error al generar el Excel del reporte:', err);
-    alert('No se pudo generar el Excel: ' + err.message);
+    console.error('Error al generar la plantilla:', err);
+    alert('No se pudo generar la plantilla: ' + err.message);
   } finally {
-    if (btn) { btn.disabled = false; btn.textContent = '📥 Descargar reporte'; }
+    if (btn) { btn.disabled = false; btn.textContent = '📥 Descargar plantilla'; }
   }
 };
 </script>
