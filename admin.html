@@ -433,6 +433,14 @@ input[type=file]{display:none}
             </div>
           </div>
           <div class="card-body" style="padding:0">
+            <div style="position:relative;padding:1rem 1.25rem 0">
+              <input type="text" id="emp-buscar" placeholder="🔎 Buscar empleado por nombre..." autocomplete="off"
+                oninput="buscarEmpleadoInput()" onfocus="buscarEmpleadoInput()"
+                onblur="setTimeout(function(){var o=document.getElementById('emp-buscar-opciones'); if(o) o.style.display='none';},150)"
+                onkeydown="if(event.key==='Escape'){this.value='';buscarEmpleadoInput();this.blur();}"
+                style="width:100%;padding:.6rem .9rem;border:1px solid var(--borde2);border-radius:8px;font-size:.85rem;font-family:inherit;box-sizing:border-box"/>
+              <div id="emp-buscar-opciones" style="display:none;position:absolute;left:1.25rem;right:1.25rem;top:100%;margin-top:2px;background:var(--w);border:1px solid var(--borde2);border-radius:8px;box-shadow:0 6px 18px rgba(0,0,0,.1);max-height:280px;overflow-y:auto;z-index:20"></div>
+            </div>
             <div id="emp-resumen" style="display:flex;gap:.6rem;flex-wrap:wrap;padding:1rem 1.25rem;border-bottom:1px solid var(--borde2)"></div>
             <div class="loading" id="loading-emp"><div style="padding:1.5rem;display:flex;align-items:center;gap:.5rem"><div class="spinner"></div>Cargando empleados...</div></div>
             <div class="tabla-wrap"><table>
@@ -664,6 +672,8 @@ document.addEventListener('DOMContentLoaded', function(){
   document.getElementById('btn-salir').addEventListener('click', async function(){
     if(unsubOrdenes)unsubOrdenes();
     if(unsubEmpleados)unsubEmpleados();
+    if(_unsubReporteOrdenes)_unsubReporteOrdenes();
+    if(_unsubReporteMov)_unsubReporteMov();
     await signOut(auth);
     window.location.href='index.html';
   });
@@ -1437,6 +1447,8 @@ function renderResumenEmpleados(lista){
     tile('Del Head Count', headCount, 'var(--naranja)');
 }
 
+let _empleadosListaCache = [];
+
 async function cargarEmpleados(){
   if(unsubEmpleados)unsubEmpleados();
   unsubEmpleados=db.collection('empleados').onSnapshot(snap=>{
@@ -1444,12 +1456,15 @@ async function cargarEmpleados(){
     const tbody=document.getElementById('tabla-empleados');
     const lista=[];
     snap.forEach(d=>lista.push(Object.assign({id:d.id}, d.data())));
+    _empleadosListaCache = lista;
     renderResumenEmpleados(lista);
     if(snap.empty){ tbody.innerHTML='<tr><td colspan="6" style="text-align:center;padding:2rem;color:var(--g3)">Sin empleados registrados</td></tr>'; return; }
     tbody.innerHTML='';
     snap.forEach(d=>{
       const e=d.data();
       const tr=document.createElement('tr');
+      tr.setAttribute('data-emp-id', d.id);
+      tr.setAttribute('data-nombre', normalizarTexto(e.nombre||''));
       tr.innerHTML=`
         <td style="font-weight:600">${e.nombre||'—'}</td>
         <td>${e.email||'—'}</td>
@@ -1465,8 +1480,74 @@ async function cargarEmpleados(){
         </td>`;
       tbody.appendChild(tr);
     });
+    // Si había una búsqueda activa, se vuelve a aplicar sobre la tabla recién
+    // redibujada (por ejemplo, tras dar de alta/baja o importar Head Count).
+    const inputBuscar = document.getElementById('emp-buscar');
+    if (inputBuscar && inputBuscar.value.trim()) {
+      filtrarTablaEmpleados(normalizarTexto(inputBuscar.value.trim()));
+    }
   });
 }
+
+// Quita acentos y pasa a minúsculas para que la búsqueda no distinga
+// mayúsculas ni acentos (p.ej. "jose" encuentra "José").
+function normalizarTexto(s){
+  return (s||'').toString().normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
+}
+
+function filtrarTablaEmpleados(q, soloId){
+  const tbody = document.getElementById('tabla-empleados');
+  if (!tbody) return;
+  const filas = tbody.querySelectorAll('tr[data-emp-id]');
+  filas.forEach(function(tr){
+    if (!q) { tr.style.display=''; return; }
+    if (soloId) { tr.style.display = (tr.getAttribute('data-emp-id') === soloId) ? '' : 'none'; return; }
+    const nombre = tr.getAttribute('data-nombre') || '';
+    tr.style.display = nombre.indexOf(q) >= 0 ? '' : 'none';
+  });
+}
+
+// Buscador con opciones (autocompletar): muestra hasta 8 empleados que
+// coincidan con lo escrito, y a la vez filtra la tabla en vivo.
+window.buscarEmpleadoInput = function(){
+  const input = document.getElementById('emp-buscar');
+  const opciones = document.getElementById('emp-buscar-opciones');
+  const qRaw = input.value.trim();
+  const q = normalizarTexto(qRaw);
+
+  if (!q) {
+    opciones.style.display = 'none';
+    opciones.innerHTML = '';
+    filtrarTablaEmpleados(null);
+    return;
+  }
+
+  const matches = _empleadosListaCache.filter(function(e){ return normalizarTexto(e.nombre||'').indexOf(q) >= 0; }).slice(0, 8);
+
+  if (!matches.length) {
+    opciones.innerHTML = '<div style="padding:.7rem .9rem;font-size:.8rem;color:var(--g3)">Sin resultados</div>';
+  } else {
+    opciones.innerHTML = matches.map(function(e){
+      return `<div style="padding:.55rem .9rem;font-size:.82rem;cursor:pointer;border-bottom:1px solid var(--borde2)"
+        onmouseover="this.style.background='var(--crema)'" onmouseout="this.style.background=''"
+        onmousedown="seleccionarEmpleadoBuscado('${e.id}')">
+        <span style="font-weight:600;color:var(--negro)">${e.nombre||'—'}</span>
+        <span style="color:var(--g3);font-size:.75rem"> · ${e.puesto||'—'} · ${e.comedor||'—'} · ${e.activo!==false?'Activo':'Inactivo'}</span>
+      </div>`;
+    }).join('');
+  }
+  opciones.style.display = 'block';
+  filtrarTablaEmpleados(q);
+};
+
+window.seleccionarEmpleadoBuscado = function(id){
+  const e = _empleadosListaCache.find(function(x){ return x.id === id; });
+  const opciones = document.getElementById('emp-buscar-opciones');
+  if (!e) { if(opciones){opciones.style.display='none';} return; }
+  document.getElementById('emp-buscar').value = e.nombre || '';
+  if (opciones) { opciones.style.display = 'none'; opciones.innerHTML = ''; }
+  filtrarTablaEmpleados(normalizarTexto(e.nombre||''), id);
+};
 
 window.eliminarEmpleado=async function(uid, nombre){
   if(!confirm('¿Eliminar a '+nombre+'? Esto no se puede deshacer.'))return;
@@ -1793,6 +1874,9 @@ async function borrarMenuDia(){
 
 // ── REPORTE ──
 let _reporteRaw = [];
+let _unsubReporteOrdenes = null, _unsubReporteMov = null;
+let _repOrdenesDocs = null, _repMovDocs = null;
+let _reporteRangoDesde = null, _reporteRangoHasta = null, _reporteRangoEsSemana = true;
 const DS_R = ['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'];
 const MS_R = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
 const MF_R = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
@@ -1877,41 +1961,69 @@ window.exportarCSVCompleto = async function() {
   a.download='respaldo_completo_buen_fruto_'+hoy()+'.csv'; a.click();
 };
 
-async function cargarReporte(){
+function cargarReporte(){
+  // Se cierra cualquier listener anterior (cambio de período/comedor o
+  // re-entrada a la sección) antes de abrir los nuevos, para no ir
+  // acumulando suscripciones activas de Firestore.
+  if (_unsubReporteOrdenes) { _unsubReporteOrdenes(); _unsubReporteOrdenes = null; }
+  if (_unsubReporteMov) { _unsubReporteMov(); _unsubReporteMov = null; }
+  _repOrdenesDocs = null;
+  _repMovDocs = null;
+
   const body = document.getElementById('reporte-body');
   body.innerHTML = '<div class="loading" style="display:flex"><div class="spinner"></div>&nbsp;Calculando reporte...</div>';
-  try {
 
   const { desde, hasta } = getRango();
-  const d0 = new Date(desde+'T12:00:00'), d1 = new Date(hasta+'T12:00:00');
-  const labels = {
-    'semana-actual':'Semana del','semana-pasada':'Semana del',
-    'mes-actual':'Mes de','mes-1':'Mes de','mes-2':'Mes de','mes-3':'Mes de'
-  };
   const esSemana = _periodoActual.startsWith('semana');
+  _reporteRangoDesde = desde;
+  _reporteRangoHasta = hasta;
+  _reporteRangoEsSemana = esSemana;
+
+  const d0 = new Date(desde+'T12:00:00'), d1 = new Date(hasta+'T12:00:00');
   document.getElementById('reporte-rango').textContent = esSemana
     ? 'Semana del '+d0.getDate()+' de '+MS_R[d0.getMonth()]+' al '+d1.getDate()+' de '+MS_R[d1.getMonth()]
     : MS_R[d0.getMonth()]+' '+d0.getFullYear();
 
-  // Antes esto traía TODAS las órdenes desde que existe la app y filtraba
-  // aquí mismo — cada vez más lento entre más historial se acumulara. Ahora
-  // se le pide a Firestore solo el rango de fechas del reporte, así que
-  // el reporte tarda lo mismo hoy que dentro de un año.
-  const snapRango = await db.collection('ordenes').where('fecha','>=',desde).where('fecha','<=',hasta).get();
-  const snap = { forEach: cb => snapRango.forEach(d => {
-    const data = d.data();
-    if(data.estado !== 'cancelado') {
-      if(_repComedor === 'todos' || data.comedor === _repComedor) cb(d);
-    }
-  })};
+  // Reporte en vivo: se abren dos listeners de Firestore acotados al rango
+  // de fechas del período seleccionado (nunca se lee el historial completo,
+  // así que el reporte tarda lo mismo hoy que dentro de un año). En cuanto
+  // ambos han entregado su primer snapshot se dibuja el reporte, y a partir
+  // de ahí cualquier cambio — nueva orden, cancelación, alta o baja de
+  // personal — lo vuelve a dibujar automáticamente al instante, sin
+  // necesidad de refrescar la página ni volver a pedir el reporte.
+  _unsubReporteOrdenes = db.collection('ordenes').where('fecha','>=',desde).where('fecha','<=',hasta)
+    .onSnapshot(snap => {
+      _repOrdenesDocs = [];
+      snap.forEach(d => _repOrdenesDocs.push(d.data()));
+      renderizarReporte();
+    }, e => {
+      console.error('Error en listener de reporte (ordenes):', e);
+      body.innerHTML = '<div style="padding:2rem;color:#C0392B">Error al cargar reporte: ' + e.message + '</div>';
+    });
 
-  // Altas y bajas de personal esta misma ventana de fechas (Head Count diario).
-  // Se consulta acotado al rango del reporte, igual que las órdenes arriba —
-  // nunca se lee el historial completo de movimientos.
-  const movSnap = await db.collection('movimientos_headcount').where('fecha','>=',desde).where('fecha','<=',hasta).get();
+  _unsubReporteMov = db.collection('movimientos_headcount').where('fecha','>=',desde).where('fecha','<=',hasta)
+    .onSnapshot(snap => {
+      _repMovDocs = [];
+      snap.forEach(d => _repMovDocs.push(d.data()));
+      renderizarReporte();
+    }, e => {
+      console.error('Error en listener de reporte (movimientos):', e);
+    });
+}
+
+function renderizarReporte(){
+  // Espera a que ambos listeners hayan entregado al menos un snapshot antes
+  // de dibujar, para no mostrar un reporte a medias.
+  if (_repOrdenesDocs === null || _repMovDocs === null) return;
+
+  const body = document.getElementById('reporte-body');
+  const desde = _reporteRangoDesde, hasta = _reporteRangoHasta, esSemana = _reporteRangoEsSemana;
+  const d0 = new Date(desde+'T12:00:00'), d1 = new Date(hasta+'T12:00:00');
+
+  try {
+
   const altasSemana = [], bajasSemana = [];
-  movSnap.forEach(d=>{
-    const m = d.data();
+  _repMovDocs.forEach(m=>{
     if(m.tipo === 'alta') altasSemana.push(m); else if(m.tipo === 'baja') bajasSemana.push(m);
   });
   function movimientosHtml(){
@@ -1924,7 +2036,7 @@ async function cargarReporte(){
     }
     return `
     <div style="margin-bottom:1.75rem;background:var(--crema);border-radius:12px;padding:1.1rem 1.25rem">
-      <div style="font-size:.9rem;font-weight:700;color:var(--negro);margin-bottom:.75rem">Altas y bajas de personal esta semana (Head Count)</div>
+      <div style="font-size:.9rem;font-weight:700;color:var(--negro);margin-bottom:.75rem">Altas y bajas de personal en este período (Head Count)</div>
       <div style="display:flex;gap:1.5rem;flex-wrap:wrap">
         <div style="flex:1;min-width:220px">
           <div style="font-size:.68rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--v);margin-bottom:.4rem">Altas (${altasSemana.length})</div>
@@ -1938,11 +2050,11 @@ async function cargarReporte(){
     </div>`;
   }
 
-  // Agrupar por empleado
+  // Agrupar por empleado (excluye canceladas y aplica el filtro de comedor activo)
   const porEmp = {};
-  snap.forEach(d=>{
-    const o = d.data();
+  _repOrdenesDocs.forEach(o=>{
     if(o.estado === 'cancelado') return; // ignorar canceladas
+    if(_repComedor !== 'todos' && o.comedor !== _repComedor) return;
     if(!porEmp[o.empleado_uid]) porEmp[o.empleado_uid] = { nombre: o.empleado_nombre||'—', iniciales: (o.empleado_nombre||'??').split(' ').map(x=>x[0]).slice(0,2).join(''), dias:[] };
     const extras = (o.extras||[]).map(e=>typeof e==='string'?e:(e.nombre+' $'+e.precio)).join(', ');
     const subsidio = 45;
@@ -1960,7 +2072,7 @@ async function cargarReporte(){
   _reporteRaw = Object.values(porEmp);
 
   if(!_reporteRaw.length){
-    body.innerHTML = movimientosHtml() + '<div style="text-align:center;padding:3rem;color:var(--g3)">Sin órdenes esta semana</div>';
+    body.innerHTML = movimientosHtml() + '<div style="text-align:center;padding:3rem;color:var(--g3)">Sin órdenes en este período</div>';
     return;
   }
 
@@ -1979,16 +2091,16 @@ async function cargarReporte(){
   <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:1.5rem;padding-bottom:1rem;border-bottom:1.5px solid var(--borde)">
     <div>
       <div style="font-size:.68rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--g3);margin-bottom:.3rem">Buen Fruto — Betel</div>
-      <div style="font-size:1.1rem;font-weight:700;color:var(--negro)">Reporte semanal de comedor</div>
+      <div style="font-size:1.1rem;font-weight:700;color:var(--negro)">Reporte ${esSemana?'semanal':'mensual'} de comedor</div>
       <div style="font-size:.78rem;color:var(--g2);margin-top:.2rem">
-        Semana del ${d0.getDate()} de ${MS_R[d0.getMonth()]} al ${d1.getDate()} de ${MS_R[d1.getMonth()]} &nbsp;·&nbsp;
+        ${esSemana ? ('Semana del '+d0.getDate()+' de '+MS_R[d0.getMonth()]+' al '+d1.getDate()+' de '+MS_R[d1.getMonth()]) : (MF_R[d0.getMonth()]+' '+d0.getFullYear())} &nbsp;·&nbsp;
         Generado ${DS_R[ahora.getDay()]} ${ahora.getDate()} ${MS_R[ahora.getMonth()]}, ${ahora.getHours()}:${String(ahora.getMinutes()).padStart(2,'0')} ${ahora.getHours()<12?'am':'pm'}
       </div>
     </div>
     <div style="text-align:right">
-      <div style="font-size:.7rem;color:var(--g3);margin-bottom:.2rem">Comidas esta semana</div>
-      <div style="font-size:1.4rem;font-weight:800;color:var(--negro)" id="reporte-ordenes-hoy">—</div>
-      <div style="font-size:.72rem;color:var(--g2);margin-top:.1rem" id="reporte-ordenes-sub">en tiempo real</div>
+      <div style="font-size:.7rem;color:var(--g3);margin-bottom:.2rem">Comidas en este período</div>
+      <div style="font-size:1.4rem;font-weight:800;color:var(--negro)">${gtComidas}</div>
+      <div style="font-size:.72rem;color:var(--g2);margin-top:.1rem">● actualizado en vivo</div>
     </div>
   </div>`;
 
@@ -2007,7 +2119,7 @@ async function cargarReporte(){
           <div style="width:32px;height:32px;border-radius:50%;background:${bg};display:flex;align-items:center;justify-content:center;font-size:.75rem;font-weight:700;color:${color};flex-shrink:0">${emp.iniciales}</div>
           <div>
             <div style="font-size:.88rem;font-weight:700;color:var(--negro)">${emp.nombre}</div>
-            <div style="font-size:.72rem;color:var(--g3)">${emp.dias.length} comida${emp.dias.length!==1?'s':''} esta semana</div>
+            <div style="font-size:.72rem;color:var(--g3)">${emp.dias.length} comida${emp.dias.length!==1?'s':''} en este período</div>
           </div>
         </div>
         <div style="text-align:right">
@@ -2080,20 +2192,9 @@ async function cargarReporte(){
 
   body.innerHTML = html;
 
-  // Listener en tiempo real para órdenes de hoy
-  const qHoy = db.collection('ordenes').where('fecha','>=',getDias()[0]).where('fecha','<=',hoy());
-  qHoy.onSnapshot(snapHoy => {
-    const el = document.getElementById('reporte-ordenes-hoy');
-    const sub = document.getElementById('reporte-ordenes-sub');
-    if (el) {
-      const activas = snapHoy.docs.filter(d => d.data().estado !== 'cancelado').length;
-      el.textContent = activas;
-      if (sub) sub.textContent = activas === 1 ? '1 comida esta semana' : activas + ' comidas registradas esta semana';
-    }
-  });
   } catch(e) {
     body.innerHTML = '<div style="padding:2rem;color:#C0392B">Error al cargar reporte: ' + e.message + '</div>';
-    console.error('cargarReporte error:', e);
+    console.error('renderizarReporte error:', e);
   }
 }
 
@@ -2101,12 +2202,17 @@ window.exportarCSV = function(){
   if(!_reporteRaw.length) return;
   var DS2 = ['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'];
   var MS2_exp = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
-  const lunes = getDias()[0];
-  const viernes = getDias()[4];
+  // Usa el rango del período que está realmente seleccionado/visible en el
+  // reporte (semana actual, semana pasada o cualquier mes) — antes esto
+  // siempre usaba la semana actual sin importar qué período se hubiera
+  // exportado, lo cual etiquetaba mal el CSV.
+  const desde = _reporteRangoDesde;
+  const hasta = _reporteRangoHasta;
+  const esSemana = _reporteRangoEsSemana;
 
   let rows = [
-    ['REPORTE SEMANAL BUEN FRUTO'],
-    ['Semana: '+lunes+' al '+viernes],
+    ['REPORTE '+(esSemana?'SEMANAL':'MENSUAL')+' BUEN FRUTO'],
+    [(esSemana?'Semana':'Período')+': '+desde+' al '+hasta],
     ['Generado: '+new Date().toLocaleString('es-MX')],
     [],
     ['Empleado','Fecha','Platillos','Extras','Pago empleado','Subsidio empresa','Total día']
@@ -2139,7 +2245,7 @@ window.exportarCSV = function(){
   const blob = new Blob(['\uFEFF'+csv],{type:'text/csv;charset=utf-8'});
   const url  = URL.createObjectURL(blob);
   const a    = document.createElement('a');
-  a.href=url; a.download='Reporte_Buen_Fruto_'+lunes+'_al_'+viernes+'.csv'; a.click();
+  a.href=url; a.download='Reporte_Buen_Fruto_'+desde+'_al_'+hasta+'.csv'; a.click();
 };
 </script>
 </body>
