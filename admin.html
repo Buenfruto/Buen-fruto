@@ -536,6 +536,9 @@ input[type=file]{display:none}
               <button class="btn btn-v btn-sm" id="btn-excel-reporte" onclick="descargarReporteExcel()">
                 📊 Descargar reporte
               </button>
+              <button class="btn btn-outline btn-sm" id="btn-ver-asistencia" onclick="mostrarVistaAsistencia()" title="Ver en pantalla quién ha escaneado su gafete, antes de descargar">
+                👁 Ver asistencia
+              </button>
               <button class="btn btn-outline btn-sm" id="btn-excel-asistencia" onclick="descargarReporteAsistencia()" title="Solo empleado, sede, fecha y hora — organizado por comedor">
                 🕐 Descargar asistencia
               </button>
@@ -589,6 +592,24 @@ input[type=file]{display:none}
     <div style="display:flex;gap:.75rem;margin-top:1.25rem">
       <button class="btn btn-v" style="flex:1;justify-content:center" id="btn-guardar-emp">Guardar</button>
       <button class="btn btn-outline" onclick="cerrarModalEmp()">Cancelar</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL VISTA PREVIA DE ASISTENCIA -->
+<div id="modal-asistencia" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:200;align-items:center;justify-content:center;padding:1.5rem;backdrop-filter:blur(4px)">
+  <div style="background:var(--w);border-radius:16px;padding:2rem;width:100%;max-width:640px;max-height:85vh;display:flex;flex-direction:column">
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:1rem;margin-bottom:1rem">
+      <div>
+        <div style="font-family:'Cormorant Garamond',serif;font-size:1.3rem;font-weight:700" id="asistencia-preview-titulo">Vista previa de asistencia</div>
+        <div style="font-size:.75rem;color:var(--g3)" id="asistencia-preview-subtitulo">—</div>
+      </div>
+      <button class="btn btn-outline btn-sm" onclick="cerrarModalAsistencia()" title="Cerrar">✕</button>
+    </div>
+    <div id="asistencia-preview-body" style="overflow-y:auto;flex:1;border-top:1px solid var(--borde2);padding-top:.75rem"></div>
+    <div style="display:flex;gap:.75rem;margin-top:1.25rem">
+      <button class="btn btn-v" style="flex:1;justify-content:center" onclick="descargarReporteAsistencia()">📊 Descargar este reporte</button>
+      <button class="btn btn-outline" onclick="cerrarModalAsistencia()">Cerrar</button>
     </div>
   </div>
 </div>
@@ -3047,6 +3068,19 @@ window.descargarReporteExcel = async function(){
 // necesita saber quién llegó, a qué comedor y a qué hora. Usa el mismo
 // período y filtro de comedor que estén seleccionados arriba, y solo incluye
 // órdenes ya escaneadas (las que no se escanearon no tienen una hora real).
+// Devuelve las órdenes que cuentan como "asistencia" (gafete escaneado, no
+// canceladas) dentro del período y comedor actualmente seleccionados en
+// Reportes. La usan tanto la vista previa en pantalla como la descarga del
+// Excel, para que ambas muestren siempre exactamente lo mismo.
+function filasAsistenciaActuales(){
+  return (_repOrdenesDocs||[]).filter(function(o){
+    if (o.estado === 'cancelado') return false;
+    if (!o.escaneado) return false;
+    if (_repComedor !== 'todos' && o.comedor !== _repComedor) return false;
+    return true;
+  });
+}
+
 window.descargarReporteAsistencia = async function(){
   if(!_repOrdenesDocs || !_repOrdenesDocs.length){ alert('No hay datos en este período para exportar.'); return; }
   const btn = document.getElementById('btn-excel-asistencia');
@@ -3055,13 +3089,8 @@ window.descargarReporteAsistencia = async function(){
     const desde = _reporteRangoDesde, hasta = _reporteRangoHasta, tipo = _reporteRangoTipo;
     const etiquetaTipo = tipo==='dia' ? 'Diario' : 'Semanal';
     const tituloRango = tipo==='dia' ? ('Hoy, '+desde) : ('Del '+desde+' al '+hasta);
-    const filas = _repOrdenesDocs.filter(function(o){
-      if (o.estado === 'cancelado') return false;
-      if (!o.escaneado) return false;
-      if (_repComedor !== 'todos' && o.comedor !== _repComedor) return false;
-      return true;
-    });
-    if (!filas.length) { alert('No hay asistencias (gafetes escaneados) registradas en este período.'); return; }
+    const filas = filasAsistenciaActuales();
+    if (!filas.length) { alert('No hay asistencias (gafetes escaneados) registradas en este período.\n\nRecuerda: la asistencia solo se registra cuando el empleado escanea su gafete al recoger su comida. Los pedidos de días que todavía no llegan (aunque estén dentro de la semana) aún no cuentan.'); return; }
     const wb = await construirWorkbookAsistencia(filas, { etiquetaTipo, tituloRango });
     await descargarWorkbook(wb, 'Asistencia_Buen_Fruto_'+desde+'_al_'+hasta+'.xlsx');
   } catch(err) {
@@ -3070,6 +3099,77 @@ window.descargarReporteAsistencia = async function(){
   } finally {
     if (btn) { btn.disabled = false; btn.textContent = '🕐 Descargar asistencia'; }
   }
+};
+
+// Vista previa en pantalla del reporte de asistencia — misma lógica y mismo
+// orden que el Excel (filasAsistenciaActuales + construirWorkbookAsistencia
+// comparten los datos), pero sin descargar nada: para que se pueda revisar
+// primero quién ha escaneado su gafete antes de exportar el archivo.
+window.mostrarVistaAsistencia = function(){
+  const modal = document.getElementById('modal-asistencia');
+  const cuerpo = document.getElementById('asistencia-preview-body');
+  const subtitulo = document.getElementById('asistencia-preview-subtitulo');
+  if (!_repOrdenesDocs){ alert('El reporte todavía se está calculando, espera un momento e intenta de nuevo.'); return; }
+
+  const desde = _reporteRangoDesde, hasta = _reporteRangoHasta, tipo = _reporteRangoTipo;
+  const tituloRango = tipo==='dia' ? ('Hoy, '+desde) : ('Del '+desde+' al '+hasta);
+  subtitulo.textContent = tituloRango + (_repComedor !== 'todos' ? ' · '+_repComedor : '');
+
+  const comedorLabels = { betel:'Betel', cuauhtemoc:'Cuauhtémoc', intelomas:'Intelomas' };
+  const ordenComedores = ['betel','cuauhtemoc','intelomas'];
+  const DS2 = ['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'];
+  const MS2 = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
+  function formatearHoraPreview(ts){
+    const d = (ts && typeof ts.toDate === 'function') ? ts.toDate() : (ts ? new Date(ts) : null);
+    if (!d || isNaN(d.getTime())) return '—';
+    const h = d.getHours(), m = d.getMinutes();
+    return (h<10?'0':'')+h+':'+(m<10?'0':'')+m;
+  }
+
+  const filas = filasAsistenciaActuales();
+
+  if (!filas.length) {
+    cuerpo.innerHTML = '<div style="text-align:center;padding:2rem 1rem;color:var(--g3)">'
+      + '<div style="font-size:1.6rem;margin-bottom:.5rem">🕐</div>'
+      + '<div style="font-weight:600;margin-bottom:.4rem">No hay asistencias registradas todavía en este período.</div>'
+      + '<div style="font-size:.8rem;line-height:1.5">Una asistencia se cuenta solo cuando el empleado escanea su gafete al recoger su comida. '
+      + 'Los pedidos programados para días que aún no llegan (aunque estén dentro de esta semana) todavía no cuentan como asistencia — se registrarán en cuanto ese día llegue y el empleado escanee.</div>'
+      + '</div>';
+  } else {
+    let html = '';
+    ordenComedores.forEach(function(com){
+      const filasCom = filas.filter(function(o){ return o.comedor === com; })
+        .slice()
+        .sort(function(a,b){
+          const fa = (a.fecha||'')+formatearHoraPreview(a.escaneado_en);
+          const fb = (b.fecha||'')+formatearHoraPreview(b.escaneado_en);
+          return fa < fb ? -1 : fa > fb ? 1 : 0;
+        });
+      if (!filasCom.length) return;
+      html += '<div style="font-size:.72rem;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--w);background:var(--g1,#5C6B4A);padding:.4rem .7rem;border-radius:6px;margin:.9rem 0 .4rem">'
+        + comedorLabels[com] + ' — ' + filasCom.length + ' asistencia' + (filasCom.length!==1?'s':'') + '</div>';
+      html += '<table style="width:100%;border-collapse:collapse;font-size:.82rem">';
+      filasCom.forEach(function(o, i){
+        const dt = new Date((o.fecha||hoy())+'T12:00:00');
+        const idEmp = buscarIdEmpleado(o.empleado_uid);
+        const nombreCompleto = (idEmp && idEmp !== '—' ? idEmp+' — ' : '') + (o.empleado_nombre || '—');
+        const bg = i % 2 === 0 ? 'transparent' : 'var(--crema,#F5F0E8)';
+        html += '<tr style="background:'+bg+'">'
+          + '<td style="padding:.45rem .5rem">'+nombreCompleto+'</td>'
+          + '<td style="padding:.45rem .5rem;color:var(--g3)">'+DS2[dt.getDay()]+' '+dt.getDate()+' '+MS2[dt.getMonth()]+'</td>'
+          + '<td style="padding:.45rem .5rem;text-align:right;font-weight:600">'+formatearHoraPreview(o.escaneado_en)+'</td>'
+          + '</tr>';
+      });
+      html += '</table>';
+    });
+    cuerpo.innerHTML = html;
+  }
+
+  modal.style.display = 'flex';
+};
+
+window.cerrarModalAsistencia = function(){
+  document.getElementById('modal-asistencia').style.display = 'none';
 };
 
 // Descarga el reporte de un mes específico del Historial mensual (últimos 6
