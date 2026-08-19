@@ -536,6 +536,9 @@ input[type=file]{display:none}
               <button class="btn btn-v btn-sm" id="btn-excel-reporte" onclick="descargarReporteExcel()">
                 📊 Descargar reporte
               </button>
+              <button class="btn btn-outline btn-sm" id="btn-excel-asistencia" onclick="descargarReporteAsistencia()" title="Solo empleado, sede, fecha y hora — organizado por comedor">
+                🕐 Descargar asistencia
+              </button>
             </div>
           </div>
           <div id="reporte-alerta" style="display:none"></div>
@@ -932,7 +935,11 @@ function parseHeadCountFilas(filas){
     const loginPlata = val(fila,iLoginPlata);
     const hcId = idB360 || idPlata || loginB360 || loginPlata;
     if(!hcId) continue; // sin ningún identificador — no se puede procesar con seguridad
-    const loginBase = loginB360 || loginPlata || ('hc'+hcId);
+    // El usuario para iniciar sesión es el ID B360 (lo que el empleado ya
+    // conoce y trae impreso/asignado) — antes se usaba LOGIN B360, que es un
+    // valor distinto y menos reconocible para ellos. Solo se cae a los otros
+    // identificadores si a esa persona le falta el ID B360 en el archivo.
+    const loginBase = idB360 || idPlata || loginB360 || loginPlata || ('hc'+hcId);
     registrosBrutos.push({
       hc_id: hcId,
       nombre: normalizarNombreHC(nombre),
@@ -1351,7 +1358,10 @@ window.descargarExcelEmpleados = async function(){
       const e = d.data();
       filas.push({
         'Nombre': e.nombre || '',
-        'Usuario': e.email || '',
+        // Lo que el empleado realmente escribe en "Usuario" al iniciar sesión:
+        // su ID B360 tal cual (hc_id) si viene del Head Count, o su correo
+        // completo si es una cuenta agregada a mano (chef/admin) sin ID B360.
+        'Usuario': e.hc_id || e.email || '',
         'Contraseña': e.password_texto || '',
         'Código de gafete': e.codigo_gafete || '',
         'Puesto': e.puesto || '',
@@ -2881,6 +2891,104 @@ async function construirWorkbookReporte(datosPorEmpleado, opts){
   return wb;
 }
 
+// Reporte simple de asistencia: Empleado, Sede, Fecha, Hora — nada de
+// platillos ni montos. "docs" son órdenes crudas de Firestore (idealmente ya
+// filtradas por quien llama, pero aquí se vuelve a filtrar por si acaso —
+// una orden cancelada o sin escanear nunca debe aparecer como "asistencia").
+// Se agrupan en secciones por comedor (Betel, Cuauhtémoc, Intelomas, en ese
+// orden fijo) y dentro de cada una se ordenan por fecha y hora.
+async function construirWorkbookAsistencia(docsCrudos, opts){
+  const etiquetaTipo = opts.etiquetaTipo, tituloRango = opts.tituloRango;
+  const VERDE = 'FF5C6B4A', CREMA = 'FFF5F0E8', BLANCO = 'FFFFFFFF';
+  const comedorLabels = { betel:'Betel', cuauhtemoc:'Cuauhtémoc', intelomas:'Intelomas' };
+  const ordenComedores = ['betel','cuauhtemoc','intelomas'];
+  const docs = (docsCrudos||[]).filter(function(o){ return o.estado !== 'cancelado' && !!o.escaneado; });
+
+  const wb = new ExcelJS.Workbook();
+  wb.creator = 'Buen Fruto';
+  wb.created = new Date();
+  const ws = wb.addWorksheet('Asistencia', { views: [{ state:'frozen', ySplit: 4 }] });
+
+  ws.mergeCells('A1:D1');
+  const titulo = ws.getCell('A1');
+  titulo.value = 'Buen Fruto — Asistencia '+etiquetaTipo+' por comedor';
+  titulo.font = { name:'Arial', size:15, bold:true, color:{argb:BLANCO} };
+  titulo.alignment = { vertical:'middle' };
+  titulo.fill = { type:'pattern', pattern:'solid', fgColor:{argb:VERDE} };
+  ws.getRow(1).height = 26;
+
+  ws.mergeCells('A2:D2');
+  const subtitulo = ws.getCell('A2');
+  subtitulo.value = tituloRango + '   ·   Generado: ' + new Date().toLocaleString('es-MX');
+  subtitulo.font = { name:'Arial', size:10, italic:true, color:{argb:'FF666666'} };
+  ws.getRow(2).height = 18;
+  ws.getRow(3).height = 6;
+
+  const encabezados = ['Empleado','Sede','Fecha','Hora'];
+  const filaEnc = ws.getRow(4);
+  encabezados.forEach(function(h, i){
+    const cell = filaEnc.getCell(i+1);
+    cell.value = h;
+    cell.font = { name:'Arial', size:10, bold:true, color:{argb:BLANCO} };
+    cell.fill = { type:'pattern', pattern:'solid', fgColor:{argb:VERDE} };
+    cell.alignment = { vertical:'middle', horizontal:'left' };
+  });
+  filaEnc.height = 20;
+
+  const DS2 = ['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'];
+  const MS2 = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
+  function formatearHora(ts){
+    const d = (ts && typeof ts.toDate === 'function') ? ts.toDate() : (ts ? new Date(ts) : null);
+    if (!d || isNaN(d.getTime())) return '—';
+    const h = d.getHours(), m = d.getMinutes();
+    return (h<10?'0':'')+h+':'+(m<10?'0':'')+m;
+  }
+
+  let fila = 5;
+  ordenComedores.forEach(function(com){
+    const filasCom = docs.filter(function(o){ return o.comedor === com; })
+      .slice()
+      .sort(function(a,b){
+        const fa = (a.fecha||'')+formatearHora(a.escaneado_en);
+        const fb = (b.fecha||'')+formatearHora(b.escaneado_en);
+        return fa < fb ? -1 : fa > fb ? 1 : 0;
+      });
+    if (!filasCom.length) return; // sin asistencias en este comedor en el período — se omite la sección
+
+    const rSeccion = ws.getRow(fila);
+    ws.mergeCells('A'+fila+':D'+fila);
+    rSeccion.getCell(1).value = comedorLabels[com] + ' — ' + filasCom.length + ' asistencia'+(filasCom.length!==1?'s':'');
+    rSeccion.getCell(1).font = { name:'Arial', size:11, bold:true, color:{argb:BLANCO} };
+    rSeccion.getCell(1).fill = { type:'pattern', pattern:'solid', fgColor:{argb:VERDE} };
+    rSeccion.getCell(1).alignment = { vertical:'middle' };
+    rSeccion.height = 20;
+    fila++;
+
+    filasCom.forEach(function(o){
+      const dt = new Date((o.fecha||hoy())+'T12:00:00');
+      const r = ws.getRow(fila);
+      r.getCell(1).value = o.empleado_nombre || '—';
+      r.getCell(2).value = comedorLabels[com];
+      r.getCell(3).value = DS2[dt.getDay()]+' '+dt.getDate()+' '+MS2[dt.getMonth()];
+      r.getCell(4).value = formatearHora(o.escaneado_en);
+      const bg = fila % 2 === 0 ? CREMA : BLANCO;
+      for (let c=1;c<=4;c++){
+        const cell = r.getCell(c);
+        cell.font = { name:'Arial', size:10 };
+        cell.fill = { type:'pattern', pattern:'solid', fgColor:{argb:bg} };
+      }
+      fila++;
+    });
+    fila++; // fila en blanco entre secciones de comedor
+  });
+
+  ws.columns = [
+    { width: 28 }, { width: 16 }, { width: 16 }, { width: 10 }
+  ];
+
+  return wb;
+}
+
 // Convierte un Workbook de ExcelJS ya armado en una descarga real (.xlsx).
 async function descargarWorkbook(wb, nombreArchivo){
   const buffer = await wb.xlsx.writeBuffer();
@@ -2909,6 +3017,37 @@ window.descargarReporteExcel = async function(){
     alert('No se pudo generar el Excel: ' + err.message);
   } finally {
     if (btn) { btn.disabled = false; btn.textContent = '📊 Descargar reporte'; }
+  }
+};
+
+// Reporte de asistencia — solo empleado, sede, fecha y hora (la hora en que
+// escaneó su gafete), organizado por comedor. Es un reporte aparte del de
+// consumo: no lleva platillos ni montos, para compartirlo con quien solo
+// necesita saber quién llegó, a qué comedor y a qué hora. Usa el mismo
+// período y filtro de comedor que estén seleccionados arriba, y solo incluye
+// órdenes ya escaneadas (las que no se escanearon no tienen una hora real).
+window.descargarReporteAsistencia = async function(){
+  if(!_repOrdenesDocs || !_repOrdenesDocs.length){ alert('No hay datos en este período para exportar.'); return; }
+  const btn = document.getElementById('btn-excel-asistencia');
+  if (btn) { btn.disabled = true; btn.textContent = 'Generando…'; }
+  try {
+    const desde = _reporteRangoDesde, hasta = _reporteRangoHasta, tipo = _reporteRangoTipo;
+    const etiquetaTipo = tipo==='dia' ? 'Diario' : 'Semanal';
+    const tituloRango = tipo==='dia' ? ('Hoy, '+desde) : ('Del '+desde+' al '+hasta);
+    const filas = _repOrdenesDocs.filter(function(o){
+      if (o.estado === 'cancelado') return false;
+      if (!o.escaneado) return false;
+      if (_repComedor !== 'todos' && o.comedor !== _repComedor) return false;
+      return true;
+    });
+    if (!filas.length) { alert('No hay asistencias (gafetes escaneados) registradas en este período.'); return; }
+    const wb = await construirWorkbookAsistencia(filas, { etiquetaTipo, tituloRango });
+    await descargarWorkbook(wb, 'Asistencia_Buen_Fruto_'+desde+'_al_'+hasta+'.xlsx');
+  } catch(err) {
+    console.error('Error al generar el Excel de asistencia:', err);
+    alert('No se pudo generar el Excel: ' + err.message);
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = '🕐 Descargar asistencia'; }
   }
 };
 
