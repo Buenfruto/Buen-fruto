@@ -420,6 +420,11 @@ input[type=file]{display:none}
               <div style="font-size:.72rem;color:var(--g3);margin-top:.4rem">Registra en el historial las altas de empleados del Head Count que se crearon antes de arreglar los permisos y no quedaron en el reporte. Solo hace falta correrlo una vez.</div>
               <div class="msg" id="backfill-msg"></div>
             </div>
+            <div id="migrar-logins-wrap" style="margin-top:1rem;padding-top:1rem;border-top:1px solid var(--borde2)">
+              <button class="btn btn-outline btn-sm" id="btn-migrar-logins" onclick="migrarLoginsAhora()">🔑 Migrar logins de empleados existentes a ID B360</button>
+              <div style="font-size:.72rem;color:var(--g3);margin-top:.4rem">Los empleados que ya existían antes del cambio de login siguen entrando con su correo viejo — esto actualiza su cuenta para que puedan entrar con su ID B360, sin cambiar su contraseña. Seguro de correr varias veces.</div>
+              <div class="msg" id="migrar-logins-msg"></div>
+            </div>
           </div>
         </div>
 
@@ -702,6 +707,23 @@ async function crearEmpleadosHeadCountLote(registros, fecha){
     throw new Error('La función de servidor no está disponible. Verifica que crearEmpleadosHeadCount esté desplegada en Firebase.');
   }
   const resp = await _fnsCrearEmpleadosHC({ registros: registros, fecha: fecha });
+  return (resp && resp.data && resp.data.resultados) || [];
+}
+
+// migrarLoginsEmpleados también corre con permisos de administrador de
+// Firebase (no en este navegador) porque cambiar el correo de la cuenta de
+// OTRO usuario es algo que el SDK de cliente no permite hacer — solo cada
+// quien puede cambiar su propio correo. Por eso esto también necesita la
+// función de servidor, igual que crearEmpleadosHeadCount.
+const _fnsMigrarLogins = (function(){
+  try { return firebase.functions().httpsCallable('migrarLoginsEmpleados'); }
+  catch(e){ return null; }
+})();
+async function migrarLoginsEmpleadosLote(){
+  if(!_fnsMigrarLogins){
+    throw new Error('La función de servidor no está disponible. Verifica que migrarLoginsEmpleados esté desplegada en Firebase.');
+  }
+  const resp = await _fnsMigrarLogins({});
   return (resp && resp.data && resp.data.resultados) || [];
 }
 
@@ -1532,6 +1554,36 @@ window.backfillAltasRetroactivas = async function(){
     console.error('Error en backfill de altas:', err);
     msg.className = 'msg err';
     msg.textContent = 'Error al registrar altas retroactivas: ' + err.message;
+    if (btn) btn.disabled = false;
+  }
+};
+
+// Migra el login de TODOS los empleados que ya existían antes del cambio a
+// ID B360 — cambia el correo de su cuenta de acceso al que corresponde a su
+// ID B360 actual, sin tocar su contraseña. Es seguro correrlo varias veces:
+// a quien ya esté al corriente simplemente lo deja igual.
+window.migrarLoginsAhora = async function(){
+  if (!confirm('Esto va a cambiar el usuario de acceso de TODOS los empleados que ya existían (los que vinieron del Head Count) para que puedan entrar con su ID B360. Su contraseña no cambia. ¿Continuar?')) return;
+  const btn = document.getElementById('btn-migrar-logins');
+  const msg = document.getElementById('migrar-logins-msg');
+  if (btn) btn.disabled = true;
+  msg.style.display = 'block';
+  msg.className = 'msg';
+  msg.textContent = 'Migrando logins…';
+  try {
+    const resultados = await migrarLoginsEmpleadosLote();
+    const migrados = resultados.filter(function(r){ return r.ok && !r.sinCambios; });
+    const sinCambios = resultados.filter(function(r){ return r.ok && r.sinCambios; });
+    const errores = resultados.filter(function(r){ return !r.ok; });
+    msg.className = errores.length ? 'msg err' : 'msg ok';
+    msg.innerHTML = migrados.length + ' empleado(s) migrado(s) a login por ID B360. '
+      + sinCambios.length + ' ya estaban al corriente.'
+      + (errores.length ? '<br>' + errores.length + ' con error: ' + errores.map(function(e){ return (e.nombre||e.uid)+' ('+e.error+')'; }).join(', ') : '');
+    if (btn) btn.disabled = false;
+  } catch (err) {
+    console.error('Error al migrar logins:', err);
+    msg.className = 'msg err';
+    msg.textContent = 'Error al migrar logins: ' + err.message;
     if (btn) btn.disabled = false;
   }
 };
