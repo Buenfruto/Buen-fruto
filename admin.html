@@ -539,6 +539,9 @@ input[type=file]{display:none}
               <button class="btn btn-outline btn-sm" id="btn-excel-asistencia" onclick="descargarReporteAsistencia()" title="Solo empleado, sede, fecha y hora — organizado por comedor">
                 🕐 Descargar asistencia
               </button>
+              <button class="btn btn-outline btn-sm" id="btn-plantilla-asistencia" onclick="descargarPlantillaAsistencia()" title="Formato de referencia del reporte de asistencia, sin depender de datos reales">
+                📥 Plantilla de asistencia
+              </button>
             </div>
           </div>
           <div id="reporte-alerta" style="display:none"></div>
@@ -3156,6 +3159,89 @@ window.descargarPlantillaReporte = async function(){
     alert('No se pudo generar la plantilla: ' + err.message);
   } finally {
     if (btn) { btn.disabled = false; btn.textContent = '📥 Descargar plantilla'; }
+  }
+};
+
+// Plantilla en blanco del reporte de asistencia — mismo formato de 4
+// columnas (Empleado, Sede, Fecha, Hora) organizado por comedor, con filas
+// de ejemplo en los 3 comedores para que se vea cómo queda la agrupación.
+// No depende de datos reales de Firestore.
+window.descargarPlantillaAsistencia = async function(){
+  const btn = document.getElementById('btn-plantilla-asistencia');
+  if (btn) { btn.disabled = true; btn.textContent = 'Generando…'; }
+  try {
+    const VERDE = 'FF5C6B4A', CREMA = 'FFF5F0E8', BLANCO = 'FFFFFFFF';
+    const wb = new ExcelJS.Workbook();
+    wb.creator = 'Buen Fruto';
+    wb.created = new Date();
+    const ws = wb.addWorksheet('Plantilla asistencia', { views: [{ state:'frozen', ySplit: 4 }] });
+
+    ws.mergeCells('A1:D1');
+    const titulo = ws.getCell('A1');
+    titulo.value = 'Buen Fruto — Plantilla de asistencia por comedor';
+    titulo.font = { name:'Arial', size:15, bold:true, color:{argb:BLANCO} };
+    titulo.alignment = { vertical:'middle' };
+    titulo.fill = { type:'pattern', pattern:'solid', fgColor:{argb:VERDE} };
+    ws.getRow(1).height = 26;
+
+    ws.mergeCells('A2:D2');
+    const subtitulo = ws.getCell('A2');
+    subtitulo.value = 'Formato de referencia — así se organiza el reporte real, por comedor';
+    subtitulo.font = { name:'Arial', size:10, italic:true, color:{argb:'FF666666'} };
+    ws.getRow(2).height = 18;
+    ws.getRow(3).height = 6;
+
+    const encabezados = ['Empleado','Sede','Fecha','Hora'];
+    const filaEnc = ws.getRow(4);
+    encabezados.forEach(function(h, i){
+      const cell = filaEnc.getCell(i+1);
+      cell.value = h;
+      cell.font = { name:'Arial', size:10, bold:true, color:{argb:BLANCO} };
+      cell.fill = { type:'pattern', pattern:'solid', fgColor:{argb:VERDE} };
+      cell.alignment = { vertical:'middle', horizontal:'left' };
+    });
+    filaEnc.height = 20;
+
+    const ejemplos = [
+      { comedor:'Betel', filas: [['Ejemplo: Juan Pérez','Betel','Lun 18 ago','13:05'], ['Ejemplo: María López','Betel','Lun 18 ago','13:12']] },
+      { comedor:'Cuauhtémoc', filas: [['Ejemplo: Luis Ramírez','Cuauhtémoc','Lun 18 ago','13:20']] },
+      { comedor:'Intelomas', filas: [['Ejemplo: Sofía Torres','Intelomas','Lun 18 ago','14:00']] },
+    ];
+
+    let fila = 5;
+    ejemplos.forEach(function(grupo){
+      const rSeccion = ws.getRow(fila);
+      ws.mergeCells('A'+fila+':D'+fila);
+      rSeccion.getCell(1).value = grupo.comedor + ' — ' + grupo.filas.length + ' asistencia'+(grupo.filas.length!==1?'s':'');
+      rSeccion.getCell(1).font = { name:'Arial', size:11, bold:true, color:{argb:BLANCO} };
+      rSeccion.getCell(1).fill = { type:'pattern', pattern:'solid', fgColor:{argb:VERDE} };
+      rSeccion.getCell(1).alignment = { vertical:'middle' };
+      rSeccion.height = 20;
+      fila++;
+
+      grupo.filas.forEach(function(valores){
+        const r = ws.getRow(fila);
+        valores.forEach(function(v, i){ r.getCell(i+1).value = v; });
+        for (let c=1;c<=4;c++){
+          const cell = r.getCell(c);
+          cell.font = { name:'Arial', size:10, italic:true, color:{argb:'FF999999'} };
+          cell.fill = { type:'pattern', pattern:'solid', fgColor:{argb:CREMA} };
+        }
+        fila++;
+      });
+      fila++;
+    });
+
+    ws.columns = [
+      { width: 28 }, { width: 16 }, { width: 16 }, { width: 10 }
+    ];
+
+    await descargarWorkbook(wb, 'Plantilla_Asistencia_Buen_Fruto.xlsx');
+  } catch(err) {
+    console.error('Error al generar la plantilla de asistencia:', err);
+    alert('No se pudo generar la plantilla: ' + err.message);
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = '📥 Plantilla de asistencia'; }
   }
 };
 </script>
