@@ -715,8 +715,12 @@ async function crearEmpleadosHeadCountLote(registros, fecha){
 // OTRO usuario es algo que el SDK de cliente no permite hacer — solo cada
 // quien puede cambiar su propio correo. Por eso esto también necesita la
 // función de servidor, igual que crearEmpleadosHeadCount.
+// timeout largo (9 min) porque con cientos de empleados esta función puede
+// tardar varios minutos del lado del servidor — sin esto, el navegador se
+// da por vencido antes de que el servidor termine y muestra "internal"
+// aunque la migración sí haya funcionado.
 const _fnsMigrarLogins = (function(){
-  try { return firebase.functions().httpsCallable('migrarLoginsEmpleados'); }
+  try { return firebase.functions().httpsCallable('migrarLoginsEmpleados', { timeout: 540000 }); }
   catch(e){ return null; }
 })();
 async function migrarLoginsEmpleadosLote(){
