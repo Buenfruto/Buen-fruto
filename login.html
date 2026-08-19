@@ -239,7 +239,7 @@ html,body{height:100%;font-family:'Inter',system-ui,sans-serif;background:var(--
       <div class="login-tagline">La pausa que te mereces, cada día</div>
     </div>
     <div class="login-form">
-      <div class="campo"><label>Usuario</label><input type="email" id="inp-email" placeholder="tu.usuario@empresa.com" autocomplete="email"/></div>
+      <div class="campo"><label>Usuario</label><input type="text" id="inp-email" placeholder="Tu ID B360" autocomplete="username"/></div>
       <div class="campo"><label>Contraseña</label><input type="password" id="inp-pass" placeholder="••••••••" autocomplete="current-password"/></div>
       <button class="btn-fill" id="btn-login">Entrar</button>
       <div class="err" id="login-err">Usuario o contraseña incorrectos</div>
@@ -454,12 +454,30 @@ function diasFuturos() {
 }
 
 // ── LOGIN ──
+// La mayoría de los empleados (los que vienen del Head Count) inician sesión
+// solo con su ID B360 (ej. "48213"), sin ningún correo — así lo escriben en
+// su documento y así es más fácil de recordar. Por dentro, Firebase Auth sí
+// necesita un correo, así que aquí se arma exactamente igual a como lo arma
+// admin.html al crear la cuenta (emailSinteticoHC): mismo dominio, misma
+// limpieza de caracteres. Si lo que escribió ya trae "@" (cuentas de chef o
+// admin agregadas a mano con un correo real), se usa tal cual, sin tocarlo.
+var USUARIO_DOMINIO_INTERNO = 'buenfruto.mx';
+function resolverUsuarioLogin(valorEscrito) {
+  var v = valorEscrito.trim();
+  if (!v) return v;
+  if (v.indexOf('@') >= 0) return v; // ya es un correo real, no un ID B360
+  var limpio = v.normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .toLowerCase().replace(/[^a-z0-9._-]/g, '');
+  return limpio + '@' + USUARIO_DOMINIO_INTERNO;
+}
+
 window.hacerLogin = function() {
-  var email = document.getElementById('inp-email').value.trim();
+  var valorUsuario = document.getElementById('inp-email').value.trim();
+  var email = resolverUsuarioLogin(valorUsuario);
   var pass  = document.getElementById('inp-pass').value;
   var err   = document.getElementById('login-err');
   var btn   = document.getElementById('btn-login');
-  if (!email || !pass) {
+  if (!valorUsuario || !pass) {
     err.style.display = 'block';
     err.style.background = '#FDEDEC';
     err.style.color = '#C0392B';
