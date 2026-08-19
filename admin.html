@@ -444,7 +444,7 @@ input[type=file]{display:none}
             <div id="emp-resumen" style="display:flex;gap:.6rem;flex-wrap:wrap;padding:1rem 1.25rem;border-bottom:1px solid var(--borde2)"></div>
             <div class="loading" id="loading-emp"><div style="padding:1.5rem;display:flex;align-items:center;gap:.5rem"><div class="spinner"></div>Cargando empleados...</div></div>
             <div class="tabla-wrap"><table>
-              <thead><tr><th>Nombre</th><th>Email</th><th>Rol</th><th>Estado</th><th>Código gafete</th><th>Comedor</th><th>Contraseña</th><th>Acciones</th></tr></thead>
+              <thead><tr><th>Nombre</th><th>Usuario</th><th>Rol</th><th>Estado</th><th>Código gafete</th><th>Comedor</th><th>Contraseña</th><th>Acciones</th></tr></thead>
               <tbody id="tabla-empleados"></tbody>
             </table></div>
           </div>
@@ -1535,7 +1535,7 @@ async function cargarEmpleados(){
       tr.setAttribute('data-nombre', normalizarTexto(e.nombre||''));
       tr.innerHTML=`
         <td style="font-weight:600">${e.nombre||'—'}</td>
-        <td>${e.email||'—'}</td>
+        <td>${e.hc_id||e.email||'—'}</td>
         <td><span class="badge ${e.rol==='admin'?'badge-c':e.rol==='chef'?'badge-r':'badge-g'}">${e.rol||'empleado'}</span></td>
         <td><span class="badge ${e.activo!==false?'badge-v':'badge-r'}">${e.activo!==false?'Activo':'Inactivo'}</span></td>
         <td style="font-family:monospace;font-size:.78rem;color:var(--v);font-weight:700">${e.codigo_gafete||'—'}</td>
@@ -2970,7 +2970,8 @@ async function construirWorkbookAsistencia(docsCrudos, opts){
     filasCom.forEach(function(o){
       const dt = new Date((o.fecha||hoy())+'T12:00:00');
       const r = ws.getRow(fila);
-      r.getCell(1).value = o.empleado_nombre || '—';
+      const idEmp = buscarIdEmpleado(o.empleado_uid);
+      r.getCell(1).value = (idEmp && idEmp !== '—' ? idEmp+' — ' : '') + (o.empleado_nombre || '—');
       r.getCell(2).value = comedorLabels[com];
       r.getCell(3).value = DS2[dt.getDay()]+' '+dt.getDate()+' '+MS2[dt.getMonth()];
       r.getCell(4).value = formatearHora(o.escaneado_en);
@@ -2986,7 +2987,7 @@ async function construirWorkbookAsistencia(docsCrudos, opts){
   });
 
   ws.columns = [
-    { width: 28 }, { width: 16 }, { width: 16 }, { width: 10 }
+    { width: 34 }, { width: 16 }, { width: 16 }, { width: 10 }
   ];
 
   return wb;
@@ -3203,9 +3204,9 @@ window.descargarPlantillaAsistencia = async function(){
     filaEnc.height = 20;
 
     const ejemplos = [
-      { comedor:'Betel', filas: [['Ejemplo: Juan Pérez','Betel','Lun 18 ago','13:05'], ['Ejemplo: María López','Betel','Lun 18 ago','13:12']] },
-      { comedor:'Cuauhtémoc', filas: [['Ejemplo: Luis Ramírez','Cuauhtémoc','Lun 18 ago','13:20']] },
-      { comedor:'Intelomas', filas: [['Ejemplo: Sofía Torres','Intelomas','Lun 18 ago','14:00']] },
+      { comedor:'Betel', filas: [['12345 — Ejemplo: Juan Pérez','Betel','Lun 18 ago','13:05'], ['12346 — Ejemplo: María López','Betel','Lun 18 ago','13:12']] },
+      { comedor:'Cuauhtémoc', filas: [['12347 — Ejemplo: Luis Ramírez','Cuauhtémoc','Lun 18 ago','13:20']] },
+      { comedor:'Intelomas', filas: [['12348 — Ejemplo: Sofía Torres','Intelomas','Lun 18 ago','14:00']] },
     ];
 
     let fila = 5;
@@ -3233,7 +3234,7 @@ window.descargarPlantillaAsistencia = async function(){
     });
 
     ws.columns = [
-      { width: 28 }, { width: 16 }, { width: 16 }, { width: 10 }
+      { width: 34 }, { width: 16 }, { width: 16 }, { width: 10 }
     ];
 
     await descargarWorkbook(wb, 'Plantilla_Asistencia_Buen_Fruto.xlsx');
