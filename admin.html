@@ -1749,6 +1749,18 @@ window.cancelarOrdenAdmin=async function(id){
   await updateDoc(doc(db,'ordenes',id),{estado:'cancelado',escaneado:false,cancelado_en:new Date()});
 };
 
+// Borrar un pedido desde Reportes — a diferencia del botón "Cancelar" del
+// Dashboard (pensado solo para antes de que se prepare), aquí el pedido
+// puede ser de cualquier día del período (pasado, presente o futuro), así
+// que el mensaje es distinto. Usa el mismo mecanismo seguro de siempre
+// (estado:'cancelado', nunca se borra el documento de verdad) — por eso
+// desaparece al instante del reporte y de los totales, pero el registro
+// sigue existiendo por si hace falta revisarlo después.
+window.eliminarOrdenReporte=async function(id){
+  if(!confirm('¿Eliminar este pedido del reporte? Ya no se le cobrará ni se contará en los totales del comedor.'))return;
+  await updateDoc(doc(db,'ordenes',id),{estado:'cancelado',cancelado_en:new Date()});
+};
+
 // ── AUTO-CANCELAR ÓRDENES NO ESCANEADAS (días ya cerrados) ──
 // Regla de negocio: si el empleado no escaneó su gafete, esa comida nunca se cobra.
 // Se le da oportunidad de escanear hasta que el día termine; una vez que el día
@@ -2292,6 +2304,7 @@ function agregarOrdenesPorEmpleado(docs, comedorFiltro){
     const subsidio = 45;
     const pagoEmp = Number(o.cargo) || 0; // blindaje: un dato mal formado nunca debe volverse "$NaN.00" en el total
     porEmp[o.empleado_uid].dias.push({
+      id: o.id,
       fecha: o.fecha,
       platillos: (o.platillos||[]).join(', ')||'—',
       extras: extrasTexto||'—',
@@ -2440,7 +2453,7 @@ function cargarReporte(esReintento){
       _reporteReintentos = 0;
       _reporteEsRespaldoActual = false;
       _repOrdenesDocs = [];
-      snap.forEach(d => _repOrdenesDocs.push(d.data()));
+      snap.forEach(d => _repOrdenesDocs.push(Object.assign({id:d.id}, d.data())));
       _reporteDesdeCache = !!(snap.metadata && snap.metadata.fromCache);
       renderizarReporte();
     }, e => _reporteFallo(miToken, e, 'ordenes'));
@@ -2666,6 +2679,7 @@ function renderizarReporte(){
             <th style="text-align:right;padding:.45rem .75rem;font-size:.65rem;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--g3);background:var(--crema)">Empleado</th>
             <th style="text-align:right;padding:.45rem .75rem;font-size:.65rem;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--g3);background:var(--crema)">Empresa</th>
             <th style="text-align:right;padding:.45rem .75rem;font-size:.65rem;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--g3);background:var(--crema)">Total día</th>
+            <th style="text-align:center;padding:.45rem .75rem;font-size:.65rem;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--g3);background:var(--crema)">Acciones</th>
           </tr>
         </thead>
         <tbody>`;
@@ -2685,6 +2699,7 @@ function renderizarReporte(){
             <td style="padding:.65rem .75rem;text-align:right;font-weight:600;color:var(--negro)">$${d.pago_empleado}.00</td>
             <td style="padding:.65rem .75rem;text-align:right;color:var(--v)">$${d.subsidio_empresa}.00</td>
             <td style="padding:.65rem .75rem;text-align:right;font-weight:700;color:var(--negro)">$${d.total_dia}.00</td>
+            <td style="padding:.65rem .75rem;text-align:center">${d.id ? '<button class="btn btn-outline btn-sm" style="color:var(--rojo);border-color:var(--rojo)" onclick="eliminarOrdenReporte(\''+d.id+'\')">🗑 Borrar</button>' : ''}</td>
           </tr>`;
     });
 
@@ -2694,6 +2709,7 @@ function renderizarReporte(){
             <td style="padding:.55rem .75rem;text-align:right;font-weight:800;color:var(--negro)">$${tEmp}.00</td>
             <td style="padding:.55rem .75rem;text-align:right;font-weight:700;color:var(--v)">$${tEmpresa}.00</td>
             <td style="padding:.55rem .75rem;text-align:right;font-weight:800;color:var(--negro)">$${tTotal}.00</td>
+            <td style="padding:.55rem .75rem"></td>
           </tr>
         </tbody>
       </table>
