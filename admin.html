@@ -278,6 +278,9 @@ input[type=file]{display:none}
       <div class="nav-item" data-sec="reportes" onclick="irSec('reportes',this)">
         <svg viewBox="0 0 24 24"><line x1="12" y1="20" x2="12" y2="10"/><line x1="18" y1="20" x2="18" y2="4"/><line x1="6" y1="20" x2="6" y2="16"/></svg>Reportes
       </div>
+      <div class="nav-item" data-sec="pendientes" onclick="irSec('pendientes',this)">
+        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>Órdenes pendientes
+      </div>
     </nav>
     <div class="sidebar-footer">
       <div id="admin-nombre" style="font-size:.8rem;color:rgba(255,255,255,.7)">—</div>
@@ -562,6 +565,26 @@ input[type=file]{display:none}
         </div>
       </div>
 
+      <div class="seccion" id="sec-pendientes">
+        <div class="sec-titulo">Órdenes pendientes</div>
+        <div class="sec-sub">Pedidos que todavía no se han escaneado — ni cuentan como asistencia ni entran al reporte de consumo hasta que se validen con el gafete.</div>
+        <div style="display:flex;gap:.5rem;flex-wrap:wrap;margin-bottom:1rem">
+          <button class="btn btn-outline btn-sm pend-comedor-btn active" onclick="setPendComedor('todos',this)">Todos</button>
+          <button class="btn btn-outline btn-sm pend-comedor-btn" onclick="setPendComedor('betel',this)">Betel</button>
+          <button class="btn btn-outline btn-sm pend-comedor-btn" onclick="setPendComedor('cuauhtemoc',this)">Cuauhtémoc</button>
+          <button class="btn btn-outline btn-sm pend-comedor-btn" onclick="setPendComedor('intelomas',this)">Intelomas</button>
+        </div>
+        <div class="card">
+          <div class="card-head">
+            <span class="card-titulo">⏳ Pendientes de escanear</span>
+            <span id="pendientes-conteo" style="font-size:.7rem;font-weight:700;padding:.2rem .6rem;border-radius:20px;background:var(--crema);color:var(--g2)">—</span>
+          </div>
+          <div class="card-body" id="pendientes-body" style="padding:1.5rem">
+            <div class="loading" id="loading-pendientes" style="display:flex"><div class="spinner"></div>&nbsp;Cargando pendientes...</div>
+          </div>
+        </div>
+      </div>
+
     </div>
   </div>
 </div>
@@ -737,6 +760,7 @@ document.addEventListener('DOMContentLoaded', function(){
     if(unsubEmpleados)unsubEmpleados();
     if(_unsubReporteOrdenes)_unsubReporteOrdenes();
     if(_unsubReporteMov)_unsubReporteMov();
+    if(_unsubPendientes)_unsubPendientes();
     _reporteLoadToken++; // invalida cualquier reintento pendiente del reporte
     await signOut(auth);
     window.location.href='index.html';
@@ -798,9 +822,10 @@ window.irSec=function(sec,el){
   el.classList.add('on');
   document.querySelectorAll('.seccion').forEach(s=>s.classList.remove('on'));
   document.getElementById('sec-'+sec).classList.add('on');
-  const titulos={dashboard:'Dashboard',empleados:'Empleados',menus:'Menús de la semana',reportes:'Reportes'};
+  const titulos={dashboard:'Dashboard',empleados:'Empleados',menus:'Menús de la semana',reportes:'Reportes',pendientes:'Órdenes pendientes'};
   document.getElementById('topbar-titulo').textContent=titulos[sec]||sec;
   if(sec==='reportes')cargarReporte();
+  if(sec==='pendientes')cargarPendientes();
 };
 
 // ── DASHBOARD ──
@@ -2231,6 +2256,18 @@ window.setRepComedor = function(comedor, btn) {
   cargarReporte();
 };
 
+// ── ÓRDENES PENDIENTES (aún no escaneadas) ──
+let _pendComedor = 'todos';
+let _pendDocs = null;
+let _unsubPendientes = null;
+
+window.setPendComedor = function(comedor, btn) {
+  _pendComedor = comedor;
+  document.querySelectorAll('.pend-comedor-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  renderizarPendientes();
+};
+
 // ── PERÍODO DE REPORTE ──
 let _periodoActual = 'semana-actual';
 
@@ -2315,6 +2352,11 @@ function agregarOrdenesPorEmpleado(docs, comedorFiltro){
   const porEmp = {};
   (docs||[]).forEach(o=>{
     if(o.estado === 'cancelado') return;
+    // El reporte de consumo (costos, subsidio, etc.) solo cuenta comidas ya
+    // validadas con gafete — los pedidos aún no escaneados se ven en la
+    // pestaña "Órdenes pendientes", no aquí, para no cobrar algo que
+    // todavía no se ha confirmado que se consumió.
+    if(!o.escaneado) return;
     if(comedorFiltro !== 'todos' && o.comedor !== comedorFiltro) return;
     if(!porEmp[o.empleado_uid]) porEmp[o.empleado_uid] = { uid: o.empleado_uid, nombre: o.empleado_nombre||'—', iniciales: (o.empleado_nombre||'??').split(' ').map(x=>x[0]).slice(0,2).join(''), dias:[] };
     // Extras se separa en nombres (texto) y costo (numérico) en vez de un
@@ -3031,6 +3073,75 @@ async function construirWorkbookAsistencia(docsCrudos, opts){
   return wb;
 }
 
+// Carga en vivo todas las órdenes que todavía no se han escaneado (sin
+// importar el período seleccionado en Reportes — esta pestaña es
+// intencionalmente independiente de esa fecha, para poder ver de un
+// vistazo todo lo que sigue pendiente de validar con el gafete, sea de hoy
+// o de días futuros ya pre-ordenados). Las canceladas se excluyen siempre.
+function cargarPendientes(){
+  if (_unsubPendientes) { _unsubPendientes(); _unsubPendientes = null; }
+  _pendDocs = null;
+  document.getElementById('pendientes-body').innerHTML = '<div class="loading" style="display:flex"><div class="spinner"></div>&nbsp;Cargando pendientes...</div>';
+  _unsubPendientes = db.collection('ordenes').where('escaneado','==',false).onSnapshot(function(snap){
+    const docs = [];
+    snap.forEach(function(d){
+      const o = d.data();
+      if (o.estado === 'cancelado') return;
+      docs.push(Object.assign({ id: d.id }, o));
+    });
+    _pendDocs = docs;
+    renderizarPendientes();
+  }, function(err){
+    console.error('Error al cargar órdenes pendientes:', err);
+    document.getElementById('pendientes-body').innerHTML = '<div style="text-align:center;padding:3rem;color:var(--rojo)">No se pudo cargar la lista de pendientes.</div>';
+  });
+}
+
+function renderizarPendientes(){
+  if (_pendDocs === null) return; // aún cargando
+
+  const comedorLabels = { betel:'Betel', cuauhtemoc:'Cuauhtémoc', intelomas:'Intelomas' };
+  const DS3 = ['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'];
+  const MS3 = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
+
+  const filas = _pendDocs
+    .filter(function(o){ return _pendComedor === 'todos' || o.comedor === _pendComedor; })
+    .slice()
+    .sort(function(a,b){ return (a.fecha||'') < (b.fecha||'') ? -1 : (a.fecha||'') > (b.fecha||'') ? 1 : 0; });
+
+  document.getElementById('pendientes-conteo').textContent = filas.length + ' pendiente' + (filas.length!==1?'s':'');
+
+  const body = document.getElementById('pendientes-body');
+  if (!filas.length) {
+    body.innerHTML = '<div style="text-align:center;padding:3rem;color:var(--g3)">🎉 No hay pedidos pendientes de escanear'+(_pendComedor!=='todos'?' en '+comedorLabels[_pendComedor]:'')+'.</div>';
+    return;
+  }
+
+  let html = '<table style="width:100%;border-collapse:collapse;font-size:.82rem">'
+    + '<thead><tr style="border-bottom:1.5px solid var(--borde)">'
+    + '<th style="text-align:left;padding:.5rem .75rem;font-size:.65rem;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--g3);background:var(--crema)">Empleado</th>'
+    + '<th style="text-align:left;padding:.5rem .75rem;font-size:.65rem;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--g3);background:var(--crema)">Comedor</th>'
+    + '<th style="text-align:left;padding:.5rem .75rem;font-size:.65rem;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--g3);background:var(--crema)">Fecha</th>'
+    + '<th style="text-align:left;padding:.5rem .75rem;font-size:.65rem;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--g3);background:var(--crema)">Platillos</th>'
+    + '<th style="text-align:center;padding:.5rem .75rem;font-size:.65rem;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--g3);background:var(--crema)">Acciones</th>'
+    + '</tr></thead><tbody>';
+  filas.forEach(function(o, i){
+    const dt = new Date((o.fecha||hoy())+'T12:00:00');
+    const idEmp = buscarIdEmpleado(o.empleado_uid);
+    const nombreCompleto = (idEmp && idEmp !== '—' ? idEmp+' — ' : '') + (o.empleado_nombre || '—');
+    const bg = i % 2 === 0 ? 'transparent' : 'var(--crema)';
+    html += '<tr style="background:'+bg+'">'
+      + '<td style="padding:.5rem .75rem">'+nombreCompleto+'</td>'
+      + '<td style="padding:.5rem .75rem">'+(comedorLabels[o.comedor]||o.comedor||'—')+'</td>'
+      + '<td style="padding:.5rem .75rem;color:var(--g3)">'+DS3[dt.getDay()]+' '+dt.getDate()+' '+MS3[dt.getMonth()]+'</td>'
+      + '<td style="padding:.5rem .75rem">'+((o.platillos||[]).join(', ')||'—')+'</td>'
+      + '<td style="padding:.5rem .75rem;text-align:center">'+(o.id ? '<button class="btn btn-outline btn-sm" style="color:var(--rojo);border-color:var(--rojo)" onclick="eliminarOrdenReporte(\''+o.id+'\')">🗑 Borrar</button>' : '')+'</td>'
+      + '</tr>';
+  });
+  html += '</tbody></table>';
+  body.innerHTML = html;
+}
+
 // Convierte un Workbook de ExcelJS ya armado en una descarga real (.xlsx).
 async function descargarWorkbook(wb, nombreArchivo){
   const buffer = await wb.xlsx.writeBuffer();
@@ -3126,6 +3237,10 @@ window.mostrarVistaAsistencia = function(){
     return (h<10?'0':'')+h+':'+(m<10?'0':'')+m;
   }
 
+  // Asistencia = solo pedidos ya escaneados (gafete validado). Los pedidos
+  // que aún no se escanean (por ejemplo, de días que no han llegado) NO
+  // cuentan como asistencia y no aparecen aquí — para eso está la pestaña
+  // "Órdenes pendientes".
   const filas = filasAsistenciaActuales();
 
   if (!filas.length) {
@@ -3133,7 +3248,7 @@ window.mostrarVistaAsistencia = function(){
       + '<div style="font-size:1.6rem;margin-bottom:.5rem">🕐</div>'
       + '<div style="font-weight:600;margin-bottom:.4rem">No hay asistencias registradas todavía en este período.</div>'
       + '<div style="font-size:.8rem;line-height:1.5">Una asistencia se cuenta solo cuando el empleado escanea su gafete al recoger su comida. '
-      + 'Los pedidos programados para días que aún no llegan (aunque estén dentro de esta semana) todavía no cuentan como asistencia — se registrarán en cuanto ese día llegue y el empleado escanee.</div>'
+      + 'Los pedidos que todavía no se han escaneado no cuentan como asistencia — revísalos en la pestaña "Órdenes pendientes".</div>'
       + '</div>';
   } else {
     let html = '';
