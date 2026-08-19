@@ -2915,16 +2915,16 @@ async function construirWorkbookAsistencia(docsCrudos, opts){
   ws.mergeCells('A1:D1');
   const titulo = ws.getCell('A1');
   titulo.value = 'Buen Fruto — Asistencia '+etiquetaTipo+' por comedor';
-  titulo.font = { name:'Arial', size:15, bold:true, color:{argb:BLANCO} };
+  titulo.font = { name:'Arial', size:16, bold:true, color:{argb:BLANCO} };
   titulo.alignment = { vertical:'middle' };
   titulo.fill = { type:'pattern', pattern:'solid', fgColor:{argb:VERDE} };
-  ws.getRow(1).height = 26;
+  ws.getRow(1).height = 28;
 
   ws.mergeCells('A2:D2');
   const subtitulo = ws.getCell('A2');
   subtitulo.value = tituloRango + '   ·   Generado: ' + new Date().toLocaleString('es-MX');
-  subtitulo.font = { name:'Arial', size:10, italic:true, color:{argb:'FF666666'} };
-  ws.getRow(2).height = 18;
+  subtitulo.font = { name:'Arial', size:11, italic:true, color:{argb:'FF555555'} };
+  ws.getRow(2).height = 20;
   ws.getRow(3).height = 6;
 
   const encabezados = ['Empleado','Sede','Fecha','Hora'];
@@ -2932,11 +2932,11 @@ async function construirWorkbookAsistencia(docsCrudos, opts){
   encabezados.forEach(function(h, i){
     const cell = filaEnc.getCell(i+1);
     cell.value = h;
-    cell.font = { name:'Arial', size:10, bold:true, color:{argb:BLANCO} };
+    cell.font = { name:'Arial', size:12, bold:true, color:{argb:BLANCO} };
     cell.fill = { type:'pattern', pattern:'solid', fgColor:{argb:VERDE} };
     cell.alignment = { vertical:'middle', horizontal:'left' };
   });
-  filaEnc.height = 20;
+  filaEnc.height = 22;
 
   const DS2 = ['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'];
   const MS2 = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
@@ -2961,10 +2961,10 @@ async function construirWorkbookAsistencia(docsCrudos, opts){
     const rSeccion = ws.getRow(fila);
     ws.mergeCells('A'+fila+':D'+fila);
     rSeccion.getCell(1).value = comedorLabels[com] + ' — ' + filasCom.length + ' asistencia'+(filasCom.length!==1?'s':'');
-    rSeccion.getCell(1).font = { name:'Arial', size:11, bold:true, color:{argb:BLANCO} };
+    rSeccion.getCell(1).font = { name:'Arial', size:12, bold:true, color:{argb:BLANCO} };
     rSeccion.getCell(1).fill = { type:'pattern', pattern:'solid', fgColor:{argb:VERDE} };
     rSeccion.getCell(1).alignment = { vertical:'middle' };
-    rSeccion.height = 20;
+    rSeccion.height = 22;
     fila++;
 
     filasCom.forEach(function(o){
@@ -2978,16 +2978,17 @@ async function construirWorkbookAsistencia(docsCrudos, opts){
       const bg = fila % 2 === 0 ? CREMA : BLANCO;
       for (let c=1;c<=4;c++){
         const cell = r.getCell(c);
-        cell.font = { name:'Arial', size:10 };
+        cell.font = { name:'Arial', size:12, color:{argb:'FF222222'} };
         cell.fill = { type:'pattern', pattern:'solid', fgColor:{argb:bg} };
       }
+      r.height = 20;
       fila++;
     });
     fila++; // fila en blanco entre secciones de comedor
   });
 
   ws.columns = [
-    { width: 34 }, { width: 16 }, { width: 16 }, { width: 10 }
+    { width: 38 }, { width: 18 }, { width: 18 }, { width: 12 }
   ];
 
   return wb;
@@ -3180,16 +3181,16 @@ window.descargarPlantillaAsistencia = async function(){
     ws.mergeCells('A1:D1');
     const titulo = ws.getCell('A1');
     titulo.value = 'Buen Fruto — Plantilla de asistencia por comedor';
-    titulo.font = { name:'Arial', size:15, bold:true, color:{argb:BLANCO} };
+    titulo.font = { name:'Arial', size:16, bold:true, color:{argb:BLANCO} };
     titulo.alignment = { vertical:'middle' };
     titulo.fill = { type:'pattern', pattern:'solid', fgColor:{argb:VERDE} };
-    ws.getRow(1).height = 26;
+    ws.getRow(1).height = 28;
 
     ws.mergeCells('A2:D2');
     const subtitulo = ws.getCell('A2');
     subtitulo.value = 'Formato de referencia — así se organiza el reporte real, por comedor';
-    subtitulo.font = { name:'Arial', size:10, italic:true, color:{argb:'FF666666'} };
-    ws.getRow(2).height = 18;
+    subtitulo.font = { name:'Arial', size:11, italic:true, color:{argb:'FF555555'} };
+    ws.getRow(2).height = 20;
     ws.getRow(3).height = 6;
 
     const encabezados = ['Empleado','Sede','Fecha','Hora'];
@@ -3197,11 +3198,11 @@ window.descargarPlantillaAsistencia = async function(){
     encabezados.forEach(function(h, i){
       const cell = filaEnc.getCell(i+1);
       cell.value = h;
-      cell.font = { name:'Arial', size:10, bold:true, color:{argb:BLANCO} };
+      cell.font = { name:'Arial', size:12, bold:true, color:{argb:BLANCO} };
       cell.fill = { type:'pattern', pattern:'solid', fgColor:{argb:VERDE} };
       cell.alignment = { vertical:'middle', horizontal:'left' };
     });
-    filaEnc.height = 20;
+    filaEnc.height = 22;
 
     const ejemplos = [
       { comedor:'Betel', filas: [['12345 — Ejemplo: Juan Pérez','Betel','Lun 18 ago','13:05'], ['12346 — Ejemplo: María López','Betel','Lun 18 ago','13:12']] },
@@ -3214,10 +3215,10 @@ window.descargarPlantillaAsistencia = async function(){
       const rSeccion = ws.getRow(fila);
       ws.mergeCells('A'+fila+':D'+fila);
       rSeccion.getCell(1).value = grupo.comedor + ' — ' + grupo.filas.length + ' asistencia'+(grupo.filas.length!==1?'s':'');
-      rSeccion.getCell(1).font = { name:'Arial', size:11, bold:true, color:{argb:BLANCO} };
+      rSeccion.getCell(1).font = { name:'Arial', size:12, bold:true, color:{argb:BLANCO} };
       rSeccion.getCell(1).fill = { type:'pattern', pattern:'solid', fgColor:{argb:VERDE} };
       rSeccion.getCell(1).alignment = { vertical:'middle' };
-      rSeccion.height = 20;
+      rSeccion.height = 22;
       fila++;
 
       grupo.filas.forEach(function(valores){
@@ -3225,16 +3226,17 @@ window.descargarPlantillaAsistencia = async function(){
         valores.forEach(function(v, i){ r.getCell(i+1).value = v; });
         for (let c=1;c<=4;c++){
           const cell = r.getCell(c);
-          cell.font = { name:'Arial', size:10, italic:true, color:{argb:'FF999999'} };
+          cell.font = { name:'Arial', size:12, italic:true, color:{argb:'FF555555'} };
           cell.fill = { type:'pattern', pattern:'solid', fgColor:{argb:CREMA} };
         }
+        r.height = 20;
         fila++;
       });
       fila++;
     });
 
     ws.columns = [
-      { width: 34 }, { width: 16 }, { width: 16 }, { width: 10 }
+      { width: 38 }, { width: 18 }, { width: 18 }, { width: 12 }
     ];
 
     await descargarWorkbook(wb, 'Plantilla_Asistencia_Buen_Fruto.xlsx');
