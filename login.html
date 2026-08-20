@@ -7,6 +7,26 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-title" content="Buen Fruto"/>
 <title>Buen Fruto</title>
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate"/>
+<meta http-equiv="Pragma" content="no-cache"/>
+<meta http-equiv="Expires" content="0"/>
+<script>
+(function(){
+  var V='20260820-1';
+  try{
+    fetch('version.txt?_='+Date.now(),{cache:'no-store'}).then(function(r){return r.ok?r.text():null;}).then(function(t){
+      if(!t) return;
+      var v=t.trim();
+      if(v && v!==V){
+        var k='bf_v_'+v;
+        if(sessionStorage.getItem(k)) return;
+        sessionStorage.setItem(k,'1');
+        location.replace(location.pathname+'?_v='+Date.now());
+      }
+    }).catch(function(){});
+  }catch(e){}
+})();
+</script>
 <link rel="preconnect" href="https://fonts.googleapis.com"/>
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet"/>
@@ -308,17 +328,23 @@ html,body{height:100%;font-family:'Inter',system-ui,sans-serif;background:var(--
           <div style="margin-top:1.5rem">
             <div class="pf-row"><span class="l">Empresa</span><span>Betel</span></div>
             <div class="pf-row"><span class="l">Rol</span><span>Empleado</span></div>
+            <div class="pf-row"><span class="l">Código de gafete</span><span id="pf-gafete">—</span></div>
           </div>
           <div style="margin-top:1.25rem;background:var(--vl2);border:1px solid #C8DEB0;border-radius:12px;padding:1rem 1.1rem">
             <div style="font-size:.65rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--g3);margin-bottom:.65rem">Asistencia y soporte</div>
-            <a href="https://wa.me/525532467191" target="_blank" style="display:flex;align-items:center;gap:.6rem;padding:.5rem 0;text-decoration:none;border-bottom:1px solid var(--borde2)">
-              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="var(--v)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12 19.79 19.79 0 0 1 1.61 3.4 2 2 0 0 1 3.6 1.22h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.91 8.83a16 16 0 0 0 6 6l.92-.92a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 21.5 16.92z"/></svg>
-              <span style="font-size:.85rem;font-weight:600;color:var(--v)">55 3246 7191</span>
+            <a href="https://wa.me/525532467191" target="_blank" style="display:flex;align-items:center;gap:.6rem;padding:.5rem 0;text-decoration:none">
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="var(--v)"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z"/><path d="M12.001 2c-5.523 0-10 4.477-10 10 0 1.771.464 3.436 1.276 4.876L2 22l5.316-1.394A9.955 9.955 0 0 0 12 22c5.523 0 10-4.477 10-10S17.524 2 12.001 2zm0 18.166c-1.632 0-3.152-.481-4.436-1.31l-.318-.19-3.157.827.844-3.083-.207-.318A8.163 8.163 0 0 1 3.834 12c0-4.508 3.658-8.166 8.167-8.166S20.168 7.492 20.168 12 16.51 20.166 12.001 20.166z"/></svg>
+              <span style="display:flex;flex-direction:column">
+                <span style="font-size:.85rem;font-weight:600;color:var(--v)">55 3246 7191</span>
+                <span style="font-size:.68rem;color:var(--g3);font-weight:500">Solo para mensajes por WhatsApp, no para llamadas</span>
+              </span>
             </a>
-            <a href="mailto:nexodigitalmex@gmail.com" style="display:flex;align-items:center;gap:.6rem;padding:.5rem 0;text-decoration:none">
-              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="var(--v)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
-              <span style="font-size:.85rem;font-weight:600;color:var(--v)">nexodigitalmex@gmail.com</span>
-            </a>
+            <div style="margin-top:.7rem;padding-top:.7rem;border-top:1px solid var(--borde2);font-size:.78rem;color:var(--g2);line-height:1.5">
+              <b style="color:var(--negro)">Reposición de gafete:</b> pídelo con la administración de tu comedor. Mientras te dan tu gafete nuevo, puedes ingresar el código de tu gafete (lo ves arriba, en tu Perfil) directo en la pantalla.
+            </div>
+            <div style="margin-top:.6rem;font-size:.78rem;color:var(--g2);line-height:1.5">
+              <b style="color:var(--negro)">¿Olvidaste tu contraseña?</b> Pide ayuda a Recursos Humanos.
+            </div>
           </div>
           <button class="btn-salir" id="btn-salir">Cerrar sesión</button>
         </div>
@@ -562,6 +588,7 @@ async function iniciarApp() {
     set('pf-nombre', n);
     set('pf-email', perfil.email || '');
     set('pf-av', n.split(' ').map(function(x){return x[0];}).slice(0,2).join(''));
+    set('pf-gafete', perfil.codigo_gafete || '—');
     pg('pg-emp');
     suscribirOrdenes();
     await cargarMenuHoy();
