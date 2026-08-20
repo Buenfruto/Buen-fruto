@@ -1,0 +1,388 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
+<meta name="theme-color" content="#5C6B4A"/>
+<meta name="apple-mobile-web-app-capable" content="yes"/>
+<meta name="apple-mobile-web-app-title" content="Buen Fruto"/>
+<title>Buen Fruto — Visita</title>
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate"/>
+<meta http-equiv="Pragma" content="no-cache"/>
+<meta http-equiv="Expires" content="0"/>
+<script>
+(function(){
+  var V='20260820-4';
+  try{
+    fetch('version.txt?_='+Date.now(),{cache:'no-store'}).then(function(r){return r.ok?r.text():null;}).then(function(t){
+      if(!t) return;
+      var v=t.trim();
+      if(v && v!==V){
+        var k='bf_v_'+v;
+        if(sessionStorage.getItem(k)) return;
+        sessionStorage.setItem(k,'1');
+        location.replace(location.pathname+location.search+(location.search?'&':'?')+'_v='+Date.now());
+      }
+    }).catch(function(){});
+  }catch(e){}
+})();
+</script>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet"/>
+<style>
+:root{
+  --v:#5C6B4A;--v2:#4C5A3D;--v-tinte:#EEF3E9;
+  --vl:#E8C84A;--crema:#F5F0E8;
+  --g2:#8FA882;--g3:#B9C4AE;
+  --borde:#E4DDCF;--borde2:#EFE9DC;
+  --negro:#3E4A34;--w:#FFFFFF;
+  --rojo:#C0392B;--rojol:#FDEDEC;
+  --rs:14px;
+  --shadow:0 1px 3px rgba(92,107,74,.08),0 16px 36px rgba(92,107,74,.14);
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+html,body{min-height:100%;font-family:'Inter',system-ui,sans-serif;background:var(--crema);color:var(--negro);-webkit-font-smoothing:antialiased}
+body{display:flex;justify-content:center;padding:2.5rem 1.25rem;min-height:100dvh}
+.wrap{width:100%;max-width:440px}
+
+.marca{display:flex;flex-direction:column;align-items:center;margin-bottom:2rem}
+.marca-ring{width:64px;height:64px;border-radius:50%;background:var(--v);display:flex;align-items:center;justify-content:center;margin-bottom:.9rem;box-shadow:var(--shadow)}
+.marca-nombre{font-family:'Cormorant Garamond',serif;font-size:1.7rem;font-weight:700;color:var(--negro)}
+.marca-sub{font-size:.78rem;color:var(--g2);margin-top:.15rem;text-align:center}
+
+.card{background:var(--w);border-radius:22px;box-shadow:var(--shadow);padding:2rem 1.75rem}
+.pg{display:none}
+.pg.on{display:block}
+
+.titulo{font-family:'Cormorant Garamond',serif;font-size:1.5rem;font-weight:700;color:var(--negro);margin-bottom:.35rem}
+.sub{font-size:.85rem;color:var(--g2);line-height:1.5;margin-bottom:1.5rem}
+
+.campo{margin-bottom:1.1rem}
+.campo label{display:block;font-size:.68rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--g2);margin-bottom:.5rem}
+.campo input{
+  width:100%;padding:.95rem 1.1rem;background:var(--crema);border:1.5px solid var(--borde);
+  border-radius:var(--rs);font-family:'Inter',sans-serif;font-size:1rem;color:var(--negro);
+  outline:none;transition:border-color .2s,background .2s;
+}
+.campo input:focus{border-color:var(--v);background:var(--w)}
+
+.comedores{display:flex;flex-direction:column;gap:.7rem;margin-bottom:1.5rem}
+.comedor-opt{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:1rem 1.15rem;border-radius:var(--rs);border:1.5px solid var(--borde);
+  background:var(--crema);cursor:pointer;transition:border-color .15s,background .15s;
+}
+.comedor-opt.sel{border-color:var(--v);background:var(--v-tinte)}
+.comedor-opt .nom{font-size:.95rem;font-weight:600}
+.comedor-opt .chk{width:20px;height:20px;border-radius:50%;border:1.5px solid var(--borde);display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.comedor-opt.sel .chk{background:var(--v);border-color:var(--v)}
+.comedor-opt .chk svg{width:11px;height:11px;opacity:0}
+.comedor-opt.sel .chk svg{opacity:1}
+
+.btn{
+  width:100%;padding:1.05rem;background:var(--v);color:var(--w);border:none;border-radius:var(--rs);
+  font-family:'Inter',sans-serif;font-size:1rem;font-weight:600;cursor:pointer;transition:background .15s,transform .1s;
+}
+.btn:active{background:var(--v2);transform:scale(.98)}
+.btn:disabled{opacity:.45;cursor:default}
+.btn-ghost{
+  width:100%;padding:.85rem;background:transparent;color:var(--g2);border:none;
+  font-family:'Inter',sans-serif;font-size:.85rem;font-weight:600;cursor:pointer;margin-top:.6rem;
+}
+
+.item{
+  display:flex;align-items:center;justify-content:space-between;padding:.9rem 1rem;
+  border-radius:12px;border:1.5px solid var(--borde);margin-bottom:.6rem;cursor:pointer;transition:border-color .15s,background .15s;
+}
+.item.on{border-color:var(--v);background:var(--v-tinte)}
+.item-left{display:flex;align-items:center;gap:.75rem}
+.check{width:20px;height:20px;border-radius:6px;border:1.5px solid var(--borde);display:flex;align-items:center;justify-content:center;flex-shrink:0;background:transparent}
+.check svg{width:12px;height:12px;stroke:var(--w);opacity:0}
+.item.on .check{background:var(--v);border-color:var(--v)}
+.item.on .check svg{opacity:1}
+.item-nom{font-size:.9rem;font-weight:600}
+.item-precio{font-size:.82rem;font-weight:700;color:var(--g2)}
+.sec-tit{font-size:.65rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--g3);margin:1.1rem 0 .6rem}
+
+.gratis-tag{
+  display:inline-flex;align-items:center;gap:.4rem;background:var(--v-tinte);color:var(--v);
+  font-size:.72rem;font-weight:700;padding:.4rem .75rem;border-radius:20px;margin-bottom:1.25rem;
+}
+
+/* CONFIRMACIÓN */
+.codigo-box{
+  text-align:center;background:var(--v-tinte);border:1.5px solid var(--v);border-radius:18px;
+  padding:2rem 1.5rem;margin-bottom:1.25rem;
+}
+.codigo-label{font-size:.68rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--v);margin-bottom:.6rem}
+.codigo-val{font-family:'Inter',sans-serif;font-size:2.1rem;font-weight:700;letter-spacing:.1em;color:var(--negro)}
+.codigo-nota{font-size:.8rem;color:var(--g2);margin-top:.75rem;line-height:1.5}
+
+.msg{margin-top:1rem;padding:.85rem 1rem;border-radius:12px;font-size:.83rem;display:none}
+.msg.err{background:var(--rojol);color:var(--rojo);display:block}
+
+.loading{text-align:center;padding:2rem 0;color:var(--g2);font-size:.85rem}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="marca">
+    <div class="marca-ring">
+      <svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2C8 2 6 5 6 8c0 5 6 12 6 12s6-7 6-12c0-3-2-6-6-6z"/><circle cx="12" cy="8" r="2.2"/></svg>
+    </div>
+    <div class="marca-nombre">Buen Fruto</div>
+    <div class="marca-sub">Bienvenido — hoy comes con nosotros</div>
+  </div>
+
+  <div class="card">
+
+    <!-- PASO 1: NOMBRE -->
+    <div class="pg on" id="pg-nombre">
+      <div class="titulo">¿Cómo te llamas?</div>
+      <div class="sub">Solo necesitamos tu nombre para tu pedido de hoy.</div>
+      <div class="campo">
+        <label>Nombre</label>
+        <input type="text" id="inp-nombre" autocomplete="off" placeholder="Ej. María"/>
+      </div>
+      <div class="campo">
+        <label>Apellido</label>
+        <input type="text" id="inp-apellido" autocomplete="off" placeholder="Ej. González"/>
+      </div>
+      <button class="btn" id="btn-a-comedor">Continuar</button>
+    </div>
+
+    <!-- PASO 2: COMEDOR -->
+    <div class="pg" id="pg-comedor">
+      <div class="titulo">¿En qué comedor vas a comer?</div>
+      <div class="sub">Elige el comedor donde te encuentras hoy.</div>
+      <div class="comedores" id="lista-comedores"></div>
+      <button class="btn" id="btn-a-menu" disabled>Continuar</button>
+      <button class="btn-ghost" id="btn-atras-1">← Atrás</button>
+    </div>
+
+    <!-- PASO 3: MENÚ -->
+    <div class="pg" id="pg-menu">
+      <div class="titulo">Menú de hoy</div>
+      <div class="gratis-tag">
+        <svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="8" cy="8" r="6"/><path d="M8 5v3l2 1.5"/></svg>
+        Comida de cortesía — no tiene costo para ti
+      </div>
+      <div id="menu-contenido"></div>
+      <button class="btn" id="btn-ordenar" style="margin-top:1.25rem" disabled>Confirmar pedido</button>
+      <button class="btn-ghost" id="btn-atras-2">← Atrás</button>
+      <div class="msg" id="menu-msg"></div>
+    </div>
+
+    <!-- PASO 4: CONFIRMACIÓN -->
+    <div class="pg" id="pg-listo">
+      <div class="titulo">¡Listo, <span id="listo-nombre">—</span>!</div>
+      <div class="sub">Presenta este código al llegar al comedor — la persona en la entrada lo captura en su sistema y tu pedido pasa a cocina.</div>
+      <div class="codigo-box">
+        <div class="codigo-label">Tu código</div>
+        <div class="codigo-val" id="codigo-visita">—</div>
+        <div class="codigo-nota">Válido solo hoy, en el comedor que elegiste. Este enlace ya no se puede volver a usar.</div>
+      </div>
+    </div>
+
+    <div class="loading" id="loading" style="display:none">Cargando menú del día…</div>
+  </div>
+</div>
+
+<script type="module">
+import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js';
+import { getFirestore, collection, query, where, getDocs, addDoc, doc, getDoc }
+  from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
+
+const app = initializeApp({
+  apiKey:"AIzaSyDFOypq8OfX1QmZpoZAdsXmqKYauswBjes",
+  authDomain:"buen-fruto.firebaseapp.com",
+  projectId:"buen-fruto",
+  messagingSenderId:"931992831636",
+  appId:"1:931992831636:web:65ee6652748f6418dc9681"
+});
+const db = getFirestore(app);
+
+// OJO: NUNCA usar toISOString() aquí — convierte a UTC y adelanta la fecha
+// en la tarde/noche en México.
+function hoy(){ const d=new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+
+const COMEDORES = [
+  { id:'betel', nombre:'Betel' },
+  { id:'cuauhtemoc', nombre:'Cuauhtémoc' },
+  { id:'intelomas', nombre:'Intelomas' }
+];
+
+// Si esta pestaña ya generó un pedido de visita hoy, no dejamos volver a
+// ordenar aunque recarguen la página — la liga la vuelve a compartir Sebastián
+// cuando quiera invitar a alguien otra vez (no bloqueamos el dispositivo,
+// solo esta sesión de esta pestaña).
+const YA_KEY = 'bf_visita_ya_' + hoy();
+
+let nombreCompleto = '';
+let comedorSel = null;
+let menuHoy = null;
+let buffetSel = false;
+let platillosSel = [];
+let extrasSel = [];
+
+function irPaso(id){
+  document.querySelectorAll('.pg').forEach(p => p.classList.remove('on'));
+  document.getElementById(id).classList.add('on');
+}
+
+if (sessionStorage.getItem(YA_KEY)) {
+  // Ya ordenó en esta pestaña hoy — mostramos directo su código guardado.
+  const guardado = JSON.parse(sessionStorage.getItem(YA_KEY));
+  document.getElementById('listo-nombre').textContent = guardado.nombre || '';
+  document.getElementById('codigo-visita').textContent = guardado.codigo || '—';
+  irPaso('pg-listo');
+} else {
+  document.getElementById('inp-nombre').focus();
+}
+
+// ── PASO 1 → 2 ──
+document.getElementById('btn-a-comedor').addEventListener('click', () => {
+  const nombre = document.getElementById('inp-nombre').value.trim();
+  const apellido = document.getElementById('inp-apellido').value.trim();
+  if (!nombre || !apellido) { alert('Escribe tu nombre y apellido'); return; }
+  nombreCompleto = nombre + ' ' + apellido;
+  renderComedores();
+  irPaso('pg-comedor');
+});
+
+function renderComedores(){
+  const cont = document.getElementById('lista-comedores');
+  cont.innerHTML = '';
+  COMEDORES.forEach(c => {
+    const el = document.createElement('div');
+    el.className = 'comedor-opt' + (comedorSel === c.id ? ' sel' : '');
+    el.innerHTML = `<span class="nom">${c.nombre}</span><span class="chk"><svg viewBox="0 0 12 12" fill="none" stroke="white" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="2 6 5 9 10 3"/></svg></span>`;
+    el.addEventListener('click', () => {
+      comedorSel = c.id;
+      renderComedores();
+      document.getElementById('btn-a-menu').disabled = false;
+    });
+    cont.appendChild(el);
+  });
+}
+
+document.getElementById('btn-atras-1').addEventListener('click', () => irPaso('pg-nombre'));
+
+// ── PASO 2 → 3 ──
+document.getElementById('btn-a-menu').addEventListener('click', async () => {
+  irPaso('pg-menu');
+  document.getElementById('menu-contenido').innerHTML = '';
+  document.getElementById('loading').style.display = 'block';
+  try {
+    const snap = await getDoc(doc(db, 'menus', hoy()));
+    menuHoy = snap.exists() ? snap.data() : null;
+  } catch (e) {
+    console.error('Error al cargar el menú:', e);
+    menuHoy = null;
+  }
+  document.getElementById('loading').style.display = 'none';
+  renderMenu();
+});
+
+document.getElementById('btn-atras-2').addEventListener('click', () => irPaso('pg-comedor'));
+
+function renderMenu(){
+  const cont = document.getElementById('menu-contenido');
+  const btn = document.getElementById('btn-ordenar');
+  if (!menuHoy) {
+    cont.innerHTML = '<div class="sub" style="margin-bottom:0">Todavía no hay menú publicado para hoy — pregunta en la entrada del comedor.</div>';
+    btn.disabled = true;
+    return;
+  }
+  buffetSel = false; platillosSel = []; extrasSel = [];
+  btn.disabled = true;
+
+  const bRow = document.createElement('div');
+  bRow.className = 'item';
+  bRow.innerHTML = `<div class="item-left"><div class="check"><svg viewBox="0 0 12 12" fill="none" stroke="white" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="2 6 5 9 10 3"/></svg></div><span class="item-nom">Buffet completo — ${(menuHoy.platillos||[]).join(', ')}</span></div>`;
+  bRow.addEventListener('click', () => {
+    buffetSel = !buffetSel;
+    platillosSel = buffetSel ? (menuHoy.platillos||[]).slice() : [];
+    bRow.classList.toggle('on', buffetSel);
+    actuBtn();
+  });
+  cont.appendChild(bRow);
+
+  if ((menuHoy.extras||[]).length) {
+    const st = document.createElement('div');
+    st.className = 'sec-tit';
+    st.textContent = 'Extras';
+    cont.appendChild(st);
+    menuHoy.extras.forEach(ex => {
+      const d = document.createElement('div');
+      d.className = 'item';
+      d.innerHTML = `<div class="item-left"><div class="check"><svg viewBox="0 0 12 12" fill="none" stroke="white" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="2 6 5 9 10 3"/></svg></div><span class="item-nom">${ex.nombre}</span></div>`;
+      d.addEventListener('click', () => {
+        const idx = extrasSel.findIndex(x => x.nombre === ex.nombre);
+        const sel = idx === -1;
+        if (sel) extrasSel.push(ex); else extrasSel.splice(idx, 1);
+        d.classList.toggle('on', sel);
+        actuBtn();
+      });
+      cont.appendChild(d);
+    });
+  }
+
+  function actuBtn(){
+    btn.disabled = !buffetSel && extrasSel.length === 0;
+  }
+}
+
+function generarCodigoVisita(){
+  return 'VIS' + Math.floor(10000 + Math.random()*90000);
+}
+
+document.getElementById('btn-ordenar').addEventListener('click', async () => {
+  const btn = document.getElementById('btn-ordenar');
+  const msg = document.getElementById('menu-msg');
+  msg.style.display = 'none';
+  btn.disabled = true;
+  btn.textContent = 'Enviando…';
+  try {
+    // Verificamos contra las órdenes de hoy que el código generado no choque
+    // con uno ya usado (aunque es muy poco probable con 90,000 combinaciones).
+    const qHoy = query(collection(db, 'ordenes'), where('fecha', '==', hoy()));
+    const snapHoy = await getDocs(qHoy);
+    const usados = new Set();
+    snapHoy.forEach(d => { const c = d.data().codigo_visita; if (c) usados.add(c); });
+    let codigo = generarCodigoVisita();
+    while (usados.has(codigo)) codigo = generarCodigoVisita();
+
+    const data = {
+      empleado_uid: null,
+      empleado_nombre: nombreCompleto,
+      fecha: hoy(),
+      platillos: buffetSel ? platillosSel : [],
+      extras: extrasSel,
+      cargo: 0,
+      tipo: 'visita',
+      hora_preorden: null,
+      comedor: comedorSel,
+      estado: 'pagado',
+      escaneado: false,
+      codigo_visita: codigo,
+      creado_en: new Date()
+    };
+    await addDoc(collection(db, 'ordenes'), data);
+
+    sessionStorage.setItem(YA_KEY, JSON.stringify({ nombre: nombreCompleto, codigo }));
+    document.getElementById('listo-nombre').textContent = nombreCompleto;
+    document.getElementById('codigo-visita').textContent = codigo;
+    irPaso('pg-listo');
+  } catch (e) {
+    console.error('Error al enviar el pedido de visita:', e);
+    msg.textContent = 'No se pudo enviar tu pedido. Intenta de nuevo o pide ayuda en la entrada.';
+    msg.className = 'msg err';
+    btn.disabled = false;
+    btn.textContent = 'Confirmar pedido';
+  }
+});
+</script>
+</body>
+</html>
