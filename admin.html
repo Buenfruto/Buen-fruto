@@ -426,8 +426,8 @@ input[type=file]{display:none}
               <div class="msg" id="migrar-logins-msg"></div>
             </div>
             <div id="limpiar-inactivos-wrap" style="margin-top:1rem;padding-top:1rem;border-top:1px solid var(--borde2)">
-              <button class="btn btn-danger btn-sm" id="btn-limpiar-inactivos" onclick="eliminarDuplicadosInactivos()">🗑 Eliminar duplicados ya desactivados</button>
-              <div style="font-size:.72rem;color:var(--g3);margin-top:.4rem">Limpieza de una sola vez: borra para siempre a los empleados que quedaron "Inactivo" por ser un ID B360 duplicado (su copia activa se queda). No toca a nadie que hayas desactivado tú a mano por otra razón.</div>
+              <button class="btn btn-danger btn-sm" id="btn-limpiar-inactivos" onclick="eliminarDuplicadosInactivos()">🗑 Eliminar duplicados por ID B360</button>
+              <div style="font-size:.72rem;color:var(--g3);margin-top:.4rem">Limpieza y corrección de una sola vez: por cada ID B360 duplicado, revisa cuál de las copias tiene el correo correcto (sin importar si ahora está Activo o Inactivo) — esa se deja (reactivándola si hacía falta) y las demás se borran para siempre. No toca a nadie que hayas desactivado tú a mano por otra razón, ni ID B360 que no estén duplicados.</div>
               <div class="msg" id="limpiar-inactivos-msg"></div>
             </div>
           </div>
@@ -1608,12 +1608,18 @@ window.migrarLoginsAhora = async function(){
     let conflictos = resultados.filter(function(r){ return !r.ok && r.conflicto; });
     const otrosErrores = resultados.filter(function(r){ return !r.ok && !r.conflicto; });
 
-    // Si un conflicto ya se resolvió antes (con el botón de abajo o a mano
-    // desde el directorio, desactivando la cuenta sobrante), no tiene caso
-    // seguir mostrándolo como pendiente cada vez que se corre la migración.
+    // Si un conflicto ya se resolvió antes (eliminando o desactivando el
+    // registro "uid" — el que nunca puede quedarse con el correo limpio
+    // mientras exista el "otro" — desde el directorio o con el botón de
+    // abajo), no tiene caso seguir mostrándolo como pendiente cada vez
+    // que se corre la migración. OJO: si en cambio el registro inactivo
+    // es el "otro" (el que sí tiene el correo correcto), esto NO se
+    // filtra a propósito — es una señal de que ese par quedó mal resuelto
+    // y debe seguir apareciendo hasta corregirse con "Eliminar duplicados
+    // ya desactivados", que ahora repara ese caso también.
     if (conflictos.length) {
-      const docsPrimarios = await Promise.all(conflictos.map(function(c){ return db.collection('empleados').doc(c.uid).get(); }));
-      conflictos = conflictos.filter(function(c, i){ return docsPrimarios[i].exists && docsPrimarios[i].data().activo !== false; });
+      const docsUid = await Promise.all(conflictos.map(function(c){ return db.collection('empleados').doc(c.uid).get(); }));
+      conflictos = conflictos.filter(function(c, i){ return docsUid[i].exists && docsUid[i].data().activo !== false; });
     }
     _ultimosConflictosLogin = conflictos;
 
@@ -1685,12 +1691,14 @@ window.descargarConflictosLogin = async function(){
 
 // Resuelve automáticamente los conflictos de la última corrida de "Migrar
 // logins": para cada par, ELIMINA por completo (de la base de datos, esto
-// NO se puede deshacer) la cuenta que se creó DESPUÉS, dejando la que se
-// creó primero. Solo se resuelve así un par cuando NINGUNA de las dos
-// cuentas ha iniciado sesión nunca — si ya hay indicio de uso, o falta el
-// dato de creación, ese par se deja sin tocar para que se revise a mano
-// (eliminar la cuenta equivocada sí podría afectar a alguien que ya está
-// usando el sistema, y a diferencia de desactivar, esto no se revierte).
+// NO se puede deshacer) el registro "uid" — el que falló al migrar y por
+// lo tanto NUNCA puede quedarse con el correo por ID B360 mientras exista
+// el "otro" registro, que es el que YA tiene ese correo correcto (el que
+// aparece en "Duplicado — Correo actual" del Excel). Por eso siempre se
+// elimina "uid" y siempre se deja "otroUid" — no importa cuál se haya
+// creado primero. Solo se resuelve así un par cuando NINGUNA de las dos
+// cuentas ha iniciado sesión nunca — si ya hay indicio de uso, ese par se
+// deja sin tocar para que se revise a mano.
 window.resolverConflictosLogin = async function(){
   if (!_ultimosConflictosLogin.length) { alert('No hay conflictos pendientes por resolver — corre "Migrar logins" primero.'); return; }
 
@@ -1698,26 +1706,19 @@ window.resolverConflictosLogin = async function(){
   const paraRevisarAMano = [];
   _ultimosConflictosLogin.forEach(function(c){
     const yaTuvoUso = c.ultimoAcceso || c.otroUltimoAcceso;
-    const faltanFechas = !c.creado || !c.otroCreado;
-    if (yaTuvoUso || faltanFechas) { paraRevisarAMano.push(c); return; }
-    const miFecha = new Date(c.creado).getTime();
-    const otraFecha = new Date(c.otroCreado).getTime();
-    if (!(miFecha < otraFecha) && !(otraFecha < miFecha)) { paraRevisarAMano.push(c); return; } // empate exacto
-    const eliminar = miFecha > otraFecha
-      ? { uid: c.uid, nombre: c.nombre }
-      : { uid: c.otroUid, nombre: c.otroNombre || c.nombre };
-    candidatos.push(eliminar);
+    if (yaTuvoUso || !c.otroUid) { paraRevisarAMano.push(c); return; }
+    candidatos.push({ uid: c.uid, nombre: c.nombre });
   });
 
   if (!candidatos.length) {
-    alert('Ninguno de los conflictos pendientes se puede resolver automáticamente — todos necesitan revisión manual (alguna de las dos cuentas ya tuvo actividad, o falta el dato de creación). Descarga el detalle y revísalos desde el directorio de Empleados.');
+    alert('Ninguno de los conflictos pendientes se puede resolver automáticamente — todos necesitan revisión manual (alguna de las dos cuentas ya tuvo actividad). Descarga el detalle y revísalos desde el directorio de Empleados.');
     return;
   }
 
   const advertenciaManual = paraRevisarAMano.length
-    ? ('\n\n' + paraRevisarAMano.length + ' caso(s) más se quedan sin tocar porque necesitan revisión manual (hay indicio de uso, o falta información).')
+    ? ('\n\n' + paraRevisarAMano.length + ' caso(s) más se quedan sin tocar porque necesitan revisión manual (hay indicio de uso).')
     : '';
-  if (!confirm('Esto va a ELIMINAR PARA SIEMPRE (no se puede deshacer) ' + candidatos.length + ' registro(s) duplicado(s): la copia creada después en cada par, dejando la primera. Ninguna de estas cuentas ha iniciado sesión nunca. Ya descargaste el Excel con el detalle de los 75, así que si necesitas consultar qué se borró, ahí queda el registro.' + advertenciaManual + '\n\n¿Continuar?')) return;
+  if (!confirm('Esto va a ELIMINAR PARA SIEMPRE (no se puede deshacer) ' + candidatos.length + ' registro(s) duplicado(s) que nunca lograron migrar a su ID B360, dejando activa la copia que ya tiene el correo correcto. Ninguna de estas cuentas ha iniciado sesión nunca. Ya descargaste el Excel con el detalle, así que si necesitas consultar qué se borró, ahí queda el registro.' + advertenciaManual + '\n\n¿Continuar?')) return;
 
   const msg = document.getElementById('migrar-logins-msg');
   msg.style.display = 'block';
@@ -1749,21 +1750,27 @@ window.resolverConflictosLogin = async function(){
   msg.innerHTML = html;
 };
 
-// Limpieza de una sola vez: por si algún duplicado se había desactivado
-// antes (con una versión previa de esta pantalla que solo desactivaba en
-// vez de eliminar), esto los borra para siempre ahora. Agrupa por ID B360
-// normalizado dentro de origen:'head_count' — si un grupo tiene EXACTAMENTE
-// un registro activo y uno o más inactivos, borra los inactivos. Si un
-// grupo tiene más de un activo, o todos están inactivos, no se toca (no
-// está claro cuál conservar) y se deja para revisión manual, para no
-// borrar por error a alguien que se desactivó a mano por otra razón.
+// Limpieza y REPARACIÓN de una sola vez para los duplicados de ID B360.
+// Agrupa por ID B360 normalizado dentro de origen:'head_count', y para
+// cada grupo con más de un registro identifica cuál de ellos tiene el
+// correo CORRECTO (el que corresponde a su ID B360 — el mismo que usa
+// "Migrar logins" para decidir quién ya está al corriente), sin fiarse
+// solo de la bandera "Activo" actual:
+//   - Si hay EXACTAMENTE uno con el correo correcto: ese se deja/reactiva
+//     como el bueno, y TODOS los demás del grupo se eliminan para
+//     siempre — sin importar si ahora mismo estaban activos o inactivos.
+//     Esto también repara los casos donde por error había quedado
+//     desactivado el registro bueno y activo el que tiene el correo
+//     equivocado (nunca puede entrar por ID B360 mientras exista el otro).
+//   - Si ninguno (o más de uno) tiene el correo correcto, ese grupo se
+//     deja sin tocar para revisión manual.
 window.eliminarDuplicadosInactivos = async function(){
   const btn = document.getElementById('btn-limpiar-inactivos');
   const msg = document.getElementById('limpiar-inactivos-msg');
   if (btn) btn.disabled = true;
   msg.style.display = 'block';
   msg.className = 'msg';
-  msg.textContent = 'Buscando duplicados inactivos…';
+  msg.textContent = 'Buscando y verificando duplicados…';
 
   try {
     const snap = await db.collection('empleados').where('origen', '==', 'head_count').get();
@@ -1772,45 +1779,56 @@ window.eliminarDuplicadosInactivos = async function(){
       const e = d.data();
       if (!e.hc_id) return;
       const norm = normalizarHcId(e.hc_id);
-      (porHcId[norm] = porHcId[norm] || []).push({ uid: d.id, nombre: e.nombre, activo: e.activo !== false });
+      (porHcId[norm] = porHcId[norm] || []).push({ uid: d.id, nombre: e.nombre, email: e.email, activo: e.activo !== false, hc_id: e.hc_id });
     });
 
     const aEliminar = [];
+    const aReactivar = [];
     const ambiguos = [];
     Object.keys(porHcId).forEach(function(norm){
       const grupo = porHcId[norm];
       if (grupo.length < 2) return;
-      const activos = grupo.filter(function(g){ return g.activo; });
-      const inactivos = grupo.filter(function(g){ return !g.activo; });
-      if (!inactivos.length) return; // duplicado con ambos activos, ya lo maneja "Migrar logins"
-      if (activos.length === 1) {
-        inactivos.forEach(function(i){ aEliminar.push(i); });
-      } else {
-        ambiguos.push(norm);
-      }
+      const correoCorrecto = emailSinteticoHC(grupo[0].hc_id);
+      const buenos = grupo.filter(function(g){ return g.email === correoCorrecto; });
+      if (buenos.length !== 1) { ambiguos.push(norm); return; }
+      const bueno = buenos[0];
+      if (!bueno.activo) aReactivar.push(bueno);
+      grupo.forEach(function(g){ if (g.uid !== bueno.uid) aEliminar.push(g); });
     });
 
-    if (!aEliminar.length) {
+    if (!aEliminar.length && !aReactivar.length) {
       msg.className = 'msg ok';
       msg.textContent = ambiguos.length
-        ? ('No hay duplicados claros por eliminar automáticamente. Hay ' + ambiguos.length + ' grupo(s) con más de un activo, o todos inactivos — revísalos a mano en el directorio.')
-        : 'No hay duplicados inactivos pendientes por eliminar.';
+        ? ('No hay duplicados claros por resolver automáticamente. Hay ' + ambiguos.length + ' grupo(s) donde ninguno (o más de uno) tiene el correo correcto — revísalos a mano en el directorio.')
+        : 'No hay duplicados pendientes por eliminar.';
       if (btn) btn.disabled = false;
       return;
     }
 
     const advertenciaAmbiguos = ambiguos.length
-      ? ('\n\n' + ambiguos.length + ' grupo(s) más se quedan sin tocar porque no está claro cuál conservar.')
+      ? ('\n\n' + ambiguos.length + ' grupo(s) más se quedan sin tocar porque no está claro cuál tiene el correo correcto.')
       : '';
-    if (!confirm('Esto va a ELIMINAR PARA SIEMPRE (no se puede deshacer) ' + aEliminar.length + ' empleado(s) marcados como Inactivo por ser ID B360 duplicado, dejando su copia activa.' + advertenciaAmbiguos + '\n\n¿Continuar?')) {
+    const advertenciaReactivar = aReactivar.length
+      ? ('\n\n' + aReactivar.length + ' de esos quedaron marcados "Inactivo" por error en una limpieza anterior y se van a reactivar, porque son los que sí tienen el correo correcto.')
+      : '';
+    if (!confirm('Esto va a ELIMINAR PARA SIEMPRE (no se puede deshacer) ' + aEliminar.length + ' registro(s) duplicado(s) que NO tienen el correo correcto por ID B360.' + advertenciaReactivar + advertenciaAmbiguos + '\n\n¿Continuar?')) {
       msg.style.display = 'none';
       if (btn) btn.disabled = false;
       return;
     }
 
-    msg.textContent = 'Eliminando…';
+    msg.textContent = 'Corrigiendo…';
+    let reactivados = 0;
     let ok = 0;
     const fallos = [];
+    for (const r of aReactivar) {
+      try {
+        await db.collection('empleados').doc(r.uid).update({ activo: true });
+        reactivados++;
+      } catch (e) {
+        fallos.push((r.nombre || r.uid) + ' (reactivar): ' + e.message);
+      }
+    }
     for (const cand of aEliminar) {
       try {
         await db.collection('empleados').doc(cand.uid).delete();
@@ -1821,8 +1839,11 @@ window.eliminarDuplicadosInactivos = async function(){
     }
 
     let html = ok + ' empleado(s) duplicado(s) eliminado(s) para siempre.';
+    if (reactivados) {
+      html += '<br>' + reactivados + ' cuenta(s) buena(s) que habían quedado mal desactivadas se reactivaron.';
+    }
     if (ambiguos.length) {
-      html += '<br>' + ambiguos.length + ' grupo(s) se dejaron sin tocar (más de un activo, o todos inactivos) — revísalos a mano en el directorio.';
+      html += '<br>' + ambiguos.length + ' grupo(s) se dejaron sin tocar (no está claro cuál tiene el correo correcto) — revísalos a mano en el directorio.';
     }
     if (fallos.length) {
       html += '<br>' + fallos.length + ' con error: ' + fallos.join(', ');
