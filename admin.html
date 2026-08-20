@@ -4,6 +4,32 @@
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
 <title>Buen Fruto — Admin</title>
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate"/>
+<meta http-equiv="Pragma" content="no-cache"/>
+<meta http-equiv="Expires" content="0"/>
+<script>
+// Autoactualización: si el navegador quedó con una copia vieja guardada en
+// caché de esta página, esto la detecta y la recarga sola, sin que nadie
+// tenga que borrar caché a mano. Compara esta versión contra version.txt
+// (que se sube sin caché, con un query único cada vez) y si no coinciden,
+// fuerza una recarga limpia. sessionStorage evita que se quede en bucle si
+// version.txt no está disponible por algún motivo.
+(function(){
+  var V='20260820-1';
+  try{
+    fetch('version.txt?_='+Date.now(),{cache:'no-store'}).then(function(r){return r.ok?r.text():null;}).then(function(t){
+      if(!t) return;
+      var v=t.trim();
+      if(v && v!==V){
+        var k='bf_v_'+v;
+        if(sessionStorage.getItem(k)) return;
+        sessionStorage.setItem(k,'1');
+        location.replace(location.pathname+'?_v='+Date.now());
+      }
+    }).catch(function(){});
+  }catch(e){}
+})();
+</script>
 <link rel="preconnect" href="https://fonts.googleapis.com"/>
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet"/>
