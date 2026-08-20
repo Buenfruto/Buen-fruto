@@ -1566,6 +1566,8 @@ window.backfillAltasRetroactivas = async function(){
 // ID B360 — cambia el correo de su cuenta de acceso al que corresponde a su
 // ID B360 actual, sin tocar su contraseña. Es seguro correrlo varias veces:
 // a quien ya esté al corriente simplemente lo deja igual.
+let _ultimosConflictosLogin = [];
+
 window.migrarLoginsAhora = async function(){
   if (!confirm('Esto va a cambiar el usuario de acceso de TODOS los empleados que ya existían (los que vinieron del Head Count) para que puedan entrar con su ID B360. Su contraseña no cambia. ¿Continuar?')) return;
   const btn = document.getElementById('btn-migrar-logins');
@@ -1578,11 +1580,20 @@ window.migrarLoginsAhora = async function(){
     const resultados = await migrarLoginsEmpleadosLote();
     const migrados = resultados.filter(function(r){ return r.ok && !r.sinCambios; });
     const sinCambios = resultados.filter(function(r){ return r.ok && r.sinCambios; });
-    const errores = resultados.filter(function(r){ return !r.ok; });
-    msg.className = errores.length ? 'msg err' : 'msg ok';
-    msg.innerHTML = migrados.length + ' empleado(s) migrado(s) a login por ID B360. '
-      + sinCambios.length + ' ya estaban al corriente.'
-      + (errores.length ? '<br>' + errores.length + ' con error: ' + errores.map(function(e){ return (e.nombre||e.uid)+' ('+e.error+')'; }).join(', ') : '');
+    const conflictos = resultados.filter(function(r){ return !r.ok && r.conflicto; });
+    const otrosErrores = resultados.filter(function(r){ return !r.ok && !r.conflicto; });
+    _ultimosConflictosLogin = conflictos;
+
+    msg.className = (conflictos.length || otrosErrores.length) ? 'msg err' : 'msg ok';
+    let html = migrados.length + ' empleado(s) migrado(s) a login por ID B360. ' + sinCambios.length + ' ya estaban al corriente.';
+    if (conflictos.length) {
+      html += '<br>' + conflictos.length + ' con ID B360 duplicado (dos registros distintos con el mismo nombre/ID) — no se pueden migrar hasta que decidas cuál de los dos registros eliminar o desactivar en el directorio. '
+        + '<button type="button" class="btn btn-outline btn-sm" style="margin-left:.5rem" onclick="descargarConflictosLogin()">📥 Descargar detalle</button>';
+    }
+    if (otrosErrores.length) {
+      html += '<br>' + otrosErrores.length + ' con otro error: ' + otrosErrores.map(function(e){ return (e.nombre||e.uid)+' ('+e.error+')'; }).join(', ');
+    }
+    msg.innerHTML = html;
     if (btn) btn.disabled = false;
   } catch (err) {
     console.error('Error al migrar logins:', err);
@@ -1590,6 +1601,27 @@ window.migrarLoginsAhora = async function(){
     msg.textContent = 'Error al migrar logins: ' + err.message;
     if (btn) btn.disabled = false;
   }
+};
+
+// Excel con el detalle de los empleados cuyo ID B360 choca con otro registro
+// del directorio — para que el admin pueda ver los dos nombres/comedores uno
+// junto al otro y decidir cuál registro sobra (eliminarlo o desactivarlo
+// desde el directorio de Empleados).
+window.descargarConflictosLogin = async function(){
+  if (!_ultimosConflictosLogin.length) { alert('No hay conflictos pendientes por descargar.'); return; }
+  const comedorLabels = { betel:'Betel', cuauhtemoc:'Cuauhtémoc', intelomas:'Intelomas' };
+  const wb = new ExcelJS.Workbook();
+  const ws = wb.addWorksheet('Conflictos de login');
+  ws.addRow(['Nombre', 'Comedor', 'ID B360', 'UID', 'Duplicado — Nombre', 'Duplicado — Comedor', 'Duplicado — ID B360', 'Duplicado — UID', 'Duplicado — Activo', 'Duplicado — Correo actual']).font = { bold: true };
+  _ultimosConflictosLogin.forEach(function(c){
+    ws.addRow([
+      c.nombre || '—', comedorLabels[c.comedor] || c.comedor || '—', c.hc_id || '—', c.uid || '—',
+      c.otroNombre || '—', comedorLabels[c.otroComedor] || c.otroComedor || '—', c.otroHcId || '—', c.otroUid || '—',
+      c.otroActivo === false ? 'No' : (c.otroActivo === true ? 'Sí' : '—'), c.otroEmail || '—'
+    ]);
+  });
+  ws.columns.forEach(function(col){ col.width = 22; });
+  await descargarWorkbook(wb, 'Conflictos_login_ID_B360_' + hoy() + '.xlsx');
 };
 
 function renderResumenEmpleados(lista){
