@@ -15,7 +15,7 @@
 // fuerza una recarga limpia. sessionStorage evita que se quede en bucle si
 // version.txt no está disponible por algún motivo.
 (function(){
-  var V='20260820-2';
+  var V='20260820-4';
   try{
     fetch('version.txt?_='+Date.now(),{cache:'no-store'}).then(function(r){return r.ok?r.text():null;}).then(function(t){
       if(!t) return;
@@ -347,6 +347,8 @@ input[type=file]{display:none}
           <div class="metrica"><div class="metrica-label">Empleados activos</div><div class="metrica-val" id="m-empleados">—</div><div class="metrica-sub">Registrados</div></div>
           <div class="metrica ciruela"><div class="metrica-label">Pre-órdenes hoy</div><div class="metrica-val" id="m-preordenes">—</div><div class="metrica-sub">Con hora agendada</div></div>
           <div class="metrica"><div class="metrica-label">Recaudado hoy</div><div class="metrica-val" id="m-recaudado">—</div><div class="metrica-sub">Empleados + empresa</div></div>
+          <div class="metrica verde"><div class="metrica-label">Subsidiados hoy</div><div class="metrica-val" id="m-subsidiados">—</div><div class="metrica-sub">Comida 100% empresa</div></div>
+          <div class="metrica ciruela"><div class="metrica-label">Visitas hoy</div><div class="metrica-val" id="m-visitas">—</div><div class="metrica-sub">Sin cuenta, por link</div></div>
         </div>
 
         <!-- TARJETAS POR CENTRO -->
@@ -445,6 +447,30 @@ input[type=file]{display:none}
               <button class="btn btn-danger btn-sm" id="btn-revisar-directorio" onclick="revisarYCorregirDirectorio()">🔎 Revisar y corregir directorio</button>
               <div style="font-size:.72rem;color:var(--g3);margin-top:.4rem">Revisa todo el directorio de una vez: corrige solo ID B360 duplicados donde está claro cuál copia tiene el correo correcto (borra las demás para siempre, reactiva la buena si hacía falta) — y avisa de cualquier otra cosa rara que encuentre (gafetes repetidos, correos repetidos, empleados del Head Count sin ID B360, duplicados donde no está claro cuál es el bueno) sin tocarla, para que la revises a mano. No toca a nadie que hayas desactivado tú por otra razón.</div>
               <div class="msg" id="revisar-directorio-msg"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- EMPLEADOS SUBSIDIADOS 100% -->
+        <div class="card">
+          <div class="card-head"><span class="card-titulo">💚 Empleados subsidiados 100%</span></div>
+          <div class="card-body">
+            <p style="font-size:.82rem;color:var(--g2);margin-bottom:1rem">Empleados a los que la empresa les cubre toda la comida (no se les cobra nada, y sus comidas se ven aparte en Reportes y Dashboard). Sube un Excel con las mismas columnas del Head Count, o agrégalos uno por uno con la casilla "Subsidiado 100%" al agregar un empleado más abajo. Si el ID B360 ya existe en el directorio, nomás se marca como subsidiado; si no existe, se crea de cero.</p>
+            <div class="drop-area" id="subs-drop-area" onclick="document.getElementById('subs-input').click()">
+              <div class="drop-icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="var(--g3)" stroke-width="1.5" stroke-linecap="round">
+                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="12" x2="12" y2="18"/><polyline points="9 15 12 18 15 15"/>
+                </svg>
+              </div>
+              <div class="drop-txt">Arrastra el Excel de subsidiados aquí o haz clic para seleccionar</div>
+              <div class="drop-sub">ID B360, LOGIN B360, ID PLATA, LOGIN PLATA, NOMBRE COMPLETO, PUESTO, CENTRO</div>
+            </div>
+            <input type="file" id="subs-input" accept=".csv,.xlsx,.xls"/>
+            <div id="subs-preview" style="display:none;margin-top:1.25rem"></div>
+            <div class="msg" id="subs-msg"></div>
+            <div style="margin-top:1.5rem;padding-top:1.25rem;border-top:1px solid var(--borde2)">
+              <div style="font-size:.72rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--g2);margin-bottom:.75rem">Subsidiados actuales</div>
+              <div id="lista-subsidiados"></div>
             </div>
           </div>
         </div>
@@ -637,6 +663,10 @@ input[type=file]{display:none}
         <option value="admin">Admin</option>
       </select>
     </div>
+    <div class="campo" style="display:flex;align-items:center;gap:.5rem">
+      <input type="checkbox" id="emp-subsidiado" style="width:auto"/>
+      <label for="emp-subsidiado" style="margin:0;cursor:pointer">💚 Subsidiado 100% (la empresa paga toda su comida)</label>
+    </div>
     <div class="msg" id="emp-msg"></div>
     <div style="display:flex;gap:.75rem;margin-top:1.25rem">
       <button class="btn btn-v" style="flex:1;justify-content:center" id="btn-guardar-emp">Guardar</button>
@@ -818,6 +848,23 @@ document.addEventListener('DOMContentLoaded', function(){
     if(e.dataTransfer.files && e.dataTransfer.files[0]) procesarArchivoHeadCount(e.dataTransfer.files[0]);
   });
 
+  // Empleados subsidiados 100%
+  document.getElementById('subs-input').addEventListener('change', function(e){
+    if(e.target.files && e.target.files[0]) procesarArchivoSubsidiados(e.target.files[0]);
+  });
+  const subsDropArea = document.getElementById('subs-drop-area');
+  ['dragover','dragenter'].forEach(function(evt){
+    subsDropArea.addEventListener(evt, function(e){ e.preventDefault(); e.stopPropagation(); subsDropArea.classList.add('drag'); });
+  });
+  ['dragleave','dragend'].forEach(function(evt){
+    subsDropArea.addEventListener(evt, function(e){ e.preventDefault(); e.stopPropagation(); subsDropArea.classList.remove('drag'); });
+  });
+  subsDropArea.addEventListener('drop', function(e){
+    e.preventDefault(); e.stopPropagation();
+    subsDropArea.classList.remove('drag');
+    if(e.dataTransfer.files && e.dataTransfer.files[0]) procesarArchivoSubsidiados(e.dataTransfer.files[0]);
+  });
+
   // Menú semanal por Excel
   document.getElementById('menu-input').addEventListener('change', function(e){
     if(e.target.files && e.target.files[0]) procesarArchivoMenuSemana(e.target.files[0]);
@@ -872,6 +919,8 @@ async function cargarDashboard(){
     document.getElementById('m-ordenes').textContent=ordenes.length;
     document.getElementById('m-preordenes').textContent=preordenes.length;
     document.getElementById('m-recaudado').textContent='$'+total;
+    document.getElementById('m-subsidiados').textContent=ordenes.filter(o=>o.subsidiado).length;
+    document.getElementById('m-visitas').textContent=ordenes.filter(o=>o.tipo==='visita').length;
     document.getElementById('loading-dashboard').style.display='none';
     const hora=new Date();
     const horaStr=hora.getHours()+':'+String(hora.getMinutes()).padStart(2,'0');
@@ -931,6 +980,23 @@ function generarCodigoGafete() {
   const num = Math.floor(10000 + Math.random() * 90000);
   return 'EMP' + num;
 }
+// Antes, cada código de gafete se generaba al puro azar sin checar si ya
+// existía — con ~500+ empleados la probabilidad de que dos coincidieran era
+// alta (así se repitió EMP38163 entre dos personas distintas). Estas dos
+// funciones cargan primero todos los códigos ya usados y solo entregan uno
+// que nadie más tenga, reintentando si hay choque.
+async function cargarGafetesUsados(){
+  const snap = await db.collection('empleados').get();
+  const usados = new Set();
+  snap.forEach(function(d){ const c = d.data().codigo_gafete; if (c) usados.add(c); });
+  return usados;
+}
+function generarCodigoGafeteUnico(usados){
+  let intento;
+  do { intento = generarCodigoGafete(); } while (usados.has(intento));
+  usados.add(intento);
+  return intento;
+}
 
 function quitarAcentos(s){
   return String(s||'').normalize('NFD').replace(/[̀-ͯ]/g,'');
@@ -973,6 +1039,8 @@ const HC_EMAIL_DOMINIO = 'buenfruto.mx';
 let hcRegistros = [];
 let hcDuplicados = [];
 let hcDiff = null;
+let subsRegistros = [];
+let subsDuplicados = [];
 
 // Normaliza un ID B360/ID Plata para COMPARAR (no para guardar ni mostrar):
 // el mismo identificador puede llegar distinto entre un día y otro del
@@ -1091,6 +1159,129 @@ function procesarArchivoHeadCount(file){
   else reader.readAsText(file, 'UTF-8');
 }
 
+// ── EMPLEADOS SUBSIDIADOS 100% (Excel aparte, lista chica) ──
+// Reutiliza el mismo formato de columnas y el mismo parser que el Head
+// Count diario (ID B360, LOGIN B360, ID PLATA, LOGIN PLATA, NOMBRE
+// COMPLETO, PUESTO, CENTRO), pero en vez de dar de alta/baja por diferencia
+// contra un padrón, nomás marca subsidiado:true en quien ya exista por ID
+// B360, y crea de cero a quien no exista todavía.
+function procesarArchivoSubsidiados(file){
+  const msg = document.getElementById('subs-msg');
+  msg.style.display='none';
+  const nombreArchivo = file.name.toLowerCase();
+  const esExcel = nombreArchivo.endsWith('.xlsx') || nombreArchivo.endsWith('.xls');
+  const reader = new FileReader();
+  reader.onload = async function(e){
+    try {
+      let filas;
+      if(esExcel){
+        const wb = XLSX.read(new Uint8Array(e.target.result), {type:'array'});
+        const hoja = wb.Sheets[wb.SheetNames[0]];
+        filas = XLSX.utils.sheet_to_json(hoja, {header:1, defval:''});
+      } else {
+        filas = parseCSVTexto(String(e.target.result));
+      }
+      const resultado = parseHeadCountFilas(filas);
+      subsRegistros = resultado.registros;
+      subsDuplicados = resultado.duplicadosArchivo;
+      if(!subsRegistros.length && !subsDuplicados.length){
+        msg.textContent = 'No se encontraron filas válidas. Verifica que el archivo tenga las columnas (ID B360, LOGIN B360, ID PLATA, LOGIN PLATA, NOMBRE COMPLETO, PUESTO, CENTRO).';
+        msg.className = 'msg err'; msg.style.display='block';
+        return;
+      }
+      renderPreviewSubsidiados();
+    } catch(err){
+      console.error('Error al leer lista de subsidiados:', err);
+      msg.textContent = 'No se pudo leer el archivo. Verifica que sea un Excel o CSV válido.';
+      msg.className = 'msg err'; msg.style.display='block';
+    }
+  };
+  if(esExcel) reader.readAsArrayBuffer(file);
+  else reader.readAsText(file, 'UTF-8');
+}
+
+function renderPreviewSubsidiados(){
+  const preview = document.getElementById('subs-preview');
+  preview.style.display='block';
+  preview.innerHTML =
+    '<div style="font-size:.85rem;color:var(--g2);margin-bottom:.75rem">' + subsRegistros.length + ' persona(s) leída(s) del archivo' +
+    (subsDuplicados.length ? (' — ' + subsDuplicados.length + ' con identificador repetido dentro del mismo archivo, se van a omitir (revísalos a mano).') : '.') +
+    '</div>' +
+    '<div style="max-height:220px;overflow-y:auto;margin-bottom:1rem">' +
+    subsRegistros.slice(0,50).map(function(r){ return '<div style="font-size:.8rem;padding:.25rem 0;border-bottom:1px solid var(--borde2)">'+escHtml(r.nombre)+' — '+escHtml(r.puesto)+' · '+escHtml(r.comedor)+'</div>'; }).join('') +
+    (subsRegistros.length>50 ? '<div style="font-size:.75rem;color:var(--g3);padding:.3rem 0">+'+(subsRegistros.length-50)+' más</div>' : '') +
+    '</div>' +
+    '<button class="btn btn-v" id="btn-aplicar-subs">Marcar/crear como subsidiados</button> ' +
+    '<button class="btn btn-outline" id="btn-cancelar-subs">Cancelar</button>';
+  document.getElementById('btn-aplicar-subs').addEventListener('click', aplicarSubsidiados);
+  document.getElementById('btn-cancelar-subs').addEventListener('click', function(){
+    subsRegistros = []; subsDuplicados = [];
+    document.getElementById('subs-input').value = '';
+    preview.style.display='none'; preview.innerHTML='';
+  });
+}
+
+async function aplicarSubsidiados(){
+  if(!subsRegistros.length) return;
+  if(!confirm('Esto va a marcar como subsidiados al 100% a ' + subsRegistros.length + ' persona(s) — las que ya existan en el directorio se actualizan, las que no existan se crean de cero con acceso por ID B360. ¿Continuar?')) return;
+
+  const btn = document.getElementById('btn-aplicar-subs');
+  const msg = document.getElementById('subs-msg');
+  if(btn) btn.disabled = true;
+  msg.style.display='block'; msg.className='msg'; msg.textContent='Procesando…';
+
+  // Directorio actual, para saber quién ya existe por ID B360 (sin importar
+  // si vino del Head Count o se agregó a mano).
+  const snap = await db.collection('empleados').get();
+  const porHcId = {};
+  snap.forEach(function(d){ const e=d.data(); if(e.hc_id) porHcId[normalizarHcId(e.hc_id)] = Object.assign({uid:d.id}, e); });
+  const usados = await cargarGafetesUsados();
+
+  let actualizados = 0, creados = 0;
+  const errores = [];
+  for (const r of subsRegistros) {
+    try {
+      const existente = porHcId[normalizarHcId(r.hc_id)];
+      if (existente) {
+        // Un empleado que se marca como subsidiado siempre queda activo —
+        // esa es la decisión del admin al subirlo aquí, sin excepción.
+        await db.collection('empleados').doc(existente.uid).update({ subsidiado: true, activo: true });
+        actualizados++;
+      } else {
+        const email = emailSinteticoHC(r.login_base);
+        const password = Math.random().toString(36).slice(2,10);
+        const uid = await crearEmpleadoAuth(email, password);
+        await db.collection('empleados').doc(uid).set({
+          nombre: r.nombre, email: email, password_texto: password,
+          rol: 'empleado', comedor: r.comedor, puesto: r.puesto,
+          activo: true, subsidiado: true,
+          codigo_gafete: generarCodigoGafeteUnico(usados),
+          hc_id: r.hc_id, origen: 'manual'
+        });
+        creados++;
+      }
+    } catch(e){
+      errores.push((r.nombre||r.hc_id)+': '+e.message);
+    }
+  }
+
+  let html = actualizados + ' empleado(s) ya existente(s) marcado(s) como subsidiado(s), ' + creados + ' cuenta(s) nueva(s) creada(s) como subsidiadas.';
+  if (subsDuplicados.length) {
+    html += '<br>' + subsDuplicados.length + ' se omitieron por tener el identificador repetido dentro del archivo.';
+  }
+  if (errores.length) {
+    html += '<br>' + errores.length + ' con error: ' + errores.join(', ');
+  }
+  msg.className = errores.length ? 'msg err' : 'msg ok';
+  msg.innerHTML = html;
+
+  subsRegistros = []; subsDuplicados = [];
+  document.getElementById('subs-input').value = '';
+  document.getElementById('subs-preview').style.display='none';
+  document.getElementById('subs-preview').innerHTML='';
+  if(btn) btn.disabled = false;
+}
+
 async function calcularDiffHeadCount(){
   const preview = document.getElementById('hc-preview');
   preview.style.display='block';
@@ -1206,12 +1397,13 @@ async function aplicarCambiosHeadCount(){
   // ninguna llamada tarde tanto que se pase del tiempo máximo de la función,
   // no por ningún límite de Firebase.
   const LOTE_HC = 200;
+  const _gafetesUsadosHC = await cargarGafetesUsados();
   for(let i=0;i<altas.length;i+=LOTE_HC){
     const lote = altas.slice(i, i+LOTE_HC).map(function(r){
       return {
         hc_id: r.hc_id, nombre: r.nombre, puesto: r.puesto, comedor: r.comedor,
         email: emailSinteticoHC(r.login_base), password: Math.random().toString(36).slice(2,10),
-        codigo_gafete: generarCodigoGafete()
+        codigo_gafete: generarCodigoGafeteUnico(_gafetesUsadosHC)
       };
     });
     try {
@@ -1723,7 +1915,7 @@ async function cargarEmpleados(){
       tr.setAttribute('data-emp-id', d.id);
       tr.setAttribute('data-nombre', normalizarTexto(e.nombre||''));
       tr.innerHTML=`
-        <td style="font-weight:600">${e.nombre||'—'}</td>
+        <td style="font-weight:600">${e.nombre||'—'}${e.subsidiado?'<span class="badge badge-v" style="margin-left:.4rem;font-size:.62rem">💚 Subsidiado</span>':''}</td>
         <td>${e.hc_id||e.email||'—'}</td>
         <td><span class="badge ${e.rol==='admin'?'badge-c':e.rol==='chef'?'badge-r':'badge-g'}">${e.rol||'empleado'}</span></td>
         <td><span class="badge ${e.activo!==false?'badge-v':'badge-r'}">${e.activo!==false?'Activo':'Inactivo'}</span></td>
@@ -1737,6 +1929,7 @@ async function cargarEmpleados(){
         </td>`;
       tbody.appendChild(tr);
     });
+    renderListaSubsidiados(lista);
     // Si había una búsqueda activa, se vuelve a aplicar sobre la tabla recién
     // redibujada (por ejemplo, tras dar de alta/baja o importar Head Count).
     const inputBuscar = document.getElementById('emp-buscar');
@@ -1820,6 +2013,49 @@ window.toggleActivo=async function(uid, activoActual){
   }
 };
 
+// Marca o quita el subsidio 100% de un empleado ya existente — desde ese
+// momento, sus próximos pedidos (los que haga después de este cambio, los
+// ya hechos no se tocan) no le cobran nada y quedan aparte en Reportes. Esto
+// solo se controla desde la tarjeta "Empleados subsidiados 100%" (no desde
+// el directorio general) para que sea una decisión deliberada del admin, no
+// un botón de un clic mezclado con las demás acciones de cada fila. Al
+// marcar el subsidio también se asegura que el empleado quede activo — un
+// empleado que decidiste subsidiar nunca debe quedarse fuera por estar
+// inactivo.
+window.toggleSubsidiado=async function(uid, subsidiadoActual){
+  try {
+    const data = { subsidiado: !subsidiadoActual };
+    if (!subsidiadoActual) data.activo = true;
+    await updateDoc(doc(db,'empleados',uid), data);
+  } catch(e) {
+    console.error('Error al cambiar subsidio de empleado:', e);
+    alert('No se pudo actualizar el subsidio del empleado.');
+  }
+};
+
+// Lista de empleados actualmente subsidiados, dentro de la propia tarjeta
+// "Empleados subsidiados 100%" — aquí es donde se agregan y se quitan, no
+// desde el directorio general.
+function renderListaSubsidiados(lista){
+  const cont = document.getElementById('lista-subsidiados');
+  if (!cont) return;
+  const subsidiados = (lista||[]).filter(function(e){ return e.subsidiado; });
+  if (!subsidiados.length) {
+    cont.innerHTML = '<div style="font-size:.8rem;color:var(--g3);padding:.4rem 0">Ningún empleado subsidiado por ahora.</div>';
+    return;
+  }
+  const comedorLabels = { betel:'Betel', cuauhtemoc:'Cuauhtémoc', intelomas:'Intelomas' };
+  cont.innerHTML = subsidiados.map(function(e){
+    return '<div style="display:flex;align-items:center;justify-content:space-between;gap:.75rem;padding:.6rem 0;border-bottom:1px solid var(--borde2)">'+
+      '<div>'+
+        '<div style="font-size:.85rem;font-weight:600;color:var(--negro)">'+escHtml(e.nombre||'—')+(e.activo===false?' <span style="font-size:.68rem;font-weight:700;color:var(--rojo)">(inactivo)</span>':'')+'</div>'+
+        '<div style="font-size:.72rem;color:var(--g2)">'+escHtml(comedorLabels[e.comedor]||e.comedor||'—')+'</div>'+
+      '</div>'+
+      '<button class="btn btn-outline btn-sm" onclick="toggleSubsidiado(\''+e.id+'\',true)">Quitar subsidio</button>'+
+    '</div>';
+  }).join('');
+}
+
 // ── MODAL AGREGAR EMPLEADO ──
 window.mostrarModalEmpleado=function(){
   document.getElementById('modal-emp-titulo').textContent='Nuevo empleado';
@@ -1829,6 +2065,7 @@ window.mostrarModalEmpleado=function(){
   document.getElementById('emp-puesto').value='';
   document.getElementById('emp-comedor').value='betel';
   document.getElementById('emp-rol').value='empleado';
+  document.getElementById('emp-subsidiado').checked=false;
   const msg=document.getElementById('emp-msg');
   msg.style.display='none'; msg.className='msg'; msg.textContent='';
   const btn=document.getElementById('btn-guardar-emp');
@@ -1846,6 +2083,7 @@ async function guardarNuevoEmpleado(){
   const puesto = document.getElementById('emp-puesto').value.trim();
   const comedor = document.getElementById('emp-comedor').value;
   const rol = document.getElementById('emp-rol').value;
+  const subsidiado = document.getElementById('emp-subsidiado').checked;
   const msg = document.getElementById('emp-msg');
   function mostrarMsg(txt, ok){
     msg.textContent=txt; msg.className='msg '+(ok?'ok':'err'); msg.style.display='block';
@@ -1856,6 +2094,7 @@ async function guardarNuevoEmpleado(){
   btn.disabled = true; btn.textContent = 'Guardando...';
   try {
     const uid = await crearEmpleadoAuth(email, pass);
+    const usados = await cargarGafetesUsados();
     await db.collection('empleados').doc(uid).set({
       nombre: nombre,
       email: email,
@@ -1864,7 +2103,8 @@ async function guardarNuevoEmpleado(){
       comedor: comedor,
       puesto: puesto || 'Empleado',
       activo: true,
-      codigo_gafete: generarCodigoGafete(),
+      subsidiado: subsidiado,
+      codigo_gafete: generarCodigoGafeteUnico(usados),
       origen: 'manual'
     });
     mostrarMsg('Empleado creado correctamente.', true);
@@ -2500,15 +2740,22 @@ function agregarOrdenesPorEmpleado(docs, comedorFiltro){
     // pestaña "Órdenes pendientes", no aquí, para no cobrar algo que
     // todavía no se ha confirmado que se consumió.
     if(!o.escaneado) return;
+    // Las visitas (personas sin cuenta que pidieron por el link de visita) no
+    // tienen empleado_uid ni nómina de la que descontarles nada — se listan
+    // aparte en su propia tabla de "Visitas" (ver renderizarReporte), no aquí.
+    if(o.tipo === 'visita' || !o.empleado_uid) return;
     if(comedorFiltro !== 'todos' && o.comedor !== comedorFiltro) return;
-    if(!porEmp[o.empleado_uid]) porEmp[o.empleado_uid] = { uid: o.empleado_uid, nombre: o.empleado_nombre||'—', iniciales: (o.empleado_nombre||'??').split(' ').map(x=>x[0]).slice(0,2).join(''), dias:[] };
+    if(!porEmp[o.empleado_uid]) porEmp[o.empleado_uid] = { uid: o.empleado_uid, nombre: o.empleado_nombre||'—', iniciales: (o.empleado_nombre||'??').split(' ').map(x=>x[0]).slice(0,2).join(''), subsidiado: !!o.subsidiado, dias:[] };
     // Extras se separa en nombres (texto) y costo (numérico) en vez de un
     // solo string combinado — así el reporte puede tener una columna
     // "Extras" y otra "Costo extras" por separado.
     const extrasTexto = (o.extras||[]).map(e=>typeof e==='string'?e:e.nombre).join(', ');
     const costoExtras = (o.extras||[]).reduce((s,e)=>s+(typeof e==='string'?0:(Number(e.precio)||0)), 0);
-    const subsidio = 45;
-    const pagoEmp = Number(o.cargo) || 0; // blindaje: un dato mal formado nunca debe volverse "$NaN.00" en el total
+    // Un empleado subsidiado al 100% no paga nada de su comida — la empresa
+    // cubre el buffet completo ($90, no solo los $45 de siempre) más
+    // cualquier extra, en vez del reparto normal 45/45.
+    const subsidio = o.subsidiado ? (((o.platillos||[]).length ? 90 : 0) + costoExtras) : 45;
+    const pagoEmp = o.subsidiado ? 0 : (Number(o.cargo) || 0); // blindaje: un dato mal formado nunca debe volverse "$NaN.00" en el total
     porEmp[o.empleado_uid].dias.push({
       id: o.id,
       fecha: o.fecha,
@@ -2858,6 +3105,7 @@ function renderizarReporte(){
     const mov = indicativoMovimiento(emp.nombre, _repMovDocs);
     const movBadge = mov ? `<span style="display:inline-block;margin-left:.5rem;font-size:.65rem;font-weight:700;padding:.15rem .55rem;border-radius:20px;background:${mov.tipo==='alta'?'var(--vl)':'var(--rojol)'};color:${mov.tipo==='alta'?'var(--v)':'var(--rojo)'}">${mov.texto}</span>` : '';
     const idBadge = `<span style="display:inline-block;margin-left:.5rem;font-size:.65rem;font-weight:700;padding:.15rem .55rem;border-radius:20px;background:var(--crema);color:var(--g2);font-family:monospace">ID ${emp.id_empleado||'—'}</span>`;
+    const subsBadge = emp.subsidiado ? `<span style="display:inline-block;margin-left:.5rem;font-size:.65rem;font-weight:700;padding:.15rem .55rem;border-radius:20px;background:var(--vl);color:var(--v)">💚 Subsidiado 100%</span>` : '';
 
     html += `
     <div style="margin-bottom:1.75rem">
@@ -2865,7 +3113,7 @@ function renderizarReporte(){
         <div style="display:flex;align-items:center;gap:10px">
           <div style="width:32px;height:32px;border-radius:50%;background:${bg};display:flex;align-items:center;justify-content:center;font-size:.75rem;font-weight:700;color:${color};flex-shrink:0">${emp.iniciales}</div>
           <div>
-            <div style="font-size:.88rem;font-weight:700;color:var(--negro)">${emp.nombre}${idBadge}${movBadge}</div>
+            <div style="font-size:.88rem;font-weight:700;color:var(--negro)">${emp.nombre}${idBadge}${subsBadge}${movBadge}</div>
             <div style="font-size:.72rem;color:var(--g3)">${emp.dias.length} comida${emp.dias.length!==1?'s':''} en este período</div>
           </div>
         </div>
@@ -2941,6 +3189,39 @@ function renderizarReporte(){
       </div>
     </div>
   </div>`;
+
+  // Visitas del período (personas sin cuenta que pidieron por el link de
+  // visita) — no tienen nómina de la que descontarles nada, así que se
+  // muestran aparte, solo para llevar control de quién vino y qué pidió.
+  const visitasPeriodo = (_repOrdenesDocs||[]).filter(o=>
+    o.tipo === 'visita' && o.estado !== 'cancelado' && o.escaneado &&
+    (_repComedor === 'todos' || o.comedor === _repComedor)
+  );
+  if (visitasPeriodo.length) {
+    const labelsVis={betel:'Betel',cuauhtemoc:'Cuauhtémoc',intelomas:'Intelomas'};
+    html += `
+    <div style="margin-top:2rem;padding-top:1.5rem;border-top:1.5px solid var(--borde)">
+      <div style="font-size:.9rem;font-weight:700;color:var(--negro);margin-bottom:.75rem">🎟 Visitas (${visitasPeriodo.length})</div>
+      <table style="width:100%;border-collapse:collapse;font-size:.8rem">
+        <thead><tr style="border-bottom:1.5px solid var(--borde)">
+          <th style="text-align:left;padding:.45rem .75rem;font-size:.65rem;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--g3);background:var(--crema)">Fecha</th>
+          <th style="text-align:left;padding:.45rem .75rem;font-size:.65rem;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--g3);background:var(--crema)">Nombre</th>
+          <th style="text-align:left;padding:.45rem .75rem;font-size:.65rem;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--g3);background:var(--crema)">Comedor</th>
+          <th style="text-align:left;padding:.45rem .75rem;font-size:.65rem;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--g3);background:var(--crema)">Platillos</th>
+          <th style="text-align:left;padding:.45rem .75rem;font-size:.65rem;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--g3);background:var(--crema)">Extras</th>
+        </tr></thead>
+        <tbody>${visitasPeriodo.map(o=>`
+          <tr style="border-bottom:1px solid var(--borde2)">
+            <td style="padding:.45rem .75rem">${o.fecha}</td>
+            <td style="padding:.45rem .75rem;font-weight:600">${o.empleado_nombre||'—'}</td>
+            <td style="padding:.45rem .75rem">${labelsVis[o.comedor]||o.comedor||'—'}</td>
+            <td style="padding:.45rem .75rem;font-size:.78rem">${(o.platillos||[]).join(', ')||'—'}</td>
+            <td style="padding:.45rem .75rem;font-size:.78rem">${(o.extras||[]).map(e=>e.nombre||e).join(', ')||'—'}</td>
+          </tr>`).join('')}
+        </tbody>
+      </table>
+    </div>`;
+  }
 
   body.innerHTML = html;
   _reporteMarcarExito(desde, hasta);
