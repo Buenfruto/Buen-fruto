@@ -1600,15 +1600,24 @@ window.migrarLoginsAhora = async function(){
     const resultados = await migrarLoginsEmpleadosLote();
     const migrados = resultados.filter(function(r){ return r.ok && !r.sinCambios; });
     const sinCambios = resultados.filter(function(r){ return r.ok && r.sinCambios; });
-    const conflictos = resultados.filter(function(r){ return !r.ok && r.conflicto; });
+    let conflictos = resultados.filter(function(r){ return !r.ok && r.conflicto; });
     const otrosErrores = resultados.filter(function(r){ return !r.ok && !r.conflicto; });
+
+    // Si un conflicto ya se resolvió antes (con el botón de abajo o a mano
+    // desde el directorio, desactivando la cuenta sobrante), no tiene caso
+    // seguir mostrándolo como pendiente cada vez que se corre la migración.
+    if (conflictos.length) {
+      const docsPrimarios = await Promise.all(conflictos.map(function(c){ return db.collection('empleados').doc(c.uid).get(); }));
+      conflictos = conflictos.filter(function(c, i){ return docsPrimarios[i].exists && docsPrimarios[i].data().activo !== false; });
+    }
     _ultimosConflictosLogin = conflictos;
 
     msg.className = (conflictos.length || otrosErrores.length) ? 'msg err' : 'msg ok';
     let html = migrados.length + ' empleado(s) migrado(s) a login por ID B360. ' + sinCambios.length + ' ya estaban al corriente.';
     if (conflictos.length) {
       html += '<br>' + conflictos.length + ' con ID B360 duplicado (dos registros distintos con el mismo nombre/ID) — descarga el detalle para ver, según el último acceso de cada cuenta, cuál de las dos ya se usa y cuál conviene desactivar en el directorio. '
-        + '<button type="button" class="btn btn-outline btn-sm" style="margin-left:.5rem" onclick="descargarConflictosLogin()">📥 Descargar detalle</button>';
+        + '<button type="button" class="btn btn-outline btn-sm" style="margin-left:.5rem" onclick="descargarConflictosLogin()">📥 Descargar detalle</button>'
+        + '<button type="button" class="btn btn-outline btn-sm" style="margin-left:.5rem" onclick="resolverConflictosLogin()">🧹 Resolver automáticamente</button>';
     }
     if (otrosErrores.length) {
       html += '<br>' + otrosErrores.length + ' con otro error: ' + otrosErrores.map(function(e){ return (e.nombre||e.uid)+' ('+e.error+')'; }).join(', ');
@@ -1667,6 +1676,72 @@ window.descargarConflictosLogin = async function(){
   ws.columns.forEach(function(col){ col.width = 24; });
   ws.getColumn(15).width = 60;
   await descargarWorkbook(wb, 'Conflictos_login_ID_B360_' + hoy() + '.xlsx');
+};
+
+// Resuelve automáticamente los conflictos de la última corrida de "Migrar
+// logins": para cada par, DESACTIVA (nunca elimina — se puede reactivar
+// desde el directorio en cualquier momento) la cuenta que se creó
+// DESPUÉS, dejando activa la que se creó primero. Solo se resuelve así un
+// par cuando NINGUNA de las dos cuentas ha iniciado sesión nunca — si ya
+// hay indicio de uso, o falta el dato de creación, ese par se deja sin
+// tocar para que se revise a mano (desactivar la cuenta equivocada sí
+// podría afectar a alguien que ya está usando el sistema).
+window.resolverConflictosLogin = async function(){
+  if (!_ultimosConflictosLogin.length) { alert('No hay conflictos pendientes por resolver — corre "Migrar logins" primero.'); return; }
+
+  const candidatos = [];
+  const paraRevisarAMano = [];
+  _ultimosConflictosLogin.forEach(function(c){
+    const yaTuvoUso = c.ultimoAcceso || c.otroUltimoAcceso;
+    const faltanFechas = !c.creado || !c.otroCreado;
+    if (yaTuvoUso || faltanFechas) { paraRevisarAMano.push(c); return; }
+    const miFecha = new Date(c.creado).getTime();
+    const otraFecha = new Date(c.otroCreado).getTime();
+    if (!(miFecha < otraFecha) && !(otraFecha < miFecha)) { paraRevisarAMano.push(c); return; } // empate exacto
+    const desactivar = miFecha > otraFecha
+      ? { uid: c.uid, nombre: c.nombre }
+      : { uid: c.otroUid, nombre: c.otroNombre || c.nombre };
+    candidatos.push(desactivar);
+  });
+
+  if (!candidatos.length) {
+    alert('Ninguno de los conflictos pendientes se puede resolver automáticamente — todos necesitan revisión manual (alguna de las dos cuentas ya tuvo actividad, o falta el dato de creación). Descarga el detalle y revísalos desde el directorio de Empleados.');
+    return;
+  }
+
+  const advertenciaManual = paraRevisarAMano.length
+    ? ('\n\n' + paraRevisarAMano.length + ' caso(s) más se quedan sin tocar porque necesitan revisión manual (hay indicio de uso, o falta información).')
+    : '';
+  if (!confirm('Esto va a DESACTIVAR (no elimina — se puede reactivar en cualquier momento desde Empleados) ' + candidatos.length + ' cuenta(s) duplicada(s): la copia creada después en cada par, dejando activa la primera. Ninguna de estas cuentas ha iniciado sesión nunca.' + advertenciaManual + '\n\n¿Continuar?')) return;
+
+  const msg = document.getElementById('migrar-logins-msg');
+  msg.style.display = 'block';
+  msg.className = 'msg';
+  msg.textContent = 'Resolviendo duplicados…';
+
+  let ok = 0;
+  const fallos = [];
+  for (const cand of candidatos) {
+    try {
+      await db.collection('empleados').doc(cand.uid).update({ activo: false });
+      ok++;
+    } catch (e) {
+      fallos.push((cand.nombre || cand.uid) + ': ' + e.message);
+    }
+  }
+
+  _ultimosConflictosLogin = paraRevisarAMano;
+
+  let html = ok + ' cuenta(s) duplicada(s) desactivada(s) automáticamente.';
+  if (paraRevisarAMano.length) {
+    html += '<br>' + paraRevisarAMano.length + ' quedan pendientes de revisión manual — '
+      + '<button type="button" class="btn btn-outline btn-sm" style="margin-left:.5rem" onclick="descargarConflictosLogin()">📥 Descargar detalle</button>';
+  }
+  if (fallos.length) {
+    html += '<br>' + fallos.length + ' con error: ' + fallos.join(', ');
+  }
+  msg.className = fallos.length ? 'msg err' : 'msg ok';
+  msg.innerHTML = html;
 };
 
 function renderResumenEmpleados(lista){
