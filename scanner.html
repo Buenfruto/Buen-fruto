@@ -12,7 +12,7 @@
 <meta http-equiv="Expires" content="0"/>
 <script>
 (function(){
-  var V='20260820-1';
+  var V='20260820-4';
   try{
     fetch('version.txt?_='+Date.now(),{cache:'no-store'}).then(function(r){return r.ok?r.text():null;}).then(function(t){
       if(!t) return;
@@ -257,25 +257,39 @@ window.escanear=async function(){
   const qEmp=query(collection(db,'empleados'),where('codigo_gafete','==',code));
   const empSnap=await getDocs(qEmp);
 
-  if(empSnap.empty){
-    mostrarRes('error','Gafete inválido','No se encontró ningún empleado con este código','Verifica que el código sea correcto');
-    agregarHistorial('Gafete inválido','error');
-    return;
-  }
-
-  const empDoc=empSnap.docs[0];
-  const emp=empDoc.data();
-
-  // Buscar la orden de hoy para este empleado (que no esté cancelada)
-  const qOrd=query(collection(db,'ordenes'),where('empleado_uid','==',empDoc.id),where('fecha','==',hoy()));
-  const ordSnap=await getDocs(qOrd);
+  let nombrePersona;
   const ordenesHoy=[];
-  ordSnap.forEach(d=>{ const data=d.data(); if(data.estado!=='cancelado') ordenesHoy.push({id:d.id,...data}); });
 
-  if(!ordenesHoy.length){
-    mostrarRes('error','Sin orden hoy',emp.nombre||'Empleado','Este empleado no tiene ninguna orden para hoy');
-    agregarHistorial((emp.nombre||'?')+' (sin orden)','error');
-    return;
+  if(!empSnap.empty){
+    const empDoc=empSnap.docs[0];
+    const emp=empDoc.data();
+    nombrePersona=emp.nombre||'Empleado';
+
+    // Buscar la orden de hoy para este empleado (que no esté cancelada)
+    const qOrd=query(collection(db,'ordenes'),where('empleado_uid','==',empDoc.id),where('fecha','==',hoy()));
+    const ordSnap=await getDocs(qOrd);
+    ordSnap.forEach(d=>{ const data=d.data(); if(data.estado!=='cancelado') ordenesHoy.push({id:d.id,...data}); });
+
+    if(!ordenesHoy.length){
+      mostrarRes('error','Sin orden hoy',nombrePersona,'Este empleado no tiene ninguna orden para hoy');
+      agregarHistorial((nombrePersona||'?')+' (sin orden)','error');
+      return;
+    }
+  } else {
+    // No es un gafete de empleado registrado — puede ser el código de una
+    // visita (persona sin cuenta que pidió por el link de invitado). Ese
+    // código se generó al ordenar y solo es válido el mismo día, buscamos
+    // directo en ordenes.
+    const qVis=query(collection(db,'ordenes'),where('codigo_visita','==',code),where('fecha','==',hoy()));
+    const visSnap=await getDocs(qVis);
+    visSnap.forEach(d=>{ const data=d.data(); if(data.estado!=='cancelado') ordenesHoy.push({id:d.id,...data}); });
+
+    if(!ordenesHoy.length){
+      mostrarRes('error','Código inválido','—','No se encontró ningún empleado ni visita con este código');
+      agregarHistorial('Código inválido','error');
+      return;
+    }
+    nombrePersona=ordenesHoy[0].empleado_nombre||'Visita';
   }
 
   // Esta estación solo activa órdenes del comedor al que pertenece (via
@@ -286,8 +300,8 @@ window.escanear=async function(){
 
   if(!ordenes.length){
     const otro=_comedorLabels[ordenesHoy[0].comedor]||ordenesHoy[0].comedor||'otro comedor';
-    mostrarRes('error','Comedor incorrecto',emp.nombre||'Empleado','Su orden de hoy es en '+otro+', no en '+_comedorNombre);
-    agregarHistorial((emp.nombre||'?')+' (comedor incorrecto)','error');
+    mostrarRes('error','Comedor incorrecto',nombrePersona,'Su orden de hoy es en '+otro+', no en '+_comedorNombre);
+    agregarHistorial((nombrePersona||'?')+' (comedor incorrecto)','error');
     return;
   }
 
@@ -309,23 +323,23 @@ window.escanear=async function(){
       return { yaEscaneado:false, data };
     });
   } catch(e){
-    mostrarRes('error','Sin orden hoy',emp.nombre||'Empleado','Este empleado no tiene ninguna orden para hoy');
-    agregarHistorial((emp.nombre||'?')+' (sin orden)','error');
+    mostrarRes('error','Sin orden hoy',nombrePersona,'Este empleado no tiene ninguna orden para hoy');
+    agregarHistorial((nombrePersona||'?')+' (sin orden)','error');
     return;
   }
 
   if(resultado.yaEscaneado){
-    mostrarRes('ya','Ya fue escaneado',emp.nombre||'Empleado','Este gafete ya fue usado hoy — no puede usarse dos veces');
-    agregarHistorial((emp.nombre||'?')+' (ya escaneado)','error');
+    mostrarRes('ya','Ya fue escaneado',nombrePersona,'Este código ya fue usado hoy — no puede usarse dos veces');
+    agregarHistorial((nombrePersona||'?')+' (ya escaneado)','error');
     return;
   }
 
   // Mostrar éxito
   const pls=(resultado.data.platillos||[]).concat((resultado.data.extras||[]).map(e=>typeof e==='string'?e:e.nombre+' (extra)'));
-  mostrarRes('ok','¡Bienvenido!',emp.nombre||'Empleado','Pasando a cocina ahora');
+  mostrarRes('ok','¡Bienvenido!',nombrePersona,'Pasando a cocina ahora');
   document.getElementById('res-pedido').style.display='block';
   document.getElementById('res-platillos').innerHTML=pls.map(p=>`<div class="res-platillo">• ${p}</div>`).join('');
-  agregarHistorial(emp.nombre||'Empleado','ok');
+  agregarHistorial(nombrePersona,'ok');
 };
 
 function mostrarRes(tipo,titulo,nombre,detalle){
