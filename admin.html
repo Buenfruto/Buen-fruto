@@ -698,8 +698,14 @@ function traducirErrorAuth(err){
 // crearEmpleadosHeadCount corre con permisos de administrador de Firebase,
 // que no tiene ese límite — puede crear cientos de cuentas sin bloquearse,
 // sin importar el volumen.
+// timeout largo (9 min) por la misma razón que migrarLoginsEmpleados más
+// abajo: con un lote de hasta 200 altas, el servidor puede tardar más que
+// el tiempo de espera por defecto del navegador — sin esto, el navegador
+// se da por vencido y muestra "error" aunque el servidor sí haya
+// terminado bien, lo que puede llevar a subir el mismo archivo otra vez
+// y duplicar cuentas.
 const _fnsCrearEmpleadosHC = (function(){
-  try { return firebase.functions().httpsCallable('crearEmpleadosHeadCount'); }
+  try { return firebase.functions().httpsCallable('crearEmpleadosHeadCount', { timeout: 540000 }); }
   catch(e){ return null; }
 })();
 async function crearEmpleadosHeadCountLote(registros, fecha){
@@ -968,6 +974,20 @@ let hcRegistros = [];
 let hcDuplicados = [];
 let hcDiff = null;
 
+// Normaliza un ID B360/ID Plata para COMPARAR (no para guardar ni mostrar):
+// el mismo identificador puede llegar distinto entre un día y otro del
+// Head Count (con o sin ceros a la izquierda, como texto o como número en
+// el Excel) — sin esto, la comparación diaria puede no reconocer a un
+// empleado que ya existe y darlo de alta otra vez, creando una segunda
+// cuenta duplicada para la misma persona. Esta fue la causa raíz de los
+// ~75 duplicados detectados el 19-20 de agosto de 2026.
+function normalizarHcId(v){
+  const s = String(v==null ? '' : v).trim();
+  if(!s) return '';
+  if(/^\d+$/.test(s)) return String(parseInt(s,10));
+  return s.toUpperCase();
+}
+
 function normalizarNombreHC(nombre){
   const limpio = nombre.replace(/\s+/g,' ').trim();
   return limpio.toLowerCase().replace(/(^|\s)([a-záéíóúñ])/g, function(m,sp,ch){ return sp+ch.toUpperCase(); });
@@ -1080,17 +1100,17 @@ async function calcularDiffHeadCount(){
   const actuales = {};
   snap.forEach(function(d){
     const e = d.data();
-    if(e.hc_id) actuales[e.hc_id] = { uid:d.id, nombre:e.nombre, puesto:e.puesto, comedor:e.comedor };
+    if(e.hc_id) actuales[normalizarHcId(e.hc_id)] = { uid:d.id, nombre:e.nombre, puesto:e.puesto, comedor:e.comedor, hc_id:e.hc_id };
   });
 
   const hcIdsNuevo = {};
-  hcRegistros.forEach(function(r){ hcIdsNuevo[r.hc_id] = r; });
+  hcRegistros.forEach(function(r){ hcIdsNuevo[normalizarHcId(r.hc_id)] = r; });
 
   const altas = [];
   const actualizados = [];
   const sinCambios = [];
   hcRegistros.forEach(function(r){
-    const actual = actuales[r.hc_id];
+    const actual = actuales[normalizarHcId(r.hc_id)];
     if(!actual){ altas.push(r); return; }
     if(actual.nombre !== r.nombre || actual.puesto !== r.puesto || actual.comedor !== r.comedor){
       actualizados.push({ uid:actual.uid, antes:actual, despues:r });
@@ -1100,8 +1120,8 @@ async function calcularDiffHeadCount(){
   });
 
   const bajas = [];
-  Object.keys(actuales).forEach(function(hcId){
-    if(!hcIdsNuevo[hcId]) bajas.push(Object.assign({hc_id:hcId}, actuales[hcId]));
+  Object.keys(actuales).forEach(function(hcIdNorm){
+    if(!hcIdsNuevo[hcIdNorm]) bajas.push(actuales[hcIdNorm]);
   });
 
   hcDiff = { altas: altas, bajas: bajas, actualizados: actualizados, sinCambios: sinCambios };
@@ -1587,7 +1607,7 @@ window.migrarLoginsAhora = async function(){
     msg.className = (conflictos.length || otrosErrores.length) ? 'msg err' : 'msg ok';
     let html = migrados.length + ' empleado(s) migrado(s) a login por ID B360. ' + sinCambios.length + ' ya estaban al corriente.';
     if (conflictos.length) {
-      html += '<br>' + conflictos.length + ' con ID B360 duplicado (dos registros distintos con el mismo nombre/ID) — no se pueden migrar hasta que decidas cuál de los dos registros eliminar o desactivar en el directorio. '
+      html += '<br>' + conflictos.length + ' con ID B360 duplicado (dos registros distintos con el mismo nombre/ID) — descarga el detalle para ver, según el último acceso de cada cuenta, cuál de las dos ya se usa y cuál conviene desactivar en el directorio. '
         + '<button type="button" class="btn btn-outline btn-sm" style="margin-left:.5rem" onclick="descargarConflictosLogin()">📥 Descargar detalle</button>';
     }
     if (otrosErrores.length) {
@@ -1605,22 +1625,47 @@ window.migrarLoginsAhora = async function(){
 
 // Excel con el detalle de los empleados cuyo ID B360 choca con otro registro
 // del directorio — para que el admin pueda ver los dos nombres/comedores uno
-// junto al otro y decidir cuál registro sobra (eliminarlo o desactivarlo
-// desde el directorio de Empleados).
+// junto al otro, cuándo fue el último acceso de cada cuenta, y una
+// recomendación de cuál registro sobra (eliminarlo o desactivarlo desde el
+// directorio de Empleados).
+function fmtFechaAcceso(iso){
+  if(!iso) return 'Nunca ha iniciado sesión';
+  try { return new Date(iso).toLocaleString('es-MX', { dateStyle:'medium', timeStyle:'short' }); }
+  catch(e){ return String(iso); }
+}
+function recomendacionConflictoLogin(c){
+  const miAcceso = c.ultimoAcceso ? new Date(c.ultimoAcceso).getTime() : null;
+  const otroAcceso = c.otroUltimoAcceso ? new Date(c.otroUltimoAcceso).getTime() : null;
+  if (miAcceso === null && otroAcceso === null) return 'Revisar a mano — ninguna de las dos cuentas ha iniciado sesión todavía';
+  if (miAcceso !== null && otroAcceso === null) return 'Esta cuenta (columna UID) parece la que se usa — considera desactivar la Duplicado';
+  if (miAcceso === null && otroAcceso !== null) return 'La cuenta Duplicado parece la que se usa — considera desactivar esta cuenta (columna UID)';
+  if (otroAcceso > miAcceso) return 'La cuenta Duplicado tiene acceso más reciente — considera desactivar esta cuenta (columna UID)';
+  if (miAcceso > otroAcceso) return 'Esta cuenta (columna UID) tiene acceso más reciente — considera desactivar la Duplicado';
+  return 'Revisar a mano — mismo momento de acceso en ambas';
+}
 window.descargarConflictosLogin = async function(){
   if (!_ultimosConflictosLogin.length) { alert('No hay conflictos pendientes por descargar.'); return; }
   const comedorLabels = { betel:'Betel', cuauhtemoc:'Cuauhtémoc', intelomas:'Intelomas' };
   const wb = new ExcelJS.Workbook();
   const ws = wb.addWorksheet('Conflictos de login');
-  ws.addRow(['Nombre', 'Comedor', 'ID B360', 'UID', 'Duplicado — Nombre', 'Duplicado — Comedor', 'Duplicado — ID B360', 'Duplicado — UID', 'Duplicado — Activo', 'Duplicado — Correo actual']).font = { bold: true };
+  ws.addRow([
+    'Nombre', 'Comedor', 'ID B360', 'UID', 'Último acceso (UID)', 'Cuenta creada (UID)',
+    'Duplicado — Nombre', 'Duplicado — Comedor', 'Duplicado — ID B360', 'Duplicado — UID',
+    'Duplicado — Activo', 'Duplicado — Correo actual', 'Duplicado — Último acceso', 'Duplicado — Cuenta creada',
+    'Recomendación'
+  ]).font = { bold: true };
   _ultimosConflictosLogin.forEach(function(c){
     ws.addRow([
       c.nombre || '—', comedorLabels[c.comedor] || c.comedor || '—', c.hc_id || '—', c.uid || '—',
+      fmtFechaAcceso(c.ultimoAcceso), fmtFechaAcceso(c.creado),
       c.otroNombre || '—', comedorLabels[c.otroComedor] || c.otroComedor || '—', c.otroHcId || '—', c.otroUid || '—',
-      c.otroActivo === false ? 'No' : (c.otroActivo === true ? 'Sí' : '—'), c.otroEmail || '—'
+      c.otroActivo === false ? 'No' : (c.otroActivo === true ? 'Sí' : '—'), c.otroEmail || '—',
+      fmtFechaAcceso(c.otroUltimoAcceso), fmtFechaAcceso(c.otroCreado),
+      recomendacionConflictoLogin(c)
     ]);
   });
-  ws.columns.forEach(function(col){ col.width = 22; });
+  ws.columns.forEach(function(col){ col.width = 24; });
+  ws.getColumn(15).width = 60;
   await descargarWorkbook(wb, 'Conflictos_login_ID_B360_' + hoy() + '.xlsx');
 };
 
