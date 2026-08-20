@@ -415,20 +415,10 @@ input[type=file]{display:none}
             <input type="file" id="hc-input" accept=".csv,.xlsx,.xls"/>
             <div id="hc-preview" style="display:none;margin-top:1.25rem"></div>
             <div class="msg" id="hc-msg"></div>
-            <div id="backfill-wrap" style="margin-top:1rem;padding-top:1rem;border-top:1px solid var(--borde2)">
-              <button class="btn btn-outline btn-sm" id="btn-backfill-altas" onclick="backfillAltasRetroactivas()">🔧 Registrar altas retroactivas pendientes</button>
-              <div style="font-size:.72rem;color:var(--g3);margin-top:.4rem">Registra en el historial las altas de empleados del Head Count que se crearon antes de arreglar los permisos y no quedaron en el reporte. Solo hace falta correrlo una vez.</div>
-              <div class="msg" id="backfill-msg"></div>
-            </div>
-            <div id="migrar-logins-wrap" style="margin-top:1rem;padding-top:1rem;border-top:1px solid var(--borde2)">
-              <button class="btn btn-outline btn-sm" id="btn-migrar-logins" onclick="migrarLoginsAhora()">🔑 Migrar logins de empleados existentes a ID B360</button>
-              <div style="font-size:.72rem;color:var(--g3);margin-top:.4rem">Los empleados que ya existían antes del cambio de login siguen entrando con su correo viejo — esto actualiza su cuenta para que puedan entrar con su ID B360, sin cambiar su contraseña. Seguro de correr varias veces.</div>
-              <div class="msg" id="migrar-logins-msg"></div>
-            </div>
-            <div id="limpiar-inactivos-wrap" style="margin-top:1rem;padding-top:1rem;border-top:1px solid var(--borde2)">
-              <button class="btn btn-danger btn-sm" id="btn-limpiar-inactivos" onclick="eliminarDuplicadosInactivos()">🗑 Eliminar duplicados por ID B360</button>
-              <div style="font-size:.72rem;color:var(--g3);margin-top:.4rem">Limpieza y corrección de una sola vez: por cada ID B360 duplicado, revisa cuál de las copias tiene el correo correcto (sin importar si ahora está Activo o Inactivo) — esa se deja (reactivándola si hacía falta) y las demás se borran para siempre. No toca a nadie que hayas desactivado tú a mano por otra razón, ni ID B360 que no estén duplicados.</div>
-              <div class="msg" id="limpiar-inactivos-msg"></div>
+            <div id="revisar-directorio-wrap" style="margin-top:1rem;padding-top:1rem;border-top:1px solid var(--borde2)">
+              <button class="btn btn-danger btn-sm" id="btn-revisar-directorio" onclick="revisarYCorregirDirectorio()">🔎 Revisar y corregir directorio</button>
+              <div style="font-size:.72rem;color:var(--g3);margin-top:.4rem">Revisa todo el directorio de una vez: corrige solo ID B360 duplicados donde está claro cuál copia tiene el correo correcto (borra las demás para siempre, reactiva la buena si hacía falta) — y avisa de cualquier otra cosa rara que encuentre (gafetes repetidos, correos repetidos, empleados del Head Count sin ID B360, duplicados donde no está claro cuál es el bueno) sin tocarla, para que la revises a mano. No toca a nadie que hayas desactivado tú por otra razón.</div>
+              <div class="msg" id="revisar-directorio-msg"></div>
             </div>
           </div>
         </div>
@@ -651,7 +641,6 @@ input[type=file]{display:none}
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-functions-compat.js"></script>
-<script src="fb-compat.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
@@ -718,27 +707,6 @@ async function crearEmpleadosHeadCountLote(registros, fecha){
     throw new Error('La función de servidor no está disponible. Verifica que crearEmpleadosHeadCount esté desplegada en Firebase.');
   }
   const resp = await _fnsCrearEmpleadosHC({ registros: registros, fecha: fecha });
-  return (resp && resp.data && resp.data.resultados) || [];
-}
-
-// migrarLoginsEmpleados también corre con permisos de administrador de
-// Firebase (no en este navegador) porque cambiar el correo de la cuenta de
-// OTRO usuario es algo que el SDK de cliente no permite hacer — solo cada
-// quien puede cambiar su propio correo. Por eso esto también necesita la
-// función de servidor, igual que crearEmpleadosHeadCount.
-// timeout largo (9 min) porque con cientos de empleados esta función puede
-// tardar varios minutos del lado del servidor — sin esto, el navegador se
-// da por vencido antes de que el servidor termine y muestra "internal"
-// aunque la migración sí haya funcionado.
-const _fnsMigrarLogins = (function(){
-  try { return firebase.functions().httpsCallable('migrarLoginsEmpleados', { timeout: 540000 }); }
-  catch(e){ return null; }
-})();
-async function migrarLoginsEmpleadosLote(){
-  if(!_fnsMigrarLogins){
-    throw new Error('La función de servidor no está disponible. Verifica que migrarLoginsEmpleados esté desplegada en Firebase.');
-  }
-  const resp = await _fnsMigrarLogins({});
   return (resp && resp.data && resp.data.resultados) || [];
 }
 
@@ -1532,254 +1500,51 @@ window.descargarGafetesDeHoy = async function(){
   }
 };
 
-// ── BACKFILL: registrar altas retroactivas que no quedaron en el historial ──
-window.backfillAltasRetroactivas = async function(){
-  const btn = document.getElementById('btn-backfill-altas');
-  const msg = document.getElementById('backfill-msg');
+// Revisión y corrección de una sola pasada para todo el directorio:
+//
+// 1) Duplicados por ID B360 (dentro de origen:'head_count'): agrupa por ID
+//    normalizado, y para cada grupo con más de un registro identifica cuál
+//    tiene el correo CORRECTO (el que corresponde a su ID B360, calculado
+//    con emailSinteticoHC — no se fía de la bandera "Activo"). Si hay
+//    exactamente uno con el correo correcto, ese se deja/reactiva y todos
+//    los demás del grupo se eliminan para siempre (esto también repara
+//    casos donde por error quedó desactivado el bueno y activo el malo).
+//    Si ninguno (o más de uno) tiene el correo correcto, el grupo se deja
+//    sin tocar como "ambiguo".
+//
+// 2) Otras rarezas — se REPORTAN pero nunca se tocan solas, porque no hay
+//    forma segura de adivinar cuál copia es la correcta:
+//    - Código de gafete repetido entre distintos empleados.
+//    - Correo repetido entre distintas cuentas (fuera de los duplicados ya
+//      resueltos en el paso 1).
+//    - Empleados de origen:'head_count' sin ID B360 registrado.
+window.revisarYCorregirDirectorio = async function(){
+  const btn = document.getElementById('btn-revisar-directorio');
+  const msg = document.getElementById('revisar-directorio-msg');
   if (btn) btn.disabled = true;
   msg.style.display = 'block';
   msg.className = 'msg';
   msg.textContent = 'Revisando el directorio…';
-  try {
-    const [empSnap, movSnap] = await Promise.all([
-      db.collection('empleados').where('origen', '==', 'head_count').get(),
-      db.collection('movimientos_headcount').where('tipo', '==', 'alta').get()
-    ]);
-    const yaRegistrados = new Set();
-    movSnap.forEach(function(d){ const m = d.data(); if (m.hc_id) yaRegistrados.add(m.hc_id); });
-
-    const faltantes = [];
-    empSnap.forEach(function(d){
-      const e = d.data();
-      if (e.hc_id && !yaRegistrados.has(e.hc_id)) faltantes.push(e);
-    });
-
-    if (!faltantes.length) {
-      msg.className = 'msg ok';
-      msg.textContent = 'No hay altas pendientes por registrar — el reporte ya está al corriente.';
-      if (btn) btn.style.display = 'none';
-      return;
-    }
-
-    const fechaHoy = hoy();
-    for (let i = 0; i < faltantes.length; i += 450) {
-      const lote = faltantes.slice(i, i + 450);
-      const batch = db.batch();
-      lote.forEach(function(e){
-        const ref = db.collection('movimientos_headcount').doc();
-        batch.set(ref, {
-          tipo: 'alta', nombre: e.nombre, hc_id: e.hc_id, puesto: e.puesto || '', comedor: e.comedor || '',
-          fecha: fechaHoy, motivo: 'backfill_retroactivo',
-          creado_en: serverTimestamp()
-        });
-      });
-      await batch.commit();
-    }
-
-    msg.className = 'msg ok';
-    msg.textContent = faltantes.length + ' alta(s) retroactiva(s) registrada(s) correctamente. El reporte semanal ya las va a incluir a partir de hoy.';
-    if (btn) btn.style.display = 'none';
-  } catch (err) {
-    console.error('Error en backfill de altas:', err);
-    msg.className = 'msg err';
-    msg.textContent = 'Error al registrar altas retroactivas: ' + err.message;
-    if (btn) btn.disabled = false;
-  }
-};
-
-// Migra el login de TODOS los empleados que ya existían antes del cambio a
-// ID B360 — cambia el correo de su cuenta de acceso al que corresponde a su
-// ID B360 actual, sin tocar su contraseña. Es seguro correrlo varias veces:
-// a quien ya esté al corriente simplemente lo deja igual.
-let _ultimosConflictosLogin = [];
-
-window.migrarLoginsAhora = async function(){
-  if (!confirm('Esto va a cambiar el usuario de acceso de TODOS los empleados que ya existían (los que vinieron del Head Count) para que puedan entrar con su ID B360. Su contraseña no cambia. ¿Continuar?')) return;
-  const btn = document.getElementById('btn-migrar-logins');
-  const msg = document.getElementById('migrar-logins-msg');
-  if (btn) btn.disabled = true;
-  msg.style.display = 'block';
-  msg.className = 'msg';
-  msg.textContent = 'Migrando logins…';
-  try {
-    const resultados = await migrarLoginsEmpleadosLote();
-    const migrados = resultados.filter(function(r){ return r.ok && !r.sinCambios; });
-    const sinCambios = resultados.filter(function(r){ return r.ok && r.sinCambios; });
-    let conflictos = resultados.filter(function(r){ return !r.ok && r.conflicto; });
-    const otrosErrores = resultados.filter(function(r){ return !r.ok && !r.conflicto; });
-
-    // Si un conflicto ya se resolvió antes (eliminando o desactivando el
-    // registro "uid" — el que nunca puede quedarse con el correo limpio
-    // mientras exista el "otro" — desde el directorio o con el botón de
-    // abajo), no tiene caso seguir mostrándolo como pendiente cada vez
-    // que se corre la migración. OJO: si en cambio el registro inactivo
-    // es el "otro" (el que sí tiene el correo correcto), esto NO se
-    // filtra a propósito — es una señal de que ese par quedó mal resuelto
-    // y debe seguir apareciendo hasta corregirse con "Eliminar duplicados
-    // ya desactivados", que ahora repara ese caso también.
-    if (conflictos.length) {
-      const docsUid = await Promise.all(conflictos.map(function(c){ return db.collection('empleados').doc(c.uid).get(); }));
-      conflictos = conflictos.filter(function(c, i){ return docsUid[i].exists && docsUid[i].data().activo !== false; });
-    }
-    _ultimosConflictosLogin = conflictos;
-
-    msg.className = (conflictos.length || otrosErrores.length) ? 'msg err' : 'msg ok';
-    let html = migrados.length + ' empleado(s) migrado(s) a login por ID B360. ' + sinCambios.length + ' ya estaban al corriente.';
-    if (conflictos.length) {
-      html += '<br>' + conflictos.length + ' con ID B360 duplicado (dos registros distintos con el mismo nombre/ID) — descarga el detalle para ver, según el último acceso de cada cuenta, cuál de las dos ya se usa y cuál conviene desactivar en el directorio. '
-        + '<button type="button" class="btn btn-outline btn-sm" style="margin-left:.5rem" onclick="descargarConflictosLogin()">📥 Descargar detalle</button>'
-        + '<button type="button" class="btn btn-danger btn-sm" style="margin-left:.5rem" onclick="resolverConflictosLogin()">🗑 Eliminar duplicados automáticamente</button>';
-    }
-    if (otrosErrores.length) {
-      html += '<br>' + otrosErrores.length + ' con otro error: ' + otrosErrores.map(function(e){ return (e.nombre||e.uid)+' ('+e.error+')'; }).join(', ');
-    }
-    msg.innerHTML = html;
-    if (btn) btn.disabled = false;
-  } catch (err) {
-    console.error('Error al migrar logins:', err);
-    msg.className = 'msg err';
-    msg.textContent = 'Error al migrar logins: ' + err.message;
-    if (btn) btn.disabled = false;
-  }
-};
-
-// Excel con el detalle de los empleados cuyo ID B360 choca con otro registro
-// del directorio — para que el admin pueda ver los dos nombres/comedores uno
-// junto al otro, cuándo fue el último acceso de cada cuenta, y una
-// recomendación de cuál registro sobra (eliminarlo o desactivarlo desde el
-// directorio de Empleados).
-function fmtFechaAcceso(iso){
-  if(!iso) return 'Nunca ha iniciado sesión';
-  try { return new Date(iso).toLocaleString('es-MX', { dateStyle:'medium', timeStyle:'short' }); }
-  catch(e){ return String(iso); }
-}
-function recomendacionConflictoLogin(c){
-  const miAcceso = c.ultimoAcceso ? new Date(c.ultimoAcceso).getTime() : null;
-  const otroAcceso = c.otroUltimoAcceso ? new Date(c.otroUltimoAcceso).getTime() : null;
-  if (miAcceso === null && otroAcceso === null) return 'Revisar a mano — ninguna de las dos cuentas ha iniciado sesión todavía';
-  if (miAcceso !== null && otroAcceso === null) return 'Esta cuenta (columna UID) parece la que se usa — considera desactivar la Duplicado';
-  if (miAcceso === null && otroAcceso !== null) return 'La cuenta Duplicado parece la que se usa — considera desactivar esta cuenta (columna UID)';
-  if (otroAcceso > miAcceso) return 'La cuenta Duplicado tiene acceso más reciente — considera desactivar esta cuenta (columna UID)';
-  if (miAcceso > otroAcceso) return 'Esta cuenta (columna UID) tiene acceso más reciente — considera desactivar la Duplicado';
-  return 'Revisar a mano — mismo momento de acceso en ambas';
-}
-window.descargarConflictosLogin = async function(){
-  if (!_ultimosConflictosLogin.length) { alert('No hay conflictos pendientes por descargar.'); return; }
-  const comedorLabels = { betel:'Betel', cuauhtemoc:'Cuauhtémoc', intelomas:'Intelomas' };
-  const wb = new ExcelJS.Workbook();
-  const ws = wb.addWorksheet('Conflictos de login');
-  ws.addRow([
-    'Nombre', 'Comedor', 'ID B360', 'UID', 'Último acceso (UID)', 'Cuenta creada (UID)',
-    'Duplicado — Nombre', 'Duplicado — Comedor', 'Duplicado — ID B360', 'Duplicado — UID',
-    'Duplicado — Activo', 'Duplicado — Correo actual', 'Duplicado — Último acceso', 'Duplicado — Cuenta creada',
-    'Recomendación'
-  ]).font = { bold: true };
-  _ultimosConflictosLogin.forEach(function(c){
-    ws.addRow([
-      c.nombre || '—', comedorLabels[c.comedor] || c.comedor || '—', c.hc_id || '—', c.uid || '—',
-      fmtFechaAcceso(c.ultimoAcceso), fmtFechaAcceso(c.creado),
-      c.otroNombre || '—', comedorLabels[c.otroComedor] || c.otroComedor || '—', c.otroHcId || '—', c.otroUid || '—',
-      c.otroActivo === false ? 'No' : (c.otroActivo === true ? 'Sí' : '—'), c.otroEmail || '—',
-      fmtFechaAcceso(c.otroUltimoAcceso), fmtFechaAcceso(c.otroCreado),
-      recomendacionConflictoLogin(c)
-    ]);
-  });
-  ws.columns.forEach(function(col){ col.width = 24; });
-  ws.getColumn(15).width = 60;
-  await descargarWorkbook(wb, 'Conflictos_login_ID_B360_' + hoy() + '.xlsx');
-};
-
-// Resuelve automáticamente los conflictos de la última corrida de "Migrar
-// logins": para cada par, ELIMINA por completo (de la base de datos, esto
-// NO se puede deshacer) el registro "uid" — el que falló al migrar y por
-// lo tanto NUNCA puede quedarse con el correo por ID B360 mientras exista
-// el "otro" registro, que es el que YA tiene ese correo correcto (el que
-// aparece en "Duplicado — Correo actual" del Excel). Por eso siempre se
-// elimina "uid" y siempre se deja "otroUid" — no importa cuál se haya
-// creado primero. Solo se resuelve así un par cuando NINGUNA de las dos
-// cuentas ha iniciado sesión nunca — si ya hay indicio de uso, ese par se
-// deja sin tocar para que se revise a mano.
-window.resolverConflictosLogin = async function(){
-  if (!_ultimosConflictosLogin.length) { alert('No hay conflictos pendientes por resolver — corre "Migrar logins" primero.'); return; }
-
-  const candidatos = [];
-  const paraRevisarAMano = [];
-  _ultimosConflictosLogin.forEach(function(c){
-    const yaTuvoUso = c.ultimoAcceso || c.otroUltimoAcceso;
-    if (yaTuvoUso || !c.otroUid) { paraRevisarAMano.push(c); return; }
-    candidatos.push({ uid: c.uid, nombre: c.nombre });
-  });
-
-  if (!candidatos.length) {
-    alert('Ninguno de los conflictos pendientes se puede resolver automáticamente — todos necesitan revisión manual (alguna de las dos cuentas ya tuvo actividad). Descarga el detalle y revísalos desde el directorio de Empleados.');
-    return;
-  }
-
-  const advertenciaManual = paraRevisarAMano.length
-    ? ('\n\n' + paraRevisarAMano.length + ' caso(s) más se quedan sin tocar porque necesitan revisión manual (hay indicio de uso).')
-    : '';
-  if (!confirm('Esto va a ELIMINAR PARA SIEMPRE (no se puede deshacer) ' + candidatos.length + ' registro(s) duplicado(s) que nunca lograron migrar a su ID B360, dejando activa la copia que ya tiene el correo correcto. Ninguna de estas cuentas ha iniciado sesión nunca. Ya descargaste el Excel con el detalle, así que si necesitas consultar qué se borró, ahí queda el registro.' + advertenciaManual + '\n\n¿Continuar?')) return;
-
-  const msg = document.getElementById('migrar-logins-msg');
-  msg.style.display = 'block';
-  msg.className = 'msg';
-  msg.textContent = 'Eliminando duplicados…';
-
-  let ok = 0;
-  const fallos = [];
-  for (const cand of candidatos) {
-    try {
-      await db.collection('empleados').doc(cand.uid).delete();
-      ok++;
-    } catch (e) {
-      fallos.push((cand.nombre || cand.uid) + ': ' + e.message);
-    }
-  }
-
-  _ultimosConflictosLogin = paraRevisarAMano;
-
-  let html = ok + ' cuenta(s) duplicada(s) eliminada(s) automáticamente.';
-  if (paraRevisarAMano.length) {
-    html += '<br>' + paraRevisarAMano.length + ' quedan pendientes de revisión manual — '
-      + '<button type="button" class="btn btn-outline btn-sm" style="margin-left:.5rem" onclick="descargarConflictosLogin()">📥 Descargar detalle</button>';
-  }
-  if (fallos.length) {
-    html += '<br>' + fallos.length + ' con error: ' + fallos.join(', ');
-  }
-  msg.className = fallos.length ? 'msg err' : 'msg ok';
-  msg.innerHTML = html;
-};
-
-// Limpieza y REPARACIÓN de una sola vez para los duplicados de ID B360.
-// Agrupa por ID B360 normalizado dentro de origen:'head_count', y para
-// cada grupo con más de un registro identifica cuál de ellos tiene el
-// correo CORRECTO (el que corresponde a su ID B360 — el mismo que usa
-// "Migrar logins" para decidir quién ya está al corriente), sin fiarse
-// solo de la bandera "Activo" actual:
-//   - Si hay EXACTAMENTE uno con el correo correcto: ese se deja/reactiva
-//     como el bueno, y TODOS los demás del grupo se eliminan para
-//     siempre — sin importar si ahora mismo estaban activos o inactivos.
-//     Esto también repara los casos donde por error había quedado
-//     desactivado el registro bueno y activo el que tiene el correo
-//     equivocado (nunca puede entrar por ID B360 mientras exista el otro).
-//   - Si ninguno (o más de uno) tiene el correo correcto, ese grupo se
-//     deja sin tocar para revisión manual.
-window.eliminarDuplicadosInactivos = async function(){
-  const btn = document.getElementById('btn-limpiar-inactivos');
-  const msg = document.getElementById('limpiar-inactivos-msg');
-  if (btn) btn.disabled = true;
-  msg.style.display = 'block';
-  msg.className = 'msg';
-  msg.textContent = 'Buscando y verificando duplicados…';
 
   try {
-    const snap = await db.collection('empleados').where('origen', '==', 'head_count').get();
+    const snap = await db.collection('empleados').get();
     const porHcId = {};
+    const porGafete = {};
+    const porEmail = {};
+    const sinHcId = [];
     snap.forEach(function(d){
       const e = d.data();
-      if (!e.hc_id) return;
-      const norm = normalizarHcId(e.hc_id);
-      (porHcId[norm] = porHcId[norm] || []).push({ uid: d.id, nombre: e.nombre, email: e.email, activo: e.activo !== false, hc_id: e.hc_id });
+      const item = { uid: d.id, nombre: e.nombre, email: e.email, activo: e.activo !== false, hc_id: e.hc_id, codigo_gafete: e.codigo_gafete };
+      if (e.origen === 'head_count') {
+        if (!e.hc_id) {
+          sinHcId.push(item);
+        } else {
+          const norm = normalizarHcId(e.hc_id);
+          (porHcId[norm] = porHcId[norm] || []).push(item);
+        }
+      }
+      if (e.codigo_gafete) (porGafete[e.codigo_gafete] = porGafete[e.codigo_gafete] || []).push(item);
+      if (e.email) (porEmail[e.email] = porEmail[e.email] || []).push(item);
     });
 
     const aEliminar = [];
@@ -1790,31 +1555,41 @@ window.eliminarDuplicadosInactivos = async function(){
       if (grupo.length < 2) return;
       const correoCorrecto = emailSinteticoHC(grupo[0].hc_id);
       const buenos = grupo.filter(function(g){ return g.email === correoCorrecto; });
-      if (buenos.length !== 1) { ambiguos.push(norm); return; }
+      if (buenos.length !== 1) { ambiguos.push({ hc_id: norm, grupo: grupo }); return; }
       const bueno = buenos[0];
       if (!bueno.activo) aReactivar.push(bueno);
       grupo.forEach(function(g){ if (g.uid !== bueno.uid) aEliminar.push(g); });
     });
 
-    if (!aEliminar.length && !aReactivar.length) {
-      msg.className = 'msg ok';
-      msg.textContent = ambiguos.length
-        ? ('No hay duplicados claros por resolver automáticamente. Hay ' + ambiguos.length + ' grupo(s) donde ninguno (o más de uno) tiene el correo correcto — revísalos a mano en el directorio.')
-        : 'No hay duplicados pendientes por eliminar.';
-      if (btn) btn.disabled = false;
-      return;
+    // Gafetes/correos repetidos, excluyendo lo que ya se va a corregir en el
+    // paso 1 (si no, saldrían reportados como "raros" los mismos duplicados
+    // que esta misma pasada ya está arreglando).
+    const uidsAEliminar = {};
+    aEliminar.forEach(function(g){ uidsAEliminar[g.uid] = true; });
+    function repetidosExcluyendo(mapa){
+      const out = [];
+      Object.keys(mapa).forEach(function(k){
+        const restantes = mapa[k].filter(function(x){ return !uidsAEliminar[x.uid]; });
+        if (restantes.length > 1) out.push({ valor: k, items: restantes });
+      });
+      return out;
     }
+    const gafetesRepetidos = repetidosExcluyendo(porGafete);
+    const emailsRepetidos = repetidosExcluyendo(porEmail);
 
-    const advertenciaAmbiguos = ambiguos.length
-      ? ('\n\n' + ambiguos.length + ' grupo(s) más se quedan sin tocar porque no está claro cuál tiene el correo correcto.')
-      : '';
-    const advertenciaReactivar = aReactivar.length
-      ? ('\n\n' + aReactivar.length + ' de esos quedaron marcados "Inactivo" por error en una limpieza anterior y se van a reactivar, porque son los que sí tienen el correo correcto.')
-      : '';
-    if (!confirm('Esto va a ELIMINAR PARA SIEMPRE (no se puede deshacer) ' + aEliminar.length + ' registro(s) duplicado(s) que NO tienen el correo correcto por ID B360.' + advertenciaReactivar + advertenciaAmbiguos + '\n\n¿Continuar?')) {
-      msg.style.display = 'none';
-      if (btn) btn.disabled = false;
-      return;
+    const hayAutoFix = aEliminar.length > 0 || aReactivar.length > 0;
+    if (hayAutoFix) {
+      const advertenciaAmbiguos = ambiguos.length
+        ? ('\n\n' + ambiguos.length + ' grupo(s) más se quedan sin tocar porque no está claro cuál tiene el correo correcto.')
+        : '';
+      const advertenciaReactivar = aReactivar.length
+        ? ('\n\n' + aReactivar.length + ' de esos quedaron marcados "Inactivo" por error en una limpieza anterior y se van a reactivar, porque son los que sí tienen el correo correcto.')
+        : '';
+      if (!confirm('Esto va a ELIMINAR PARA SIEMPRE (no se puede deshacer) ' + aEliminar.length + ' registro(s) duplicado(s) que NO tienen el correo correcto por ID B360.' + advertenciaReactivar + advertenciaAmbiguos + '\n\n¿Continuar?')) {
+        msg.style.display = 'none';
+        if (btn) btn.disabled = false;
+        return;
+      }
     }
 
     msg.textContent = 'Corrigiendo…';
@@ -1838,20 +1613,39 @@ window.eliminarDuplicadosInactivos = async function(){
       }
     }
 
-    let html = ok + ' empleado(s) duplicado(s) eliminado(s) para siempre.';
+    let html = hayAutoFix
+      ? (ok + ' empleado(s) duplicado(s) eliminado(s) para siempre.')
+      : 'No se encontraron duplicados por ID B360 que se puedan corregir automáticamente.';
     if (reactivados) {
       html += '<br>' + reactivados + ' cuenta(s) buena(s) que habían quedado mal desactivadas se reactivaron.';
     }
+
+    const rarezas = [];
     if (ambiguos.length) {
-      html += '<br>' + ambiguos.length + ' grupo(s) se dejaron sin tocar (no está claro cuál tiene el correo correcto) — revísalos a mano en el directorio.';
+      rarezas.push(ambiguos.length + ' grupo(s) de ID B360 duplicado donde no está claro cuál copia es la correcta: ' + ambiguos.map(function(a){ return a.grupo.map(function(g){ return g.nombre; }).join(' / '); }).join('; '));
+    }
+    if (sinHcId.length) {
+      rarezas.push(sinHcId.length + ' empleado(s) del Head Count sin ID B360 registrado: ' + sinHcId.slice(0,10).map(function(x){ return x.nombre; }).join(', ') + (sinHcId.length>10 ? '…' : ''));
+    }
+    if (gafetesRepetidos.length) {
+      rarezas.push(gafetesRepetidos.length + ' código(s) de gafete repetido(s) entre distintos empleados: ' + gafetesRepetidos.map(function(r){ return r.valor + ' (' + r.items.map(function(x){ return x.nombre; }).join(' / ') + ')'; }).join('; '));
+    }
+    if (emailsRepetidos.length) {
+      rarezas.push(emailsRepetidos.length + ' correo(s) repetido(s) entre distintas cuentas: ' + emailsRepetidos.map(function(r){ return r.valor + ' (' + r.items.map(function(x){ return x.nombre; }).join(' / ') + ')'; }).join('; '));
+    }
+
+    if (rarezas.length) {
+      html += '<br><br><b>Cosas raras detectadas (no se tocaron, revísalas a mano):</b><br>' + rarezas.map(function(r){ return '• ' + escHtml(r); }).join('<br>');
+    } else if (!hayAutoFix) {
+      html += ' No se detectó nada más raro en el directorio.';
     }
     if (fallos.length) {
       html += '<br>' + fallos.length + ' con error: ' + fallos.join(', ');
     }
-    msg.className = fallos.length ? 'msg err' : 'msg ok';
+    msg.className = (fallos.length || rarezas.length) ? 'msg err' : 'msg ok';
     msg.innerHTML = html;
   } catch (err) {
-    console.error('Error al eliminar duplicados inactivos:', err);
+    console.error('Error al revisar el directorio:', err);
     msg.className = 'msg err';
     msg.textContent = 'Error: ' + err.message;
   }
