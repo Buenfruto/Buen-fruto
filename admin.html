@@ -15,7 +15,7 @@
 // fuerza una recarga limpia. sessionStorage evita que se quede en bucle si
 // version.txt no está disponible por algún motivo.
 (function(){
-  var V='20260820-12';
+  var V='20260820-14';
   try{
     fetch('version.txt?_='+Date.now(),{cache:'no-store'}).then(function(r){return r.ok?r.text():null;}).then(function(t){
       if(!t) return;
@@ -1356,9 +1356,19 @@ let correccionAmbiguosDirectorio = [];
 
 // Normaliza un nombre SOLO para comparar (no para guardar ni mostrar): sin
 // acentos, sin distinguir mayúsculas/minúsculas, sin espacios repetidos ni
-// al borde — el Excel nuevo trae nombres con espacios sueltos y en mayúsculas.
+// al borde, sin puntuación — el Excel nuevo trae nombres con espacios
+// sueltos y en mayúsculas.
 function normalizarNombreComparar(v){
-  return quitarAcentos(String(v==null?'':v)).trim().toLowerCase().replace(/\s+/g,' ');
+  return quitarAcentos(String(v==null?'':v)).trim().toLowerCase().replace(/[.,]/g,' ').replace(/\s+/g,' ').trim();
+}
+// Mismo nombre, pero con las palabras en orden alfabético — para reconocer
+// a la misma persona aunque un lado la tenga guardada "Apellido Apellido
+// Nombre" y el otro "Nombre Apellido Apellido" (muy común: cada Excel de
+// Head Count que ha llegado a lo largo del tiempo ha traído el nombre en
+// un orden distinto). Nunca se usa para nombres distintos por casualidad
+// porque exige las MISMAS palabras exactas, solo que revueltas.
+function normalizarNombreOrdenado(v){
+  return normalizarNombreComparar(v).split(' ').filter(Boolean).sort().join(' ');
 }
 
 function parseCorreccionIdFilas(filas){
@@ -1379,6 +1389,7 @@ function parseCorreccionIdFilas(filas){
       id_nuevo: id,
       nombre_excel: nombre,
       nombre_comparar: normalizarNombreComparar(nombre),
+      nombre_ordenado: normalizarNombreOrdenado(nombre),
       comedor_nuevo: normalizarCentroHC(val(fila,iCentro))
     });
   }
@@ -1436,13 +1447,20 @@ async function calcularPreviewCorreccion(registros){
     else unicos.push(grupo[0]);
   });
 
-  // Directorio actual — solo empleados (nunca admin ni chef).
+  // Directorio actual — solo empleados (nunca admin ni chef). Se indexa de
+  // dos formas: por nombre tal cual, y por nombre con las palabras en
+  // orden alfabético (para reconocer a la misma persona aunque esté
+  // guardada en otro orden de nombre/apellidos que el Excel nuevo).
   const snap = await db.collection('empleados').where('rol','==','empleado').get();
   const porNombreDir = {};
+  const porNombreDirOrdenado = {};
   snap.forEach(function(d){
     const e = d.data();
+    const item = { uid:d.id, nombre:e.nombre, hc_id:e.hc_id, comedor:e.comedor };
     const k = normalizarNombreComparar(e.nombre);
-    (porNombreDir[k] = porNombreDir[k]||[]).push({ uid:d.id, nombre:e.nombre, hc_id:e.hc_id, comedor:e.comedor });
+    (porNombreDir[k] = porNombreDir[k]||[]).push(item);
+    const ko = normalizarNombreOrdenado(e.nombre);
+    (porNombreDirOrdenado[ko] = porNombreDirOrdenado[ko]||[]).push(item);
   });
 
   correccionCambios = [];
@@ -1451,7 +1469,14 @@ async function calcularPreviewCorreccion(registros){
   correccionAmbiguosDirectorio = [];
 
   unicos.forEach(function(r){
-    const candidatos = porNombreDir[r.nombre_comparar];
+    let candidatos = porNombreDir[r.nombre_comparar];
+    let viaOrden = false;
+    if(!candidatos || !candidatos.length){
+      // No hubo coincidencia exacta — intenta de nuevo ignorando el orden
+      // de las palabras (mismo nombre, distinto orden de apellidos/nombre).
+      candidatos = porNombreDirOrdenado[r.nombre_ordenado];
+      viaOrden = true;
+    }
     if(!candidatos || !candidatos.length){
       correccionNoEncontrados.push(r);
       return;
@@ -1470,7 +1495,8 @@ async function calcularPreviewCorreccion(registros){
     correccionCambios.push({
       uid: emp.uid, nombre: emp.nombre,
       idViejo: idViejo, idNuevo: r.id_nuevo,
-      centroViejo: centroViejo, centroNuevo: r.comedor_nuevo
+      centroViejo: centroViejo, centroNuevo: r.comedor_nuevo,
+      viaOrden: viaOrden
     });
   });
 
@@ -1493,7 +1519,9 @@ function renderPreviewCorreccion(){
       + correccionCambios.slice(0,80).map(function(c){
           const cambioCentro = c.centroViejo !== c.centroNuevo;
           return '<div style="font-size:.8rem;padding:.4rem .6rem;border-bottom:1px solid var(--borde2)">'
-            + '<strong>' + escHtml(c.nombre) + '</strong><br>'
+            + '<strong>' + escHtml(c.nombre) + '</strong>'
+            + (c.viaOrden ? ' <span style="font-size:.68rem;color:var(--naranja);font-weight:700">· nombre en otro orden, revisa</span>' : '')
+            + '<br>'
             + 'ID: ' + escHtml(String(c.idViejo)) + ' → <strong style="color:var(--v)">' + escHtml(String(c.idNuevo)) + '</strong>'
             + (cambioCentro ? ' · Centro: ' + escHtml(comedorLabels[c.centroViejo]||c.centroViejo) + ' → <strong style="color:var(--v)">' + escHtml(comedorLabels[c.centroNuevo]||c.centroNuevo) + '</strong>' : '')
             + '</div>';
@@ -1659,6 +1687,15 @@ function renderPreviewHeadCount(){
     detalle('Bajas — ya no aparecen en el Head Count', bajas, function(r){ return r.nombre+' — '+r.puesto+' · '+r.comedor; }) +
     detalle('Actualizados — cambió nombre o comedor', actualizados, function(r){ return r.despues.nombre+' — '+r.antes.comedor+' → '+r.despues.comedor; }) +
     (hcDuplicados.length ? detalle('Duplicados en el archivo — revisa a mano, no se procesan solos', hcDuplicados, function(g){ return g.map(function(x){return x.nombre;}).join(' / ')+' (mismo identificador: '+g[0].hc_id+')'; }) : '') +
+    '<div style="margin-top:1rem;padding-top:1rem;border-top:1px solid var(--borde2)">' +
+      '<div style="font-size:.72rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--g2);margin-bottom:.6rem">Qué aplicar</div>' +
+      '<div style="display:flex;flex-direction:column;gap:.5rem">' +
+        '<label style="display:flex;align-items:center;gap:.5rem;cursor:pointer"><input type="checkbox" id="hc-chk-altas" style="width:auto"'+(altas.length?' checked':' disabled')+'/> Dar de alta a los '+altas.length+' nuevo(s)</label>' +
+        '<label style="display:flex;align-items:center;gap:.5rem;cursor:pointer"><input type="checkbox" id="hc-chk-bajas" style="width:auto"'+(bajas.length?' checked':' disabled')+'/> Dar de baja (borrar) a los '+bajas.length+' que ya no aparecen</label>' +
+        '<label style="display:flex;align-items:center;gap:.5rem;cursor:pointer"><input type="checkbox" id="hc-chk-actualizados" style="width:auto"'+(actualizados.length?' checked':' disabled')+'/> Actualizar nombre/comedor de los '+actualizados.length+' que cambiaron</label>' +
+      '</div>' +
+      '<div style="font-size:.72rem;color:var(--g3);margin-top:.5rem">Destíldalas para aplicar solo lo que quieras esta vez — por ejemplo, si las bajas te parecen sospechosas (como cuando los IDs todavía no están corregidos), destilda esa y aplica nomás las altas y los actualizados.</div>' +
+    '</div>' +
     '<div style="display:flex;gap:.75rem;margin-top:1.25rem;flex-wrap:wrap;align-items:center">' +
       '<button class="btn btn-v" id="btn-aplicar-hc">Aplicar cambios</button>' +
       '<button class="btn btn-outline" id="btn-cancelar-hc">Cancelar</button>' +
@@ -1680,7 +1717,16 @@ window.cancelarHeadCount = function(){
 function cancelarHeadCount(){ window.cancelarHeadCount(); }
 
 async function aplicarCambiosHeadCount(){
-  const altas = hcDiff.altas, bajas = hcDiff.bajas, actualizados = hcDiff.actualizados;
+  // Cada grupo (altas/bajas/actualizados) solo se procesa si su casilla
+  // sigue marcada — así el admin puede destildar, por ejemplo, las bajas
+  // si le parecen sospechosas (típico cuando los IDs aún no están
+  // corregidos) y aplicar solo el resto, en vez de todo o nada.
+  const chkAltas = document.getElementById('hc-chk-altas');
+  const chkBajas = document.getElementById('hc-chk-bajas');
+  const chkActualizados = document.getElementById('hc-chk-actualizados');
+  const altas = (chkAltas && !chkAltas.checked) ? [] : hcDiff.altas;
+  const bajas = (chkBajas && !chkBajas.checked) ? [] : hcDiff.bajas;
+  const actualizados = (chkActualizados && !chkActualizados.checked) ? [] : hcDiff.actualizados;
   const btn = document.getElementById('btn-aplicar-hc');
   const btnCancelar = document.getElementById('btn-cancelar-hc');
   const wrap = document.getElementById('hc-progreso-wrap');
@@ -1768,6 +1814,11 @@ async function aplicarCambiosHeadCount(){
   msg.style.display='block';
 
   let resumen = nuevosCreados.length+' de '+altas.length+' alta(s) aplicada(s), '+bajas.length+' baja(s), '+actualizados.length+' actualizado(s).';
+  const omitidas = [];
+  if(hcDiff.altas.length && !altas.length) omitidas.push(hcDiff.altas.length+' alta(s)');
+  if(hcDiff.bajas.length && !bajas.length) omitidas.push(hcDiff.bajas.length+' baja(s)');
+  if(hcDiff.actualizados.length && !actualizados.length) omitidas.push(hcDiff.actualizados.length+' actualización(es)');
+  if(omitidas.length) resumen += ' No se tocaron (casilla destildada): '+omitidas.join(', ')+'.';
   if(errores.length) resumen += ' '+errores.length+' error(es): '+errores.slice(0,5).join(' | ')+(errores.length>5?' …':'');
   msg.className = 'msg ' + (errores.length ? 'err' : 'ok');
   msg.textContent = resumen;
