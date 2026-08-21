@@ -15,7 +15,7 @@
 // fuerza una recarga limpia. sessionStorage evita que se quede en bucle si
 // version.txt no está disponible por algún motivo.
 (function(){
-  var V='20260820-7';
+  var V='20260820-9';
   try{
     fetch('version.txt?_='+Date.now(),{cache:'no-store'}).then(function(r){return r.ok?r.text():null;}).then(function(t){
       if(!t) return;
@@ -3590,6 +3590,7 @@ function renderizarPendientes(){
     + '<th style="text-align:left;padding:.5rem .75rem;font-size:.65rem;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--g3);background:var(--crema)">Comedor</th>'
     + '<th style="text-align:left;padding:.5rem .75rem;font-size:.65rem;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--g3);background:var(--crema)">Fecha</th>'
     + '<th style="text-align:left;padding:.5rem .75rem;font-size:.65rem;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--g3);background:var(--crema)">Platillos</th>'
+    + '<th style="text-align:left;padding:.5rem .75rem;font-size:.65rem;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--g3);background:var(--crema)">Extras</th>'
     + '<th style="text-align:center;padding:.5rem .75rem;font-size:.65rem;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--g3);background:var(--crema)">Acciones</th>'
     + '</tr></thead><tbody>';
   filas.forEach(function(o, i){
@@ -3602,6 +3603,7 @@ function renderizarPendientes(){
       + '<td style="padding:.5rem .75rem">'+(comedorLabels[o.comedor]||o.comedor||'—')+'</td>'
       + '<td style="padding:.5rem .75rem;color:var(--g3)">'+DS3[dt.getDay()]+' '+dt.getDate()+' '+MS3[dt.getMonth()]+'</td>'
       + '<td style="padding:.5rem .75rem">'+((o.platillos||[]).join(', ')||'—')+'</td>'
+      + '<td style="padding:.5rem .75rem;color:var(--naranja)">'+((o.extras||[]).map(function(e){ return e.nombre||e; }).join(', ')||'—')+'</td>'
       + '<td style="padding:.5rem .75rem;text-align:center">'+(o.id ? '<button class="btn btn-outline btn-sm" style="color:var(--rojo);border-color:var(--rojo)" onclick="eliminarOrdenReporte(\''+o.id+'\')">🗑 Borrar</button>' : '')+'</td>'
       + '</tr>';
   });
