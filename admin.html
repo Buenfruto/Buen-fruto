@@ -15,7 +15,7 @@
 // fuerza una recarga limpia. sessionStorage evita que se quede en bucle si
 // version.txt no está disponible por algún motivo.
 (function(){
-  var V='20260820-6';
+  var V='20260820-7';
   try{
     fetch('version.txt?_='+Date.now(),{cache:'no-store'}).then(function(r){return r.ok?r.text():null;}).then(function(t){
       if(!t) return;
@@ -1544,8 +1544,7 @@ window.imprimirGafetesLote = function(lista){
 
 // ── DESCARGA DE GAFETES EN PDF ──
 // Gafetes en tamaño real de credencial (ISO/IEC 7810 ID-1: 8.6 x 5.4 cm),
-// varios por hoja para imprimir y recortar — antes salía uno enorme por
-// página, ahora caben 10 por hoja carta/A4.
+// en vertical, varios por hoja para imprimir y recortar.
 async function generarGafetesPDF(lista, nombreArchivo){
   const comedorLabels = { betel:'Betel', cuauhtemoc:'Cuauhtémoc', intelomas:'Intelomas' };
   const { jsPDF } = window.jspdf;
@@ -1553,7 +1552,7 @@ async function generarGafetesPDF(lista, nombreArchivo){
   const pageW = doc.internal.pageSize.getWidth();
   const pageH = doc.internal.pageSize.getHeight();
 
-  const bw = 86, bh = 54; // 8.6 x 5.4 cm
+  const bw = 54, bh = 86; // 5.4 x 8.6 cm (vertical)
   const gutter = 3;
   const cols = Math.max(1, Math.floor((pageW + gutter) / (bw + gutter)));
   const rows = Math.max(1, Math.floor((pageH + gutter) / (bh + gutter)));
@@ -1562,7 +1561,6 @@ async function generarGafetesPDF(lista, nombreArchivo){
   const totalH = rows * bh + (rows - 1) * gutter;
   const marginX = (pageW - totalW) / 2;
   const marginY = (pageH - totalH) / 2;
-  const railW = 24;
 
   for (let i = 0; i < lista.length; i++) {
     const e = lista[i];
@@ -1578,75 +1576,81 @@ async function generarGafetesPDF(lista, nombreArchivo){
     doc.setFillColor(255, 255, 255);
     doc.setDrawColor(221, 221, 221);
     doc.setLineWidth(0.25);
-    doc.roundedRect(x, y, bw, bh, 2.2, 2.2, 'FD');
+    doc.roundedRect(x, y, bw, bh, 2.5, 2.5, 'FD');
 
-    // Riel izquierdo verde con logo y comedor
+    // Encabezado verde (redondeado arriba, cuadrado donde se une con el cuerpo)
     doc.setFillColor(92, 107, 74);
-    doc.rect(x, y, railW, bh, 'F');
+    doc.roundedRect(x, y, bw, 18, 2.5, 2.5, 'F');
+    doc.rect(x, y + 12, bw, 6, 'F');
 
     doc.setTextColor(255, 255, 255);
     doc.setFont('helvetica', 'bold');
-    doc.setFontSize(6.5);
-    doc.text('Buen Fruto', x + railW / 2, y + 5, { align: 'center' });
+    doc.setFontSize(8);
+    doc.text('Buen Fruto', x + bw / 2, y + 6.5, { align: 'center' });
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(5.3);
+    const centroLineas = doc.splitTextToSize('CENTRO ' + comedorNombre, bw - 6);
+    doc.text(centroLineas[0], x + bw / 2, y + 10.8, { align: 'center' });
 
-    const cx = x + railW / 2, cy = y + 15, r = 5.5;
+    // Avatar con logo, a caballo entre encabezado y cuerpo
+    const cx = x + bw / 2, cy = y + 23, r = 9.5;
     doc.setFillColor(255, 255, 255);
-    doc.circle(cx, cy, r, 'F');
+    doc.setDrawColor(255, 255, 255);
+    doc.setLineWidth(0.6);
+    doc.circle(cx, cy, r, 'FD');
     try {
-      doc.addImage(LOGO_GAFETE_B64, 'PNG', cx - 4.6, cy - 4.6, 9.2, 9.2, undefined, 'FAST');
+      doc.addImage(LOGO_GAFETE_B64, 'PNG', cx - 8, cy - 8, 16, 16, undefined, 'FAST');
     } catch (errLogo) {
       console.error('Error al insertar logo en gafete:', errLogo);
     }
 
-    doc.setTextColor(255, 255, 255);
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(5.3);
-    const comedorLineas = doc.splitTextToSize(comedorNombre, railW - 4);
-    doc.text(comedorLineas, cx, y + 24, { align: 'center' });
-
-    // Columna derecha: nombre, puesto, código de barras
-    const xR = x + railW, wR = bw - railW, cxR = xR + wR / 2;
-
+    // Nombre
     doc.setTextColor(92, 107, 74);
     doc.setFont('helvetica', 'bold');
-    doc.setFontSize(8.5);
-    const nombreLineas = doc.splitTextToSize(e.nombre || '—', wR - 6);
-    doc.text(nombreLineas.slice(0, 2), cxR, y + 8, { align: 'center' });
+    doc.setFontSize(10);
+    const nombreLineas = doc.splitTextToSize(e.nombre || '—', bw - 10);
+    doc.text(nombreLineas.slice(0, 2), x + bw / 2, y + 40, { align: 'center' });
 
+    // Puesto (píldora)
     const puestoTxt = e.puesto || 'Empleado';
     doc.setFont('helvetica', 'normal');
-    doc.setFontSize(6);
-    const tw = doc.getTextWidth(puestoTxt) + 6;
-    const pillY = y + (nombreLineas.length > 1 ? 15.5 : 13.5);
+    doc.setFontSize(6.8);
+    const tw = doc.getTextWidth(puestoTxt) + 8;
+    const pillY = y + (nombreLineas.length > 1 ? 49.5 : 44.5);
     doc.setFillColor(92, 107, 74);
-    doc.roundedRect(cxR - tw / 2, pillY, tw, 4.6, 2, 2, 'F');
+    doc.roundedRect(x + bw / 2 - tw / 2, pillY, tw, 5.8, 2.9, 2.9, 'F');
     doc.setTextColor(255, 255, 255);
-    doc.text(puestoTxt, cxR, pillY + 3.2, { align: 'center' });
+    doc.text(puestoTxt, x + bw / 2, pillY + 4, { align: 'center' });
 
+    // Etiqueta + código de barras
     doc.setTextColor(143, 168, 130);
     doc.setFont('helvetica', 'bold');
-    doc.setFontSize(4.3);
-    doc.text('CÓDIGO DE ACCESO AL COMEDOR', cxR, pillY + 10.5, { align: 'center' });
+    doc.setFontSize(4.8);
+    doc.text('CÓDIGO DE ACCESO AL COMEDOR', x + bw / 2, pillY + 9, { align: 'center' });
 
-    const bcY = pillY + 12;
+    const bcY = pillY + 11.5;
     if (e.codigo_gafete) {
       const canvas = document.createElement('canvas');
       try {
         JsBarcode(canvas, e.codigo_gafete, { format: 'CODE128', width: 2, height: 60, displayValue: false, margin: 0 });
-        doc.addImage(canvas.toDataURL('image/png'), 'PNG', xR + 3, bcY, wR - 6, 14, undefined, 'SLOW');
+        doc.addImage(canvas.toDataURL('image/png'), 'PNG', x + 7, bcY, bw - 14, 12, undefined, 'SLOW');
       } catch (errBarcode) {
         console.error('Error al generar código de barras para', e.codigo_gafete, errBarcode);
       }
       doc.setTextColor(92, 107, 74);
       doc.setFont('courier', 'normal');
-      doc.setFontSize(6.5);
-      doc.text(e.codigo_gafete, cxR, bcY + 18.5, { align: 'center' });
+      doc.setFontSize(7);
+      doc.text(e.codigo_gafete, x + bw / 2, bcY + 15.5, { align: 'center' });
       doc.setFont('helvetica', 'normal');
     }
 
-    doc.setTextColor(180, 180, 180);
-    doc.setFontSize(4.3);
-    doc.text('Comedor Empresarial · Buen Fruto', x + bw / 2, y + bh - 2.2, { align: 'center' });
+    // Pie de página
+    doc.setFillColor(92, 107, 74);
+    doc.rect(x, y + bh - 6.5, bw, 6.5, 'F');
+    doc.setTextColor(255, 255, 255);
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(5.2);
+    doc.text('Comedor Empresarial · Buen Fruto', x + bw / 2, y + bh - 2.7, { align: 'center' });
   }
 
   doc.save(nombreArchivo);
