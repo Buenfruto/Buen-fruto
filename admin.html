@@ -15,7 +15,7 @@
 // fuerza una recarga limpia. sessionStorage evita que se quede en bucle si
 // version.txt no está disponible por algún motivo.
 (function(){
-  var V='20260820-10';
+  var V='20260820-12';
   try{
     fetch('version.txt?_='+Date.now(),{cache:'no-store'}).then(function(r){return r.ok?r.text():null;}).then(function(t){
       if(!t) return;
@@ -438,7 +438,7 @@ input[type=file]{display:none}
                 </svg>
               </div>
               <div class="drop-txt">Arrastra el Excel de Head Count aquí o haz clic para seleccionar</div>
-              <div class="drop-sub">ID B360, LOGIN B360, ID PLATA, LOGIN PLATA, NOMBRE COMPLETO, PUESTO, CENTRO</div>
+              <div class="drop-sub">ID Nmna/BF, Nombre, Centro</div>
             </div>
             <input type="file" id="hc-input" accept=".csv,.xlsx,.xls"/>
             <div id="hc-preview" style="display:none;margin-top:1.25rem"></div>
@@ -455,7 +455,7 @@ input[type=file]{display:none}
         <div class="card">
           <div class="card-head"><span class="card-titulo">🛠 Corrección de IDs</span></div>
           <div class="card-body">
-            <p style="font-size:.82rem;color:var(--g2);margin-bottom:1rem">Para corregir IDs equivocados: sube un Excel con columnas ID, Nombre, Centro. Empareja por nombre completo contra el directorio actual y te muestra una vista previa (ID viejo → ID nuevo) antes de tocar nada. Al aplicar, corrige el ID guardado y también actualiza el acceso (login) de cada empleado para que pueda seguir entrando con su ID correcto. Nunca toca cuentas de admin ni chef.</p>
+            <p style="font-size:.82rem;color:var(--g2);margin-bottom:1rem">Para corregir IDs equivocados: sube un Excel con columnas ID Nmna/BF, Nombre, Centro. Empareja por nombre completo contra el directorio actual y te muestra una vista previa (ID viejo → ID nuevo) antes de tocar nada. Al aplicar, corrige el ID guardado y también actualiza el acceso (login) de cada empleado para que pueda seguir entrando con su ID correcto. Nunca toca cuentas de admin ni chef.</p>
             <div class="drop-area" id="correccion-drop-area" onclick="document.getElementById('correccion-input').click()">
               <div class="drop-icon">
                 <svg viewBox="0 0 24 24" fill="none" stroke="var(--g3)" stroke-width="1.5" stroke-linecap="round">
@@ -463,7 +463,7 @@ input[type=file]{display:none}
                 </svg>
               </div>
               <div class="drop-txt">Arrastra el Excel de corrección aquí o haz clic para seleccionar</div>
-              <div class="drop-sub">ID, Nombre, Centro</div>
+              <div class="drop-sub">ID Nmna/BF, Nombre, Centro</div>
             </div>
             <input type="file" id="correccion-input" accept=".csv,.xlsx,.xls"/>
             <div id="correccion-preview" style="display:none;margin-top:1.25rem"></div>
@@ -483,7 +483,7 @@ input[type=file]{display:none}
                 </svg>
               </div>
               <div class="drop-txt">Arrastra el Excel de subsidiados aquí o haz clic para seleccionar</div>
-              <div class="drop-sub">ID B360, LOGIN B360, ID PLATA, LOGIN PLATA, NOMBRE COMPLETO, PUESTO, CENTRO</div>
+              <div class="drop-sub">ID Nmna/BF, Nombre, Centro</div>
             </div>
             <input type="file" id="subs-input" accept=".csv,.xlsx,.xls"/>
             <div id="subs-preview" style="display:none;margin-top:1.25rem"></div>
@@ -1063,6 +1063,19 @@ function buscarCol(headers, candidatos){
   }
   return -1;
 }
+// La columna del ID llega con nombres distintos según el Excel ("ID",
+// "ID Nmna/BF", "ID Nómina/BF"...) — primero prueba coincidencias exactas
+// conocidas, y si ninguna aplica, cae a buscar cualquier encabezado que
+// combine "id" con "nmna"/"nomina", sin importar espacios o puntuación.
+function buscarColId(headers){
+  const directo = buscarCol(headers, ['id','id nmna/bf','id nomina/bf','nmna/bf','nomina/bf','id nomina','nomina bf']);
+  if(directo>=0) return directo;
+  for(let i=0;i<headers.length;i++){
+    const h = quitarAcentos(String(headers[i]||'')).trim().toLowerCase();
+    if(h.indexOf('id')>=0 && (h.indexOf('nmna')>=0 || h.indexOf('nomina')>=0)) return i;
+  }
+  return -1;
+}
 function parseCSVTexto(texto){
   const filas = [];
   let fila = [], campo = '', enComillas = false;
@@ -1083,11 +1096,11 @@ function parseCSVTexto(texto){
   return filas.filter(function(f){ return f.some(function(c){ return String(c).trim()!==''; }); });
 }
 // ── HEAD COUNT DIARIO ──
-// Columnas reales del Excel de Head Count: ID B360, LOGIN B360, ID PLATA,
-// LOGIN PLATA, NOMBRE COMPLETO, PUESTO, CENTRO. No trae correo ni contraseña,
-// así que se sintetiza un correo de acceso a partir del login.
-// Cada persona se identifica con una clave compuesta (hc_id) para poder
-// compararla día a día aunque falte alguna de las columnas de identificador.
+// Columnas reales del Excel de Head Count: ID, Nombre, Centro. No trae
+// Puesto ni correo/contraseña, así que el puesto de un empleado que ya
+// existe nunca se toca desde aquí (solo se define a mano en el directorio),
+// y el correo de acceso se sintetiza a partir del ID.
+// Cada persona se identifica por su ID para poder compararla día a día.
 // Solo se tocan empleados con origen:'head_count' — nunca admin, chef, ni
 // empleados agregados a mano o por el importador manual de arriba.
 const HC_EMAIL_DOMINIO = 'buenfruto.mx';
@@ -1131,12 +1144,8 @@ function emailSinteticoHC(loginBase){
 function parseHeadCountFilas(filas){
   if(!filas || !filas.length) return { registros:[], duplicadosArchivo:[] };
   const headers = filas[0];
-  const iIdB360 = buscarCol(headers, ['id b360','idb360']);
-  const iLoginB360 = buscarCol(headers, ['login b360','loginb360']);
-  const iIdPlata = buscarCol(headers, ['id plata','idplata']);
-  const iLoginPlata = buscarCol(headers, ['login plata','loginplata']);
-  const iNombre = buscarCol(headers, ['nombre completo','nombre']);
-  const iPuesto = buscarCol(headers, ['puesto']);
+  const iId = buscarColId(headers);
+  const iNombre = buscarCol(headers, ['nombre','nombre completo']);
   const iCentro = buscarCol(headers, ['centro','comedor']);
 
   function val(fila, idx){ return idx>=0 && fila[idx]!==undefined && fila[idx]!==null ? String(fila[idx]).trim() : ''; }
@@ -1147,23 +1156,19 @@ function parseHeadCountFilas(filas){
     if(!fila || !fila.length) continue;
     const nombre = val(fila,iNombre);
     if(!nombre) continue;
-    const idB360 = val(fila,iIdB360);
-    const loginB360 = val(fila,iLoginB360);
-    const idPlata = val(fila,iIdPlata);
-    const loginPlata = val(fila,iLoginPlata);
-    const hcId = idB360 || idPlata || loginB360 || loginPlata;
-    if(!hcId) continue; // sin ningún identificador — no se puede procesar con seguridad
-    // El usuario para iniciar sesión es el ID B360 (lo que el empleado ya
-    // conoce y trae impreso/asignado) — antes se usaba LOGIN B360, que es un
-    // valor distinto y menos reconocible para ellos. Solo se cae a los otros
-    // identificadores si a esa persona le falta el ID B360 en el archivo.
-    const loginBase = idB360 || idPlata || loginB360 || loginPlata || ('hc'+hcId);
+    const hcId = val(fila,iId);
+    if(!hcId) continue; // sin ID — no se puede procesar con seguridad
     registrosBrutos.push({
       hc_id: hcId,
       nombre: normalizarNombreHC(nombre),
-      puesto: val(fila,iPuesto) || 'Sin puesto',
+      // El formato actual (ID, Nombre, Centro) ya no trae Puesto. null aquí
+      // significa "no vino en el archivo" — para altas nuevas se guarda
+      // como 'Sin puesto' (editable a mano después), y para empleados que
+      // YA existen, calcularDiffHeadCount/aplicarCambiosHeadCount nunca
+      // tocan su puesto guardado a partir de este valor.
+      puesto: null,
       comedor: normalizarCentroHC(val(fila,iCentro)),
-      login_base: loginBase
+      login_base: hcId
     });
   }
 
@@ -1199,7 +1204,7 @@ function procesarArchivoHeadCount(file){
       hcRegistros = resultado.registros;
       hcDuplicados = resultado.duplicadosArchivo;
       if(!hcRegistros.length && !hcDuplicados.length){
-        msg.textContent = 'No se encontraron filas válidas. Verifica que el archivo tenga las columnas del Head Count (ID B360, LOGIN B360, ID PLATA, LOGIN PLATA, NOMBRE COMPLETO, PUESTO, CENTRO).';
+        msg.textContent = 'No se encontraron filas válidas. Verifica que el archivo tenga las columnas ID Nmna/BF (o ID), Nombre, Centro.';
         msg.className = 'msg err'; msg.style.display='block';
         return;
       }
@@ -1240,7 +1245,7 @@ function procesarArchivoSubsidiados(file){
       subsRegistros = resultado.registros;
       subsDuplicados = resultado.duplicadosArchivo;
       if(!subsRegistros.length && !subsDuplicados.length){
-        msg.textContent = 'No se encontraron filas válidas. Verifica que el archivo tenga las columnas (ID B360, LOGIN B360, ID PLATA, LOGIN PLATA, NOMBRE COMPLETO, PUESTO, CENTRO).';
+        msg.textContent = 'No se encontraron filas válidas. Verifica que el archivo tenga las columnas ID Nmna/BF (o ID), Nombre, Centro.';
         msg.className = 'msg err'; msg.style.display='block';
         return;
       }
@@ -1263,7 +1268,7 @@ function renderPreviewSubsidiados(){
     (subsDuplicados.length ? (' — ' + subsDuplicados.length + ' con identificador repetido dentro del mismo archivo, se van a omitir (revísalos a mano).') : '.') +
     '</div>' +
     '<div style="max-height:220px;overflow-y:auto;margin-bottom:1rem">' +
-    subsRegistros.slice(0,50).map(function(r){ return '<div style="font-size:.8rem;padding:.25rem 0;border-bottom:1px solid var(--borde2)">'+escHtml(r.nombre)+' — '+escHtml(r.puesto)+' · '+escHtml(r.comedor)+'</div>'; }).join('') +
+    subsRegistros.slice(0,50).map(function(r){ return '<div style="font-size:.8rem;padding:.25rem 0;border-bottom:1px solid var(--borde2)">'+escHtml(r.nombre)+' · '+escHtml(r.comedor)+'</div>'; }).join('') +
     (subsRegistros.length>50 ? '<div style="font-size:.75rem;color:var(--g3);padding:.3rem 0">+'+(subsRegistros.length-50)+' más</div>' : '') +
     '</div>' +
     '<button class="btn btn-v" id="btn-aplicar-subs">Marcar/crear como subsidiados</button> ' +
@@ -1308,7 +1313,7 @@ async function aplicarSubsidiados(){
         const uid = await crearEmpleadoAuth(email, password);
         await db.collection('empleados').doc(uid).set({
           nombre: r.nombre, email: email, password_texto: password,
-          rol: 'empleado', comedor: r.comedor, puesto: r.puesto,
+          rol: 'empleado', comedor: r.comedor, puesto: r.puesto || 'Sin puesto',
           activo: true, subsidiado: true,
           codigo_gafete: generarCodigoGafeteUnico(usados),
           hc_id: r.hc_id, origen: 'manual'
@@ -1359,7 +1364,7 @@ function normalizarNombreComparar(v){
 function parseCorreccionIdFilas(filas){
   if(!filas || !filas.length) return [];
   const headers = filas[0];
-  const iId = buscarCol(headers, ['id']);
+  const iId = buscarColId(headers);
   const iNombre = buscarCol(headers, ['nombre','nombre completo']);
   const iCentro = buscarCol(headers, ['centro','comedor']);
   function val(fila, idx){ return idx>=0 && fila[idx]!==undefined && fila[idx]!==null ? String(fila[idx]).trim() : ''; }
@@ -1398,7 +1403,7 @@ function procesarArchivoCorreccion(file){
       }
       const registros = parseCorreccionIdFilas(filas);
       if(!registros.length){
-        msg.textContent = 'No se encontraron filas válidas. Verifica que el archivo tenga las columnas ID, Nombre, Centro.';
+        msg.textContent = 'No se encontraron filas válidas. Verifica que el archivo tenga las columnas ID Nmna/BF (o ID), Nombre, Centro.';
         msg.className = 'msg err'; msg.style.display='block';
         return;
       }
@@ -1604,7 +1609,9 @@ async function calcularDiffHeadCount(){
   hcRegistros.forEach(function(r){
     const actual = actuales[normalizarHcId(r.hc_id)];
     if(!actual){ altas.push(r); return; }
-    if(actual.nombre !== r.nombre || actual.puesto !== r.puesto || actual.comedor !== r.comedor){
+    // El puesto no viene en este archivo (formato ID, Nombre, Centro) — no
+    // se compara ni se toca, para no borrar el puesto real ya guardado.
+    if(actual.nombre !== r.nombre || actual.comedor !== r.comedor){
       actualizados.push({ uid:actual.uid, antes:actual, despues:r });
     } else {
       sinCambios.push(r);
@@ -1648,9 +1655,9 @@ function renderPreviewHeadCount(){
       statTile('Sin cambios', sinCambios.length, 'var(--g2)') +
       statTile('Duplicados en archivo', hcDuplicados.length, 'var(--rojo)') +
     '</div>' +
-    detalle('Altas — nuevo ingreso', altas, function(r){ return r.nombre+' — '+r.puesto+' · '+r.comedor; }) +
+    detalle('Altas — nuevo ingreso', altas, function(r){ return r.nombre+' · '+r.comedor; }) +
     detalle('Bajas — ya no aparecen en el Head Count', bajas, function(r){ return r.nombre+' — '+r.puesto+' · '+r.comedor; }) +
-    detalle('Actualizados — cambió puesto o comedor', actualizados, function(r){ return r.despues.nombre+' — '+r.antes.puesto+' → '+r.despues.puesto+' · '+r.antes.comedor+' → '+r.despues.comedor; }) +
+    detalle('Actualizados — cambió nombre o comedor', actualizados, function(r){ return r.despues.nombre+' — '+r.antes.comedor+' → '+r.despues.comedor; }) +
     (hcDuplicados.length ? detalle('Duplicados en el archivo — revisa a mano, no se procesan solos', hcDuplicados, function(g){ return g.map(function(x){return x.nombre;}).join(' / ')+' (mismo identificador: '+g[0].hc_id+')'; }) : '') +
     '<div style="display:flex;gap:.75rem;margin-top:1.25rem;flex-wrap:wrap;align-items:center">' +
       '<button class="btn btn-v" id="btn-aplicar-hc">Aplicar cambios</button>' +
@@ -1702,7 +1709,7 @@ async function aplicarCambiosHeadCount(){
   for(let i=0;i<altas.length;i+=LOTE_HC){
     const lote = altas.slice(i, i+LOTE_HC).map(function(r){
       return {
-        hc_id: r.hc_id, nombre: r.nombre, puesto: r.puesto, comedor: r.comedor,
+        hc_id: r.hc_id, nombre: r.nombre, puesto: r.puesto || 'Sin puesto', comedor: r.comedor,
         email: emailSinteticoHC(r.login_base), password: Math.random().toString(36).slice(2,10),
         codigo_gafete: generarCodigoGafeteUnico(_gafetesUsadosHC)
       };
@@ -1734,8 +1741,9 @@ async function aplicarCambiosHeadCount(){
     }});
   });
   actualizados.forEach(function(a){
+    // Puesto no se toca: el archivo (ID, Nombre, Centro) ya no lo trae.
     operaciones.push({ tipo:'update', ref: db.collection('empleados').doc(a.uid), data:{
-      nombre:a.despues.nombre, puesto:a.despues.puesto, comedor:a.despues.comedor
+      nombre:a.despues.nombre, comedor:a.despues.comedor
     }});
   });
 
