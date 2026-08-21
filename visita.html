@@ -12,7 +12,7 @@
 <meta http-equiv="Expires" content="0"/>
 <script>
 (function(){
-  var V='20260820-6';
+  var V='20260820-8';
   try{
     fetch('version.txt?_='+Date.now(),{cache:'no-store'}).then(function(r){return r.ok?r.text():null;}).then(function(t){
       if(!t) return;
@@ -328,11 +328,10 @@ function renderMenu(){
       const sel = idx === -1;
       if (sel) platillosSel.push(pl); else platillosSel.splice(idx, 1);
       pd.classList.toggle('on', sel);
-      // Si se desmarcan todos los platillos, se desmarca el buffet padre.
-      if (!platillosSel.length) {
-        buffetSel = false;
-        bRow.classList.remove('on');
-      }
+      // El buffet (padre) queda marcado mientras haya al menos un platillo
+      // elegido, y se desmarca solo si se quitan todos.
+      buffetSel = platillosSel.length > 0;
+      bRow.classList.toggle('on', buffetSel);
       actuBtn();
     });
     sub.appendChild(pd);
