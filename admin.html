@@ -15,7 +15,7 @@
 // fuerza una recarga limpia. sessionStorage evita que se quede en bucle si
 // version.txt no está disponible por algún motivo.
 (function(){
-  var V='20260820-9';
+  var V='20260820-10';
   try{
     fetch('version.txt?_='+Date.now(),{cache:'no-store'}).then(function(r){return r.ok?r.text():null;}).then(function(t){
       if(!t) return;
@@ -451,6 +451,26 @@ input[type=file]{display:none}
           </div>
         </div>
 
+        <!-- CORRECCIÓN DE IDs -->
+        <div class="card">
+          <div class="card-head"><span class="card-titulo">🛠 Corrección de IDs</span></div>
+          <div class="card-body">
+            <p style="font-size:.82rem;color:var(--g2);margin-bottom:1rem">Para corregir IDs equivocados: sube un Excel con columnas ID, Nombre, Centro. Empareja por nombre completo contra el directorio actual y te muestra una vista previa (ID viejo → ID nuevo) antes de tocar nada. Al aplicar, corrige el ID guardado y también actualiza el acceso (login) de cada empleado para que pueda seguir entrando con su ID correcto. Nunca toca cuentas de admin ni chef.</p>
+            <div class="drop-area" id="correccion-drop-area" onclick="document.getElementById('correccion-input').click()">
+              <div class="drop-icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="var(--g3)" stroke-width="1.5" stroke-linecap="round">
+                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="12" x2="12" y2="18"/><polyline points="9 15 12 18 15 15"/>
+                </svg>
+              </div>
+              <div class="drop-txt">Arrastra el Excel de corrección aquí o haz clic para seleccionar</div>
+              <div class="drop-sub">ID, Nombre, Centro</div>
+            </div>
+            <input type="file" id="correccion-input" accept=".csv,.xlsx,.xls"/>
+            <div id="correccion-preview" style="display:none;margin-top:1.25rem"></div>
+            <div class="msg" id="correccion-msg"></div>
+          </div>
+        </div>
+
         <!-- EMPLEADOS SUBSIDIADOS 100% -->
         <div class="card">
           <div class="card-head"><span class="card-titulo">💚 Empleados subsidiados 100%</span></div>
@@ -767,6 +787,23 @@ async function crearEmpleadosHeadCountLote(registros, fecha){
   const resp = await _fnsCrearEmpleadosHC({ registros: registros, fecha: fecha });
   return (resp && resp.data && resp.data.resultados) || [];
 }
+// migrarLoginsEmpleados: después de corregir el ID B360 guardado de un
+// empleado, su cuenta de acceso (Firebase Auth) se queda ligada al correo
+// sintético VIEJO hasta que esto corre — sin esto, la persona ya no podría
+// entrar con su ID nuevo. Requiere permisos de administrador (los tiene el
+// SDK de servidor), por eso es una Cloud Function y no algo que el
+// navegador pueda hacer directo.
+const _fnsMigrarLogins = (function(){
+  try { return firebase.functions().httpsCallable('migrarLoginsEmpleados', { timeout: 540000 }); }
+  catch(e){ return null; }
+})();
+async function migrarLoginsEmpleadosLote(){
+  if(!_fnsMigrarLogins){
+    throw new Error('La función de servidor no está disponible. Verifica que migrarLoginsEmpleados esté desplegada en Firebase.');
+  }
+  const resp = await _fnsMigrarLogins({});
+  return (resp && resp.data && resp.data.resultados) || [];
+}
 
 const DS = ['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'];
 const MS2 = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
@@ -847,6 +884,23 @@ document.addEventListener('DOMContentLoaded', function(){
     e.preventDefault(); e.stopPropagation();
     hcDropArea.classList.remove('drag');
     if(e.dataTransfer.files && e.dataTransfer.files[0]) procesarArchivoHeadCount(e.dataTransfer.files[0]);
+  });
+
+  // Corrección de IDs
+  document.getElementById('correccion-input').addEventListener('change', function(e){
+    if(e.target.files && e.target.files[0]) procesarArchivoCorreccion(e.target.files[0]);
+  });
+  const correccionDropArea = document.getElementById('correccion-drop-area');
+  ['dragover','dragenter'].forEach(function(evt){
+    correccionDropArea.addEventListener(evt, function(e){ e.preventDefault(); e.stopPropagation(); correccionDropArea.classList.add('drag'); });
+  });
+  ['dragleave','dragend'].forEach(function(evt){
+    correccionDropArea.addEventListener(evt, function(e){ e.preventDefault(); e.stopPropagation(); correccionDropArea.classList.remove('drag'); });
+  });
+  correccionDropArea.addEventListener('drop', function(e){
+    e.preventDefault(); e.stopPropagation();
+    correccionDropArea.classList.remove('drag');
+    if(e.dataTransfer.files && e.dataTransfer.files[0]) procesarArchivoCorreccion(e.dataTransfer.files[0]);
   });
 
   // Empleados subsidiados 100%
@@ -1280,6 +1334,252 @@ async function aplicarSubsidiados(){
   document.getElementById('subs-input').value = '';
   document.getElementById('subs-preview').style.display='none';
   document.getElementById('subs-preview').innerHTML='';
+  if(btn) btn.disabled = false;
+}
+
+// ── CORRECCIÓN DE IDs (Excel: ID, Nombre, Centro) ──
+// A diferencia del Head Count diario (que se identifica por ID y compara
+// día a día), esto sirve para el caso contrario: cuando el ID guardado ya
+// está mal y hay que corregirlo desde una fuente nueva y confiable. Como
+// el ID viejo ya no sirve para encontrar a la persona, aquí se empareja
+// por NOMBRE COMPLETO contra el directorio actual.
+let correccionCambios = [];
+let correccionSinCambios = 0;
+let correccionNoEncontrados = [];
+let correccionAmbiguosArchivo = [];
+let correccionAmbiguosDirectorio = [];
+
+// Normaliza un nombre SOLO para comparar (no para guardar ni mostrar): sin
+// acentos, sin distinguir mayúsculas/minúsculas, sin espacios repetidos ni
+// al borde — el Excel nuevo trae nombres con espacios sueltos y en mayúsculas.
+function normalizarNombreComparar(v){
+  return quitarAcentos(String(v==null?'':v)).trim().toLowerCase().replace(/\s+/g,' ');
+}
+
+function parseCorreccionIdFilas(filas){
+  if(!filas || !filas.length) return [];
+  const headers = filas[0];
+  const iId = buscarCol(headers, ['id']);
+  const iNombre = buscarCol(headers, ['nombre','nombre completo']);
+  const iCentro = buscarCol(headers, ['centro','comedor']);
+  function val(fila, idx){ return idx>=0 && fila[idx]!==undefined && fila[idx]!==null ? String(fila[idx]).trim() : ''; }
+  const out = [];
+  for(let r=1;r<filas.length;r++){
+    const fila = filas[r];
+    if(!fila || !fila.length) continue;
+    const nombre = val(fila,iNombre);
+    const id = val(fila,iId);
+    if(!nombre || !id) continue;
+    out.push({
+      id_nuevo: id,
+      nombre_excel: nombre,
+      nombre_comparar: normalizarNombreComparar(nombre),
+      comedor_nuevo: normalizarCentroHC(val(fila,iCentro))
+    });
+  }
+  return out;
+}
+
+function procesarArchivoCorreccion(file){
+  const msg = document.getElementById('correccion-msg');
+  msg.style.display='none';
+  const nombreArchivo = file.name.toLowerCase();
+  const esExcel = nombreArchivo.endsWith('.xlsx') || nombreArchivo.endsWith('.xls');
+  const reader = new FileReader();
+  reader.onload = async function(e){
+    try {
+      let filas;
+      if(esExcel){
+        const wb = XLSX.read(new Uint8Array(e.target.result), {type:'array'});
+        const hoja = wb.Sheets[wb.SheetNames[0]];
+        filas = XLSX.utils.sheet_to_json(hoja, {header:1, defval:''});
+      } else {
+        filas = parseCSVTexto(String(e.target.result));
+      }
+      const registros = parseCorreccionIdFilas(filas);
+      if(!registros.length){
+        msg.textContent = 'No se encontraron filas válidas. Verifica que el archivo tenga las columnas ID, Nombre, Centro.';
+        msg.className = 'msg err'; msg.style.display='block';
+        return;
+      }
+      await calcularPreviewCorreccion(registros);
+    } catch(err){
+      console.error('Error al leer archivo de corrección de IDs:', err);
+      msg.textContent = 'No se pudo leer el archivo. Verifica que sea un Excel o CSV válido.';
+      msg.className = 'msg err'; msg.style.display='block';
+    }
+  };
+  if(esExcel) reader.readAsArrayBuffer(file);
+  else reader.readAsText(file, 'UTF-8');
+}
+
+async function calcularPreviewCorreccion(registros){
+  const preview = document.getElementById('correccion-preview');
+  preview.style.display='block';
+  preview.innerHTML = '<div style="display:flex;align-items:center;gap:.5rem;color:var(--g2);font-size:.85rem"><div class="spinner"></div>Comparando contra el directorio actual...</div>';
+
+  // Duplicados de nombre DENTRO del archivo nuevo — no se puede saber a
+  // cuál de los dos aplica cada ID, así que se dejan fuera para revisar a
+  // mano en vez de adivinar.
+  const porNombre = {};
+  registros.forEach(function(r){ (porNombre[r.nombre_comparar] = porNombre[r.nombre_comparar]||[]).push(r); });
+  const unicos = [];
+  correccionAmbiguosArchivo = [];
+  Object.keys(porNombre).forEach(function(k){
+    const grupo = porNombre[k];
+    if(grupo.length > 1) correccionAmbiguosArchivo.push(grupo);
+    else unicos.push(grupo[0]);
+  });
+
+  // Directorio actual — solo empleados (nunca admin ni chef).
+  const snap = await db.collection('empleados').where('rol','==','empleado').get();
+  const porNombreDir = {};
+  snap.forEach(function(d){
+    const e = d.data();
+    const k = normalizarNombreComparar(e.nombre);
+    (porNombreDir[k] = porNombreDir[k]||[]).push({ uid:d.id, nombre:e.nombre, hc_id:e.hc_id, comedor:e.comedor });
+  });
+
+  correccionCambios = [];
+  correccionSinCambios = 0;
+  correccionNoEncontrados = [];
+  correccionAmbiguosDirectorio = [];
+
+  unicos.forEach(function(r){
+    const candidatos = porNombreDir[r.nombre_comparar];
+    if(!candidatos || !candidatos.length){
+      correccionNoEncontrados.push(r);
+      return;
+    }
+    if(candidatos.length > 1){
+      correccionAmbiguosDirectorio.push({ registro:r, candidatos:candidatos });
+      return;
+    }
+    const emp = candidatos[0];
+    const idViejo = emp.hc_id || '—';
+    const centroViejo = emp.comedor || '—';
+    if(normalizarHcId(emp.hc_id) === normalizarHcId(r.id_nuevo) && emp.comedor === r.comedor_nuevo){
+      correccionSinCambios++;
+      return;
+    }
+    correccionCambios.push({
+      uid: emp.uid, nombre: emp.nombre,
+      idViejo: idViejo, idNuevo: r.id_nuevo,
+      centroViejo: centroViejo, centroNuevo: r.comedor_nuevo
+    });
+  });
+
+  renderPreviewCorreccion();
+}
+
+function renderPreviewCorreccion(){
+  const preview = document.getElementById('correccion-preview');
+  const comedorLabels = { betel:'Betel', cuauhtemoc:'Cuauhtémoc', intelomas:'Intelomas' };
+  let html = '<div style="font-size:.85rem;color:var(--g2);margin-bottom:.75rem">'
+    + correccionCambios.length + ' cambio(s) para aplicar, '
+    + correccionSinCambios + ' sin cambios, '
+    + correccionNoEncontrados.length + ' no encontrado(s) en el directorio, '
+    + (correccionAmbiguosArchivo.length + correccionAmbiguosDirectorio.length) + ' ambiguo(s).'
+    + '</div>';
+
+  if(correccionCambios.length){
+    html += '<div style="font-size:.72rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--g2);margin-bottom:.4rem">Cambios a aplicar</div>'
+      + '<div style="max-height:260px;overflow-y:auto;margin-bottom:1rem;border:1px solid var(--borde2);border-radius:8px">'
+      + correccionCambios.slice(0,80).map(function(c){
+          const cambioCentro = c.centroViejo !== c.centroNuevo;
+          return '<div style="font-size:.8rem;padding:.4rem .6rem;border-bottom:1px solid var(--borde2)">'
+            + '<strong>' + escHtml(c.nombre) + '</strong><br>'
+            + 'ID: ' + escHtml(String(c.idViejo)) + ' → <strong style="color:var(--v)">' + escHtml(String(c.idNuevo)) + '</strong>'
+            + (cambioCentro ? ' · Centro: ' + escHtml(comedorLabels[c.centroViejo]||c.centroViejo) + ' → <strong style="color:var(--v)">' + escHtml(comedorLabels[c.centroNuevo]||c.centroNuevo) + '</strong>' : '')
+            + '</div>';
+        }).join('')
+      + (correccionCambios.length>80 ? '<div style="font-size:.75rem;color:var(--g3);padding:.4rem .6rem">+'+(correccionCambios.length-80)+' más</div>' : '')
+      + '</div>';
+  }
+
+  if(correccionNoEncontrados.length){
+    html += '<div style="font-size:.72rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--naranja);margin-bottom:.4rem">No encontrados en el directorio (revisa el nombre a mano)</div>'
+      + '<div style="max-height:160px;overflow-y:auto;margin-bottom:1rem;font-size:.8rem;color:var(--g2)">'
+      + correccionNoEncontrados.slice(0,50).map(function(r){ return '<div style="padding:.2rem 0">'+escHtml(r.nombre_excel)+' — ID '+escHtml(r.id_nuevo)+'</div>'; }).join('')
+      + (correccionNoEncontrados.length>50 ? '<div style="color:var(--g3)">+'+(correccionNoEncontrados.length-50)+' más</div>' : '')
+      + '</div>';
+  }
+
+  const ambiguosTotal = correccionAmbiguosArchivo.length + correccionAmbiguosDirectorio.length;
+  if(ambiguosTotal){
+    html += '<div style="font-size:.72rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--rojo);margin-bottom:.4rem">Ambiguos — no se tocan, revisa a mano</div>'
+      + '<div style="max-height:160px;overflow-y:auto;margin-bottom:1rem;font-size:.8rem;color:var(--g2)">'
+      + correccionAmbiguosArchivo.map(function(grupo){ return '<div style="padding:.2rem 0">'+escHtml(grupo[0].nombre_excel)+' — este nombre aparece '+grupo.length+' veces en el archivo nuevo</div>'; }).join('')
+      + correccionAmbiguosDirectorio.map(function(x){ return '<div style="padding:.2rem 0">'+escHtml(x.registro.nombre_excel)+' — hay '+x.candidatos.length+' empleados con este nombre en el directorio</div>'; }).join('')
+      + '</div>';
+  }
+
+  html += '<button class="btn btn-v" id="btn-aplicar-correccion"' + (!correccionCambios.length ? ' disabled' : '') + '>Aplicar corrección (' + correccionCambios.length + ')</button> '
+    + '<button class="btn btn-outline" id="btn-cancelar-correccion">Cancelar</button>';
+
+  preview.innerHTML = html;
+  document.getElementById('btn-aplicar-correccion').addEventListener('click', aplicarCorreccionIds);
+  document.getElementById('btn-cancelar-correccion').addEventListener('click', function(){
+    correccionCambios = []; correccionNoEncontrados = []; correccionAmbiguosArchivo = []; correccionAmbiguosDirectorio = [];
+    document.getElementById('correccion-input').value = '';
+    preview.style.display='none'; preview.innerHTML='';
+  });
+}
+
+async function aplicarCorreccionIds(){
+  if(!correccionCambios.length) return;
+  if(!confirm('Esto va a corregir el ID de ' + correccionCambios.length + ' empleado(s) y actualizar su acceso (login) para que puedan seguir entrando con su ID correcto. ¿Continuar?')) return;
+
+  const btn = document.getElementById('btn-aplicar-correccion');
+  const msg = document.getElementById('correccion-msg');
+  if(btn) btn.disabled = true;
+  msg.style.display='block'; msg.className='msg'; msg.textContent='Corrigiendo IDs…';
+
+  let actualizados = 0;
+  const errores = [];
+  for (const c of correccionCambios) {
+    try {
+      await db.collection('empleados').doc(c.uid).update({ hc_id: c.idNuevo, comedor: c.centroNuevo });
+      actualizados++;
+    } catch(e){
+      errores.push(c.nombre + ': ' + e.message);
+    }
+  }
+
+  let html = actualizados + ' empleado(s) con ID corregido.';
+  if (errores.length) html += '<br>' + errores.length + ' con error al guardar: ' + errores.join(', ');
+  let huboProblemaLogin = false;
+
+  // El ID ya quedó corregido en el directorio — ahora hace falta sincronizar
+  // el acceso (Firebase Auth) para que puedan entrar con el ID nuevo.
+  msg.innerHTML = html + '<br>Sincronizando accesos…';
+  try {
+    const resultados = await migrarLoginsEmpleadosLote();
+    const ok = resultados.filter(function(r){ return r.ok; }).length;
+    const conflictos = resultados.filter(function(r){ return !r.ok && r.conflicto; });
+    const otrosErrores = resultados.filter(function(r){ return !r.ok && !r.conflicto; });
+    html += '<br>Acceso sincronizado para ' + ok + ' empleado(s).';
+    if (conflictos.length) {
+      huboProblemaLogin = true;
+      html += '<br>' + conflictos.length + ' con conflicto de correo (revisa a mano): ' + conflictos.map(function(c){ return c.nombre; }).join(', ');
+    }
+    if (otrosErrores.length) {
+      huboProblemaLogin = true;
+      html += '<br>' + otrosErrores.length + ' sin sincronizar: ' + otrosErrores.map(function(e){ return (e.nombre||e.uid)+' — '+e.error; }).join(', ');
+    }
+  } catch(errMigrar) {
+    console.error('Error al sincronizar accesos:', errMigrar);
+    huboProblemaLogin = true;
+    html += '<br><strong>No se pudo sincronizar el acceso automáticamente</strong> (' + errMigrar.message + '). Los IDs ya quedaron corregidos en el directorio, pero hasta que esto corra, esas personas no van a poder entrar con su ID nuevo — avísame para revisarlo.';
+  }
+
+  msg.className = (errores.length || huboProblemaLogin) ? 'msg err' : 'msg ok';
+  msg.innerHTML = html;
+
+  correccionCambios = []; correccionNoEncontrados = []; correccionAmbiguosArchivo = []; correccionAmbiguosDirectorio = [];
+  document.getElementById('correccion-input').value = '';
+  document.getElementById('correccion-preview').style.display='none';
+  document.getElementById('correccion-preview').innerHTML='';
   if(btn) btn.disabled = false;
 }
 
