@@ -12,7 +12,7 @@
 <meta http-equiv="Expires" content="0"/>
 <script>
 (function(){
-  var V='20260820-6';
+  var V='20260822-7';
   try{
     fetch('version.txt?_='+Date.now(),{cache:'no-store'}).then(function(r){return r.ok?r.text():null;}).then(function(t){
       if(!t) return;
@@ -104,6 +104,7 @@ html,body{height:100%;font-family:'Inter',system-ui,sans-serif;background:var(--
 
 /* SUBSIDIO */
 .subsidio{display:inline-flex;align-items:center;gap:.35rem;background:var(--vl2);border:1px solid #C8DEB0;border-radius:8px;padding:.38rem .8rem;font-size:.76rem;font-weight:600;color:var(--v);margin-bottom:1rem}
+.badge-subsidiado{display:inline-flex;align-items:center;vertical-align:middle;background:var(--v);color:#fff;border-radius:20px;padding:.22rem .65rem;font-size:.62rem;font-weight:700;letter-spacing:.02em;margin-left:.45rem}
 
 /* PLATILLO NOMBRE */
 .plato-nombre{font-family:'Cormorant Garamond',serif;font-size:1.3rem;font-weight:700;color:var(--negro);margin-bottom:.75rem;letter-spacing:-.2px;line-height:1.2}
@@ -451,13 +452,18 @@ function irTab(tabId, btn) {
 }
 window.irTab = irTab;
 
-function calcCargo(buf, ext) { return (buf ? 45 : 0) + ext.reduce((s, e) => s + e.precio, 0); }
-function mkTicketHTML(buf, ext, pls) {
-  let cg = calcCargo(buf, ext), h = '';
+// Un empleado subsidiado al 100% no paga el buffet (la empresa cubre los
+// $90 completos, no solo los $45 del beneficio normal) — pero SÍ se le
+// cobran los extras igual que a cualquiera, y eso se descuenta de nómina.
+function calcCargo(buf, ext, subsidiado) { return (buf && !subsidiado ? 45 : 0) + ext.reduce((s, e) => s + e.precio, 0); }
+function mkTicketHTML(buf, ext, pls, subsidiado) {
+  let cg = calcCargo(buf, ext, subsidiado), h = '';
   if (buf) {
     h += `<div class="t-row"><span class="l">Buffet del día</span><span class="v">$90.00</span></div>`;
     if (pls?.length) h += `<div style="font-size:.72rem;color:var(--g2);padding:.15rem 0 .3rem;line-height:1.5">${pls.join(' · ')}</div>`;
-    h += `<div class="t-row desc"><span class="l">Beneficio empresa</span><span class="v">− $45.00</span></div>`;
+    h += subsidiado
+      ? `<div class="t-row desc"><span class="l">Subsidiado — no pagas</span><span class="v">− $90.00</span></div>`
+      : `<div class="t-row desc"><span class="l">Beneficio empresa</span><span class="v">− $45.00</span></div>`;
   }
   if (ext.length) { h += `<div class="t-div"></div>`; ext.forEach(e => { h += `<div class="t-row"><span class="l">${e.nombre}</span><span class="v">$${e.precio}.00</span></div>`; }); }
   h += `<div class="t-div"></div><div class="t-row tot"><span class="l">Total a pagar</span><span class="v">$${cg}.00</span></div>`;
@@ -593,6 +599,13 @@ async function iniciarApp() {
     function set(id, val) { var el = document.getElementById(id); if (el) el.textContent = val; }
     set('top-nombre', primer);
     set('sal-nombre', 'Hola, ' + primer);
+    // Empleados subsidiados al 100%: se les avisa junto a su nombre para que
+    // no se preocupen al ver precios en el menú de hoy — esos precios no
+    // les aplican (ver renderItems: para ellos el buffet siempre marca $0).
+    if (perfil.subsidiado) {
+      var elSalNombre = document.getElementById('sal-nombre');
+      if (elSalNombre) elSalNombre.innerHTML = 'Hola, ' + primer + ' <span class="badge-subsidiado">Subsidiado ¡No pagas!</span>';
+    }
     set('sal-fecha', 'Hoy es ' + fmtFecha(hoy()));
     set('pf-nombre', n);
     set('pf-email', perfil.email || '');
@@ -690,7 +703,7 @@ function renderInicio() {
       <div class="card-head"><span class="card-label">Menú de hoy</span><span class="badge badge-verde">Disponible</span></div>
       <div class="card-bod">
         <div class="plato-nombre">${menuHoy.nombre}</div>
-        <div class="subsidio"><svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="8" cy="8" r="6"/><path d="M8 5v3l2 1.5"/></svg>La empresa subsidia $45.00</div>
+        <div class="subsidio"><svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="8" cy="8" r="6"/><path d="M8 5v3l2 1.5"/></svg>${perfil.subsidiado ? 'Eres subsidiado — tu buffet no cuesta nada' : 'La empresa subsidia $45.00'}</div>
         <div id="items-hoy"></div>
         <div class="ticket" id="ticket-hoy"><div id="ticket-hoy-rows"></div></div>
         <button class="btn-fill" id="btn-pedir-ahora" style="margin-top:.9rem">Pedir ahora</button>
@@ -712,7 +725,7 @@ function renderItems(cont, menu, modo) {
         <div class="check" style="margin-top:2px;background:transparent;border-color:var(--borde)"><svg viewBox="0 0 12 12"><polyline points="2 6 5 9 10 3"/></svg></div>
         <div><div class="item-buf-nom">Buffet completo</div><div class="item-buf-desc">${(menu.platillos||[]).join(' · ')}</div></div>
       </div>
-      <div class="item-buf-precio"><div class="item-buf-tachado">$90</div><div class="item-buf-real">$45</div></div>
+      <div class="item-buf-precio"><div class="item-buf-tachado">$90</div><div class="item-buf-real">${perfil.subsidiado ? '$0' : '$45'}</div></div>
     </div>`;
 
   const sub = document.createElement('div');
@@ -803,8 +816,8 @@ function actuTick(modo, menu) {
   const tk = document.getElementById('ticket-' + (modo === 'H' ? 'hoy' : 'det'));
   const rows = document.getElementById('ticket-' + (modo === 'H' ? 'hoy' : 'det') + '-rows');
   if (!buf && ext.length === 0) { if(tk) tk.style.display = 'none'; return; }
-  if(tk) { tk.style.display = 'block'; rows.innerHTML = mkTicketHTML(buf, ext, pls); }
-  const cg = calcCargo(buf, ext);
+  if(tk) { tk.style.display = 'block'; rows.innerHTML = mkTicketHTML(buf, ext, pls, perfil.subsidiado); }
+  const cg = calcCargo(buf, ext, perfil.subsidiado);
   if (modo === 'H') {
     const ba = document.getElementById('btn-pedir-ahora');
     if(ba) ba.textContent = `Pedir ahora — $${cg}.00`;
@@ -835,8 +848,8 @@ async function pedirAhora() {
   if (!buffetHoy && extrasHoy.length === 0) { alert('Selecciona el buffet o un extra'); return; }
   // Cancelar cualquier orden previa del día
   await cancelarOrdenesDelDia(hoy());
-  // Un empleado subsidiado al 100% no paga nada — la empresa cubre todo.
-  const cg = perfil.subsidiado ? 0 : calcCargo(buffetHoy, extrasHoy);
+  // Un empleado subsidiado al 100% no paga el buffet — pero sí los extras.
+  const cg = calcCargo(buffetHoy, extrasHoy, perfil.subsidiado);
   const data = {
     empleado_uid: auth.currentUser.uid,
     empleado_nombre: perfil.nombre,
@@ -872,8 +885,8 @@ async function crearOrden(fecha, horaPreorden) {
   const buf = fecha === hoy() ? buffetHoy : buffetDet;
   const ext = fecha === hoy() ? extrasHoy : extrasDet;
   const pls = fecha === hoy() ? platHoy : platDet;
-  // Un empleado subsidiado al 100% no paga nada — la empresa cubre todo.
-  const cg = perfil.subsidiado ? 0 : calcCargo(buf, ext);
+  // Un empleado subsidiado al 100% no paga el buffet — pero sí los extras.
+  const cg = calcCargo(buf, ext, perfil.subsidiado);
   const data = {
     empleado_uid: auth.currentUser.uid,
     empleado_nombre: perfil.nombre,
@@ -957,7 +970,7 @@ function selDia(i) {
       <div class="card-head"><span class="card-label">${fmtFecha(fecha)}${esHoy?' — Hoy':''}</span><span class="badge badge-verde">Disponible</span></div>
       <div class="card-bod">
         <div class="plato-nombre">${menu.nombre}</div>
-        <div class="subsidio"><svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="8" cy="8" r="6"/><path d="M8 5v3l2 1.5"/></svg>La empresa subsidia $45.00</div>
+        <div class="subsidio"><svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="8" cy="8" r="6"/><path d="M8 5v3l2 1.5"/></svg>${perfil.subsidiado ? 'Eres subsidiado — tu buffet no cuesta nada' : 'La empresa subsidia $45.00'}</div>
         <div id="items-det"></div>
         <div class="ticket" id="ticket-det"><div id="ticket-det-rows"></div></div>
         ${tieneOrden
@@ -974,8 +987,8 @@ function selDia(i) {
     // lo que dispara la preparación cuando el empleado llega ese día y escanea.
     document.getElementById('btn-accion-dia')?.addEventListener('click', async () => {
       if (!buffetDet && extrasDet.length === 0) { alert('Selecciona el buffet o un extra'); return; }
-      // Un empleado subsidiado al 100% no paga nada — la empresa cubre todo.
-      const cg = perfil.subsidiado ? 0 : calcCargo(buffetDet, extrasDet);
+      // Un empleado subsidiado al 100% no paga el buffet — pero sí los extras.
+      const cg = calcCargo(buffetDet, extrasDet, perfil.subsidiado);
       const data = {
         empleado_uid: auth.currentUser.uid,
         empleado_nombre: perfil.nombre,
@@ -998,7 +1011,7 @@ function selDia(i) {
 // ── CONFIRMACIÓN ──
 function mostrarConf(fecha, bc, cg, desc, buf, ext, pls) {
   document.getElementById('conf-sub').textContent = `${fmtFecha(fecha)} · ${desc}`;
-  document.getElementById('conf-ticket').innerHTML = mkTicketHTML(buf||false, ext||[], pls||[]);
+  document.getElementById('conf-ticket').innerHTML = mkTicketHTML(buf||false, ext||[], pls||[], perfil.subsidiado);
   // Sin barcode — el gafete es la identificación
   const bcDiv = document.getElementById('conf-bc-svg');
   bcDiv.innerHTML = '<div style="text-align:center;padding:1rem;background:var(--vl);border-radius:var(--rs)"><svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="var(--v)" stroke-width="1.5" stroke-linecap="round" style="margin-bottom:.5rem"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 3l-4 4-4-4"/></svg><div style="font-size:.82rem;font-weight:700;color:var(--v)">Presenta tu gafete al llegar</div></div>';
