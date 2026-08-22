@@ -15,7 +15,7 @@
 // fuerza una recarga limpia. sessionStorage evita que se quede en bucle si
 // version.txt no está disponible por algún motivo.
 (function(){
-  var V='20260822-2';
+  var V='20260822-3';
   try{
     fetch('version.txt?_='+Date.now(),{cache:'no-store'}).then(function(r){return r.ok?r.text():null;}).then(function(t){
       if(!t) return;
@@ -1917,7 +1917,6 @@ async function aplicarCambiosIngresos(){
   const resCorregidos = await aplicarCorregidosLote(corregidos);
   bar.style.width = '100%';
 
-  btn.disabled = false; btnCancelar.disabled = false;
   msg.style.display='block';
 
   let resumen = resAltas.nuevosCreados.length+' de '+altas.length+' alta(s) aplicada(s), '+actualizados.length+' actualizado(s), '+resCorregidos.actualizados+' de '+corregidos.length+' ID(s) corregido(s).';
@@ -1952,7 +1951,12 @@ async function aplicarCambiosIngresos(){
     document.getElementById('ing-preview').appendChild(btnGafetes);
   }
 
-  ingRegistros = []; ingDuplicados = [];
+  // "Aplicar cambios" ya se usó — se quita del todo (no solo se reactiva)
+  // para que un segundo clic por accidente no vuelva a intentar los MISMOS
+  // cambios ya aplicados. El mensaje y el botón de gafetes se quedan
+  // visibles; para volver a comparar hay que subir el archivo de nuevo.
+  btn.remove(); btnCancelar.remove();
+  ingRegistros = []; ingDuplicados = []; ingDiff = { altas:[], actualizados:[], sinCambios:[], corregidos:[], ambiguos:[] };
   document.getElementById('ing-input').value = '';
   cargarEmpleados();
 }
@@ -2236,7 +2240,6 @@ async function aplicarCambiosHeadCount(){
   const resCorregidos = await aplicarCorregidosLote(corregidos);
   bar.style.width = '100%';
 
-  btn.disabled = false; btnCancelar.disabled = false;
   msg.style.display='block';
 
   let resumen = resAltas.nuevosCreados.length+' de '+altas.length+' alta(s) aplicada(s), '+bajas.length+' baja(s), '+actualizados.length+' actualizado(s), '+resCorregidos.actualizados+' de '+corregidos.length+' ID(s) corregido(s).';
@@ -2277,6 +2280,15 @@ async function aplicarCambiosHeadCount(){
     btnGafetes.addEventListener('click', function(){ imprimirGafetesLote(resAltas.nuevosCreados); });
     document.getElementById('hc-preview').appendChild(btnGafetes);
   }
+
+  // "Aplicar cambios" ya se usó — se quita del todo (en vez de solo
+  // reactivarlo) para que un segundo clic por accidente no vuelva a
+  // intentar los MISMOS cambios ya aplicados contra un directorio que ya
+  // cambió. El mensaje de resultado y el botón de gafetes se quedan
+  // visibles; para volver a comparar hay que subir el archivo de nuevo.
+  btn.remove(); btnCancelar.remove();
+  hcRegistros = []; hcDuplicados = []; hcDiff = null;
+  document.getElementById('hc-input').value = '';
 
   cargarEmpleados();
 }
