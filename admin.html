@@ -15,7 +15,7 @@
 // fuerza una recarga limpia. sessionStorage evita que se quede en bucle si
 // version.txt no está disponible por algún motivo.
 (function(){
-  var V='20260820-14';
+  var V='20260820-15';
   try{
     fetch('version.txt?_='+Date.now(),{cache:'no-store'}).then(function(r){return r.ok?r.text():null;}).then(function(t){
       if(!t) return;
@@ -525,6 +525,16 @@ input[type=file]{display:none}
             </table></div>
           </div>
         </div>
+
+        <!-- ZONA DE PELIGRO -->
+        <div class="card" style="border:1.5px solid var(--rojo)">
+          <div class="card-head"><span class="card-titulo" style="color:var(--rojo)">⚠️ Zona de peligro</span></div>
+          <div class="card-body">
+            <p style="font-size:.82rem;color:var(--g2);margin-bottom:1rem">Borra PARA SIEMPRE (no se puede deshacer) a todos los empleados y cuentas de chef del sistema — junto con su acceso de login. Las cuentas de admin nunca se tocan. Úsalo solo para empezar de cero, por ejemplo después de corregir todos los IDs y antes de recargar el Head Count completo.</p>
+            <button class="btn btn-danger btn-sm" id="btn-eliminar-no-admin" onclick="eliminarTodosMenosAdmin()">🗑 Eliminar a todos menos admin</button>
+            <div class="msg" id="eliminar-no-admin-msg"></div>
+          </div>
+        </div>
       </div>
 
       <!-- MENÚS -->
@@ -804,6 +814,65 @@ async function migrarLoginsEmpleadosLote(){
   const resp = await _fnsMigrarLogins({});
   return (resp && resp.data && resp.data.resultados) || [];
 }
+// eliminarEmpleadosNoAdmin: borra PARA SIEMPRE (Firestore + login de
+// Firebase Auth) a todos los empleados y chefs, dejando solo las cuentas
+// de admin. Es de servidor porque borrar la cuenta de Auth de otra
+// persona requiere permisos de administrador de Firebase.
+const _fnsEliminarNoAdmin = (function(){
+  try { return firebase.functions().httpsCallable('eliminarEmpleadosNoAdmin', { timeout: 540000 }); }
+  catch(e){ return null; }
+})();
+async function eliminarEmpleadosNoAdminLote(){
+  if(!_fnsEliminarNoAdmin){
+    throw new Error('La función de servidor no está disponible. Verifica que eliminarEmpleadosNoAdmin esté desplegada en Firebase.');
+  }
+  const resp = await _fnsEliminarNoAdmin({});
+  return (resp && resp.data && resp.data.resultados) || [];
+}
+
+// Borra PARA SIEMPRE a todos los empleados y chefs (nunca a admin). Doble
+// confirmación a propósito — primero un conteo real de a quién le tocaría,
+// y luego pedir que escriban una frase exacta — porque esto no se puede
+// deshacer y borra también el acceso de login, no solo el directorio.
+window.eliminarTodosMenosAdmin = async function(){
+  const btn = document.getElementById('btn-eliminar-no-admin');
+  const msg = document.getElementById('eliminar-no-admin-msg');
+  msg.style.display='none';
+  btn.disabled = true;
+  try {
+    const snap = await db.collection('empleados').get();
+    const aBorrar = [];
+    snap.forEach(function(d){ if(d.data().rol !== 'admin') aBorrar.push(d.data()); });
+    if(!aBorrar.length){
+      msg.className = 'msg ok'; msg.textContent = 'No hay nadie que borrar — solo quedan cuentas de admin.'; msg.style.display='block';
+      return;
+    }
+    const conCodigo = aBorrar.filter(function(e){ return e.rol==='chef'; }).length;
+    if(!confirm('Esto va a BORRAR PARA SIEMPRE a ' + aBorrar.length + ' cuenta(s) — TODOS los empleados' + (conCodigo?' y ' + conCodigo + ' chef(s)':'') + ' — junto con su acceso de login. NO se puede deshacer. ¿Seguro que quieres continuar?')){
+      return;
+    }
+    const escrito = prompt('Para confirmar, escribe exactamente:\nELIMINAR TODO');
+    if(escrito !== 'ELIMINAR TODO'){
+      msg.className = 'msg'; msg.textContent = 'Cancelado — no se borró nada (no escribiste el texto exacto).'; msg.style.display='block';
+      return;
+    }
+    msg.className = 'msg'; msg.textContent = 'Borrando ' + aBorrar.length + ' cuenta(s)…'; msg.style.display='block';
+    const resultados = await eliminarEmpleadosNoAdminLote();
+    const ok = resultados.filter(function(r){ return r.ok; }).length;
+    const conError = resultados.filter(function(r){ return !r.ok; });
+    let html = ok + ' de ' + resultados.length + ' cuenta(s) borrada(s) para siempre.';
+    if(conError.length) html += '<br>' + conError.length + ' con error: ' + conError.slice(0,10).map(function(e){ return (e.nombre||e.uid)+' — '+e.error; }).join(', ') + (conError.length>10?' …':'');
+    msg.className = 'msg ' + (conError.length ? 'err' : 'ok');
+    msg.innerHTML = html;
+    cargarEmpleados();
+    cargarDashboard();
+  } catch(err){
+    console.error('Error al eliminar empleados:', err);
+    msg.className = 'msg err'; msg.textContent = 'No se pudo completar: ' + (err.message || err); msg.style.display='block';
+  } finally {
+    btn.disabled = false;
+  }
+};
 
 const DS = ['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'];
 const MS2 = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
@@ -1371,6 +1440,45 @@ function normalizarNombreOrdenado(v){
   return normalizarNombreComparar(v).split(' ').filter(Boolean).sort().join(' ');
 }
 
+// Repara nombres "mojibake": alguien exportó/copió el Excel con un programa
+// que interpretó los bytes UTF-8 originales (con Ñ y acentos) como si
+// fueran Windows-1252 — así "Ñ" se guardó como "Ã" + una comilla curva, "é"
+// como "Ã©", etc. Esto intenta deshacer exactamente esa conversión. Si el
+// resultado no queda como texto UTF-8 válido, o el nombre no tiene ninguno
+// de estos caracteres raros, regresa el nombre tal cual — nunca inventa
+// letras nuevas, solo puede reconstruir lo que ya estaba ahí mal codificado.
+const WIN1252_ESPECIALES = {
+  0x80:0x20AC,0x82:0x201A,0x83:0x0192,0x84:0x201E,0x85:0x2026,0x86:0x2020,
+  0x87:0x2021,0x88:0x02C6,0x89:0x2030,0x8A:0x0160,0x8B:0x2039,0x8C:0x0152,
+  0x8E:0x017D,0x91:0x2018,0x92:0x2019,0x93:0x201C,0x94:0x201D,0x95:0x2022,
+  0x96:0x2013,0x97:0x2014,0x98:0x02DC,0x99:0x2122,0x9A:0x0161,0x9B:0x203A,
+  0x9C:0x0153,0x9E:0x017E,0x9F:0x0178
+};
+const WIN1252_INVERSO = (function(){
+  const m = {};
+  Object.keys(WIN1252_ESPECIALES).forEach(function(byte){ m[WIN1252_ESPECIALES[byte]] = Number(byte); });
+  return m;
+})();
+function repararMojibake(s){
+  const str = String(s==null?'':s);
+  if(!str) return str;
+  const bytes = [];
+  for(let i=0;i<str.length;i++){
+    const code = str.codePointAt(i);
+    if(code > 0xFFFF) return str; // fuera de rango — no es este tipo de corrupción
+    let byte;
+    if(code <= 0xFF) byte = code;
+    else if(WIN1252_INVERSO[code] !== undefined) byte = WIN1252_INVERSO[code];
+    else return str; // carácter que no encaja en Windows-1252 — no tocar
+    bytes.push(byte);
+  }
+  try {
+    return new TextDecoder('utf-8', { fatal:true }).decode(new Uint8Array(bytes));
+  } catch(e){
+    return str; // no decodificó como UTF-8 válido — no era este tipo de corrupción
+  }
+}
+
 function parseCorreccionIdFilas(filas){
   if(!filas || !filas.length) return [];
   const headers = filas[0];
@@ -1385,11 +1493,15 @@ function parseCorreccionIdFilas(filas){
     const nombre = val(fila,iNombre);
     const id = val(fila,iId);
     if(!nombre || !id) continue;
+    const nombreReparado = repararMojibake(nombre);
     out.push({
       id_nuevo: id,
       nombre_excel: nombre,
+      nombre_reparado: nombreReparado !== nombre ? nombreReparado : null,
       nombre_comparar: normalizarNombreComparar(nombre),
       nombre_ordenado: normalizarNombreOrdenado(nombre),
+      nombre_comparar_reparado: normalizarNombreComparar(nombreReparado),
+      nombre_ordenado_reparado: normalizarNombreOrdenado(nombreReparado),
       comedor_nuevo: normalizarCentroHC(val(fila,iCentro))
     });
   }
@@ -1470,12 +1582,22 @@ async function calcularPreviewCorreccion(registros){
 
   unicos.forEach(function(r){
     let candidatos = porNombreDir[r.nombre_comparar];
-    let viaOrden = false;
+    let viaOrden = false, viaMojibake = false;
     if(!candidatos || !candidatos.length){
       // No hubo coincidencia exacta — intenta de nuevo ignorando el orden
       // de las palabras (mismo nombre, distinto orden de apellidos/nombre).
       candidatos = porNombreDirOrdenado[r.nombre_ordenado];
       viaOrden = true;
+    }
+    if((!candidatos || !candidatos.length) && r.nombre_reparado){
+      // Tampoco — si el nombre del Excel trae acentos/Ñ rotos (mojibake),
+      // intenta otra vez con el nombre ya reparado, tal cual y revuelto.
+      candidatos = porNombreDir[r.nombre_comparar_reparado];
+      viaOrden = false; viaMojibake = true;
+      if(!candidatos || !candidatos.length){
+        candidatos = porNombreDirOrdenado[r.nombre_ordenado_reparado];
+        viaOrden = true;
+      }
     }
     if(!candidatos || !candidatos.length){
       correccionNoEncontrados.push(r);
@@ -1494,6 +1616,7 @@ async function calcularPreviewCorreccion(registros){
     }
     correccionCambios.push({
       uid: emp.uid, nombre: emp.nombre,
+      viaMojibake: viaMojibake,
       idViejo: idViejo, idNuevo: r.id_nuevo,
       centroViejo: centroViejo, centroNuevo: r.comedor_nuevo,
       viaOrden: viaOrden
@@ -1521,6 +1644,7 @@ function renderPreviewCorreccion(){
           return '<div style="font-size:.8rem;padding:.4rem .6rem;border-bottom:1px solid var(--borde2)">'
             + '<strong>' + escHtml(c.nombre) + '</strong>'
             + (c.viaOrden ? ' <span style="font-size:.68rem;color:var(--naranja);font-weight:700">· nombre en otro orden, revisa</span>' : '')
+            + (c.viaMojibake ? ' <span style="font-size:.68rem;color:var(--rojo);font-weight:700">· acentos/Ñ rotos en el Excel, revisa</span>' : '')
             + '<br>'
             + 'ID: ' + escHtml(String(c.idViejo)) + ' → <strong style="color:var(--v)">' + escHtml(String(c.idNuevo)) + '</strong>'
             + (cambioCentro ? ' · Centro: ' + escHtml(comedorLabels[c.centroViejo]||c.centroViejo) + ' → <strong style="color:var(--v)">' + escHtml(comedorLabels[c.centroNuevo]||c.centroNuevo) + '</strong>' : '')
@@ -1533,7 +1657,7 @@ function renderPreviewCorreccion(){
   if(correccionNoEncontrados.length){
     html += '<div style="font-size:.72rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--naranja);margin-bottom:.4rem">No encontrados en el directorio (revisa el nombre a mano)</div>'
       + '<div style="max-height:160px;overflow-y:auto;margin-bottom:1rem;font-size:.8rem;color:var(--g2)">'
-      + correccionNoEncontrados.slice(0,50).map(function(r){ return '<div style="padding:.2rem 0">'+escHtml(r.nombre_excel)+' — ID '+escHtml(r.id_nuevo)+'</div>'; }).join('')
+      + correccionNoEncontrados.slice(0,50).map(function(r){ return '<div style="padding:.2rem 0">'+escHtml(r.nombre_excel)+(r.nombre_reparado?' <span style="color:var(--g3)">(¿'+escHtml(r.nombre_reparado)+'?)</span>':'')+' — ID '+escHtml(r.id_nuevo)+'</div>'; }).join('')
       + (correccionNoEncontrados.length>50 ? '<div style="color:var(--g3)">+'+(correccionNoEncontrados.length-50)+' más</div>' : '')
       + '</div>';
   }
