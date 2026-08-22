@@ -15,7 +15,7 @@
 // fuerza una recarga limpia. sessionStorage evita que se quede en bucle si
 // version.txt no está disponible por algún motivo.
 (function(){
-  var V='20260822-4';
+  var V='20260822-7';
   try{
     fetch('version.txt?_='+Date.now(),{cache:'no-store'}).then(function(r){return r.ok?r.text():null;}).then(function(t){
       if(!t) return;
@@ -297,6 +297,10 @@ input[type=file]{display:none}
       <div class="nav-item" data-sec="empleados" onclick="irSec('empleados',this)">
         <svg viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>Empleados
       </div>
+      <div class="nav-item" data-sec="riesgo" onclick="irSec('riesgo',this)" style="position:relative">
+        <svg viewBox="0 0 24 24"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>En riesgo
+        <span id="riesgo-badge" style="display:none;position:absolute;right:.9rem;top:50%;transform:translateY(-50%);background:var(--rojo);color:#fff;font-size:.66rem;font-weight:800;line-height:1;padding:.3rem .45rem;border-radius:20px">0</span>
+      </div>
       <div class="nav-item" data-sec="ingresos" onclick="irSec('ingresos',this)">
         <svg viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="8.5" cy="7" r="4"/><line x1="20" y1="8" x2="20" y2="14"/><line x1="23" y1="11" x2="17" y2="11"/></svg>HC diario
       </div>
@@ -433,7 +437,7 @@ input[type=file]{display:none}
         <div class="card">
           <div class="card-head"><span class="card-titulo">Head Count semanal</span></div>
           <div class="card-body">
-            <p style="font-size:.82rem;color:var(--g2);margin-bottom:1rem">Este es la base de todo: súbelo cada semana (normalmente los martes) con el archivo completo. El sistema lo compara contra el directorio actual, te muestra exactamente qué va a cambiar (altas, bajas, actualizados, corregidos) antes de tocar nada, y solo entonces aplica los cambios. Es el único lugar que da de baja a alguien. Nunca toca cuentas de admin, chef ni empleados agregados a mano.</p>
+            <p style="font-size:.82rem;color:var(--g2);margin-bottom:1rem">Este es la base de todo: súbelo cada semana (normalmente los martes) con el archivo completo. El sistema lo compara contra el directorio actual, te muestra exactamente qué va a cambiar (altas, actualizados, corregidos) antes de tocar nada, y solo entonces aplica los cambios. A quien no aparezca se le suma una falta — nadie se borra de una sola vez; a la 3ª falta seguida sin aparecer queda lista en "En riesgo" para que tú confirmes la baja. Nunca toca cuentas de admin, chef ni empleados agregados a mano.</p>
             <div class="drop-area" id="hc-drop-area" onclick="document.getElementById('hc-input').click()">
               <div class="drop-icon">
                 <svg viewBox="0 0 24 24" fill="none" stroke="var(--g3)" stroke-width="1.5" stroke-linecap="round">
@@ -537,6 +541,35 @@ input[type=file]{display:none}
             <p style="font-size:.82rem;color:var(--g2);margin-bottom:1rem">Borra PARA SIEMPRE (no se puede deshacer) a todos los empleados y cuentas de chef del sistema — junto con su acceso de login. Las cuentas de admin nunca se tocan. Úsalo solo para empezar de cero, por ejemplo después de corregir todos los IDs y antes de recargar el Head Count completo.</p>
             <button class="btn btn-danger btn-sm" id="btn-eliminar-no-admin" onclick="eliminarTodosMenosAdmin()">🗑 Eliminar a todos menos admin</button>
             <div class="msg" id="eliminar-no-admin-msg"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- EN RIESGO (control de faltas del Head Count semanal — 3 faltas seguidas = baja, con tu confirmación) -->
+      <div class="seccion" id="sec-riesgo">
+        <div class="sec-titulo">En riesgo</div>
+        <div class="sec-sub">Aquí se controla quién ha dejado de aparecer en el Head Count semanal. Si alguien no aparece una semana no se le da de baja — se le suma una falta. En cuanto reaparece en el Head Count, su contador se regresa a cero solo. A la 3ª falta seguida queda lista aquí abajo para que tú confirmes la baja — nunca se borra nadie sin que tú lo apruebes.</div>
+
+        <div class="card">
+          <div class="card-head"><span class="card-titulo">⚠️ Listos para dar de baja — 3 o más faltas seguidas</span></div>
+          <div class="card-body">
+            <div id="riesgo-pendientes-lista"><div style="font-size:.82rem;color:var(--g3)">Cargando…</div></div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-head"><span class="card-titulo">2 semanas sin aparecer</span></div>
+          <div class="card-body">
+            <p style="font-size:.78rem;color:var(--g2);margin-bottom:.75rem">Solo informativo — si no aparecen la próxima semana pasan a la lista de arriba.</p>
+            <div id="riesgo-2-lista"><div style="font-size:.82rem;color:var(--g3)">Cargando…</div></div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-head"><span class="card-titulo">1 semana sin aparecer</span></div>
+          <div class="card-body">
+            <p style="font-size:.78rem;color:var(--g2);margin-bottom:.75rem">Solo informativo — todavía no hay nada que hacer.</p>
+            <div id="riesgo-1-lista"><div style="font-size:.82rem;color:var(--g3)">Cargando…</div></div>
           </div>
         </div>
       </div>
@@ -1100,7 +1133,7 @@ window.irSec=function(sec,el){
   el.classList.add('on');
   document.querySelectorAll('.seccion').forEach(s=>s.classList.remove('on'));
   document.getElementById('sec-'+sec).classList.add('on');
-  const titulos={dashboard:'Dashboard',empleados:'Empleados',ingresos:'HC diario',menus:'Menús de la semana',reportes:'Reportes',pendientes:'Órdenes pendientes'};
+  const titulos={dashboard:'Dashboard',empleados:'Empleados',riesgo:'En riesgo',ingresos:'HC diario',menus:'Menús de la semana',reportes:'Reportes',pendientes:'Órdenes pendientes'};
   document.getElementById('topbar-titulo').textContent=titulos[sec]||sec;
   if(sec==='reportes')cargarReporte();
   if(sec==='pendientes')cargarPendientes();
@@ -1645,7 +1678,7 @@ async function emparejarConDirectorioHC(registros){
   snap.forEach(function(d){
     const e = d.data();
     if(!e.hc_id) return;
-    actuales[normalizarHcId(e.hc_id)] = { uid:d.id, nombre:e.nombre, puesto:e.puesto, comedor:e.comedor, hc_id:e.hc_id };
+    actuales[normalizarHcId(e.hc_id)] = { uid:d.id, nombre:e.nombre, puesto:e.puesto, comedor:e.comedor, hc_id:e.hc_id, semanas_ausente_hc:e.semanas_ausente_hc||0 };
   });
   const restantes = Object.assign({}, actuales);
 
@@ -1658,9 +1691,9 @@ async function emparejarConDirectorioHC(registros){
     const actual = actuales[key];
     if(actual){
       if(actual.nombre !== r.nombre || actual.comedor !== r.comedor){
-        actualizados.push({ uid:actual.uid, antes:actual, despues:r });
+        actualizados.push({ uid:actual.uid, antes:actual, despues:r, semanas_ausente_hc: actual.semanas_ausente_hc||0 });
       } else {
-        sinCambios.push(Object.assign({ uid:actual.uid }, r));
+        sinCambios.push(Object.assign({ uid:actual.uid, semanas_ausente_hc: actual.semanas_ausente_hc||0 }, r));
       }
       delete restantes[key];
     } else {
@@ -1720,6 +1753,10 @@ async function emparejarConDirectorioHC(registros){
     delete restantes[k];
   });
 
+  // "bajas" aquí es solo "no apareció esta vez" — cada quién trae su
+  // semanas_ausente_hc actual (de antes de esta subida); quien la llama
+  // decide qué hacer con eso (el Head Count semanal es el único que lleva
+  // el conteo de faltas seguidas — ver aplicarCambiosHeadCount).
   const bajas = Object.keys(restantes).map(function(k){ return restantes[k]; });
   return { altas: altas, actualizados: actualizados, sinCambios: sinCambios, corregidos: corregidos, ambiguos: ambiguos, bajas: bajas };
 }
@@ -1767,7 +1804,9 @@ async function aplicarCorregidosLote(corregidos){
     const lote = corregidos.slice(i,i+450);
     const batch = db.batch();
     lote.forEach(function(c){
-      batch.update(db.collection('empleados').doc(c.uid), { hc_id: c.idNuevo, nombre: c.nombreDespues, comedor: c.centroNuevo });
+      // semanas_ausente_hc en 0: esta persona SÍ está en el archivo de esta
+      // semana (nomás cambió de ID), así que no cuenta como ausencia.
+      batch.update(db.collection('empleados').doc(c.uid), { hc_id: c.idNuevo, nombre: c.nombreDespues, comedor: c.centroNuevo, semanas_ausente_hc: 0 });
     });
     try { await batch.commit(); actualizados += lote.length; }
     catch(err){ lote.forEach(function(c){ erroresDirectorio.push(c.nombreDespues+': '+err.message); }); }
@@ -2121,32 +2160,45 @@ function renderPreviewHeadCount(){
     return '<details style="margin-bottom:.85rem"><summary style="cursor:pointer;font-size:.82rem;font-weight:700;color:var(--negro);padding:.3rem 0">'+titulo+' ('+items.length+')</summary><div style="max-height:220px;overflow-y:auto;padding:.4rem .2rem">'+listaHtml(items, getTexto)+'</div></details>';
   }
 
+  // Las "bajas" (los que no aparecieron esta vez) ya no se borran de una
+  // vez — se les suma una falta seguida, y solo se convierten en baja de
+  // verdad hasta llegar a 3 faltas seguidas, y esa confirmación se pide
+  // aparte, en la pestaña "En riesgo" (no aquí). Ver aplicarCambiosHeadCount.
+  const nuevasFaltas1 = bajas.filter(function(b){ return (b.semanas_ausente_hc||0)+1 === 1; }).length;
+  const nuevasFaltas2 = bajas.filter(function(b){ return (b.semanas_ausente_hc||0)+1 === 2; }).length;
+  const nuevosPendientesBaja = bajas.filter(function(b){ return (b.semanas_ausente_hc||0)+1 >= 3; }).length;
+
   preview.innerHTML =
     '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:.75rem;margin-bottom:1.25rem">' +
       statTile('Altas', altas.length, 'var(--v)') +
-      statTile('Bajas', bajas.length, 'var(--rojo)') +
+      statTile('No aparecieron', bajas.length, 'var(--rojo)') +
       statTile('Actualizados', actualizados.length, 'var(--naranja)') +
       statTile('ID corregido', corregidos.length, 'var(--naranja)') +
       statTile('Sin cambios', sinCambios.length, 'var(--g2)') +
       statTile('Duplicados en archivo', hcDuplicados.length, 'var(--rojo)') +
     '</div>' +
     detalle('Altas — nuevo ingreso', altas, function(r){ return r.nombre+' · '+r.comedor; }) +
-    detalle('Bajas — ya no aparecen en el Head Count', bajas, function(r){ return r.nombre+' — '+r.puesto+' · '+r.comedor; }) +
+    detalle('No aparecieron esta semana — se les suma una falta (no se borran solos)', bajas, function(r){
+      const n = (r.semanas_ausente_hc||0)+1;
+      return r.nombre+' — '+r.puesto+' · '+r.comedor+' · '+(n>=3?'⚠️ ya lleva '+n+' faltas seguidas':'falta '+n+' de 3');
+    }) +
     detalle('Actualizados — cambió nombre o comedor (mismo ID)', actualizados, function(r){ return r.despues.nombre+' — '+r.antes.comedor+' → '+r.despues.comedor; }) +
     detalle('ID corregido — mismo nombre, ID distinto (se sincroniza el acceso solo)', corregidos, function(c){
       return c.nombreDespues + (c.viaOrden?' · nombre en otro orden':'') + (c.viaMojibake?' · acentos/Ñ rotos en el Excel':'') + ' — ID ' + c.idViejo + ' → ' + c.idNuevo;
     }) +
     (ambiguos.length ? detalle('Ambiguos — hay más de un empleado con este nombre, se tratan como alta nueva sin corregir nada (revisa a mano)', ambiguos, function(r){ return r.nombre; }) : '') +
     (hcDuplicados.length ? detalle('Duplicados en el archivo — revisa a mano, no se procesan solos', hcDuplicados, function(g){ return g.map(function(x){return x.nombre;}).join(' / ')+' (mismo identificador: '+g[0].hc_id+')'; }) : '') +
+    (bajas.length ? '<div style="font-size:.78rem;color:var(--g2);background:var(--crema);border-radius:10px;padding:.7rem .9rem;margin-bottom:1rem">'+
+      'De los que no aparecieron: '+nuevasFaltas1+' van en su 1ª falta, '+nuevasFaltas2+' en su 2ª, y '+nuevosPendientesBaja+' ya juntan 3 o más — esos '+nuevosPendientesBaja+' van a esperar tu confirmación en la pestaña <b>En riesgo</b> para darlos de baja.'+
+      '</div>' : '') +
     '<div style="margin-top:1rem;padding-top:1rem;border-top:1px solid var(--borde2)">' +
       '<div style="font-size:.72rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--g2);margin-bottom:.6rem">Qué aplicar</div>' +
       '<div style="display:flex;flex-direction:column;gap:.5rem">' +
         '<label style="display:flex;align-items:center;gap:.5rem;cursor:pointer"><input type="checkbox" id="hc-chk-altas" style="width:auto"'+(altas.length?' checked':' disabled')+'/> Dar de alta a los '+altas.length+' nuevo(s)</label>' +
-        '<label style="display:flex;align-items:center;gap:.5rem;cursor:pointer"><input type="checkbox" id="hc-chk-bajas" style="width:auto"'+(bajas.length?' checked':' disabled')+'/> Dar de baja (borrar) a los '+bajas.length+' que ya no aparecen</label>' +
         '<label style="display:flex;align-items:center;gap:.5rem;cursor:pointer"><input type="checkbox" id="hc-chk-actualizados" style="width:auto"'+(actualizados.length?' checked':' disabled')+'/> Actualizar nombre/comedor de los '+actualizados.length+' que cambiaron</label>' +
         '<label style="display:flex;align-items:center;gap:.5rem;cursor:pointer"><input type="checkbox" id="hc-chk-corregidos" style="width:auto"'+(corregidos.length?' checked':' disabled')+'/> Corregir el ID de los '+corregidos.length+' que cambiaron de ID (misma persona, mismo nombre)</label>' +
       '</div>' +
-      '<div style="font-size:.72rem;color:var(--g3);margin-top:.5rem">Destíldalas para aplicar solo lo que quieras esta vez — por ejemplo, si las bajas te parecen sospechosas, destilda esa y aplica nomás el resto.</div>' +
+      '<div style="font-size:.72rem;color:var(--g3);margin-top:.5rem">Destíldalas para aplicar solo lo que quieras esta vez. El conteo de faltas de los que no aparecieron siempre se registra (no se puede destildar) — pero nunca borra a nadie de una vez; eso solo pasa si confirmas en "En riesgo".</div>' +
     '</div>' +
     '<div style="display:flex;gap:.75rem;margin-top:1.25rem;flex-wrap:wrap;align-items:center">' +
       '<button class="btn btn-v" id="btn-aplicar-hc">Aplicar cambios</button>' +
@@ -2169,16 +2221,16 @@ window.cancelarHeadCount = function(){
 function cancelarHeadCount(){ window.cancelarHeadCount(); }
 
 async function aplicarCambiosHeadCount(){
-  // Cada grupo (altas/bajas/actualizados/corregidos) solo se procesa si su
-  // casilla sigue marcada — así el admin puede destildar, por ejemplo, las
-  // bajas si le parecen sospechosas, y aplicar solo el resto, en vez de
-  // todo o nada.
+  // Cada grupo (altas/actualizados/corregidos) solo se procesa si su
+  // casilla sigue marcada — así el admin puede destildar y aplicar solo el
+  // resto, en vez de todo o nada. Las "no aparecieron" (antes "bajas") ya
+  // no llevan casilla: nomás les suma una falta, nunca borra a nadie de
+  // una vez — eso se confirma aparte, en la pestaña "En riesgo".
   const chkAltas = document.getElementById('hc-chk-altas');
-  const chkBajas = document.getElementById('hc-chk-bajas');
   const chkActualizados = document.getElementById('hc-chk-actualizados');
   const chkCorregidos = document.getElementById('hc-chk-corregidos');
   const altas = (chkAltas && !chkAltas.checked) ? [] : hcDiff.altas;
-  const bajas = (chkBajas && !chkBajas.checked) ? [] : hcDiff.bajas;
+  const bajas = hcDiff.bajas;
   const actualizados = (chkActualizados && !chkActualizados.checked) ? [] : hcDiff.actualizados;
   const corregidos = (chkCorregidos && !chkCorregidos.checked) ? [] : hcDiff.corregidos;
   const btn = document.getElementById('btn-aplicar-hc');
@@ -2200,20 +2252,37 @@ async function aplicarCambiosHeadCount(){
   const resAltas = await crearAltasLote(altas, hoyStr);
   bar.style.width = '40%';
 
-  // 2) BAJAS + ACTUALIZADOS — en lotes atómicos (máx 450 operaciones por lote)
+  // 2) NO APARECIERON + ACTUALIZADOS + SIN CAMBIOS QUE VENÍAN CON FALTAS —
+  // en lotes atómicos (máx 450 operaciones por lote). A quien no aparece se
+  // le suma una falta seguida (semanas_ausente_hc); nadie se borra aquí —
+  // llegar a 3 solo lo deja listo para que tú lo confirmes en "En riesgo".
   const operaciones = [];
+  let nuevasFaltas1 = 0, nuevasFaltas2 = 0, nuevosPendientesBaja = 0;
   bajas.forEach(function(b){
-    operaciones.push({ tipo:'delete', ref: db.collection('empleados').doc(b.uid) });
-    operaciones.push({ tipo:'set', ref: db.collection('movimientos_headcount').doc(), data:{
-      tipo:'baja', nombre:b.nombre, hc_id:b.hc_id, puesto:b.puesto, comedor:b.comedor,
-      fecha:hoyStr, motivo:'head_count_diario', creado_en:new Date()
+    const contador = (b.semanas_ausente_hc||0) + 1;
+    operaciones.push({ tipo:'update', ref: db.collection('empleados').doc(b.uid), data:{
+      semanas_ausente_hc: contador, ultima_ausencia_hc: hoyStr
     }});
+    if(contador === 1) nuevasFaltas1++;
+    else if(contador === 2) nuevasFaltas2++;
+    else nuevosPendientesBaja++;
   });
   actualizados.forEach(function(a){
     // Puesto no se toca: el archivo (ID, Nombre, Centro) ya no lo trae.
+    // semanas_ausente_hc en 0: si venía con faltas acumuladas, esta semana
+    // sí apareció (aunque con nombre/comedor distinto), así que se limpian.
     operaciones.push({ tipo:'update', ref: db.collection('empleados').doc(a.uid), data:{
-      nombre:a.despues.nombre, comedor:a.despues.comedor
+      nombre:a.despues.nombre, comedor:a.despues.comedor, semanas_ausente_hc: 0
     }});
+  });
+  // Los que no cambiaron nada normalmente no generan escritura (para no
+  // tocar cientos de documentos cada semana sin necesidad) — la única
+  // excepción es si venían con faltas acumuladas de semanas anteriores y
+  // esta vez sí aparecieron: a esos hay que resetearles el contador.
+  hcDiff.sinCambios.forEach(function(s){
+    if(s.semanas_ausente_hc){
+      operaciones.push({ tipo:'update', ref: db.collection('empleados').doc(s.uid), data:{ semanas_ausente_hc: 0 } });
+    }
   });
 
   const erroresBatch = [];
@@ -2242,10 +2311,13 @@ async function aplicarCambiosHeadCount(){
 
   msg.style.display='block';
 
-  let resumen = resAltas.nuevosCreados.length+' de '+altas.length+' alta(s) aplicada(s), '+bajas.length+' baja(s), '+actualizados.length+' actualizado(s), '+resCorregidos.actualizados+' de '+corregidos.length+' ID(s) corregido(s).';
+  let resumen = resAltas.nuevosCreados.length+' de '+altas.length+' alta(s) aplicada(s), '+actualizados.length+' actualizado(s), '+resCorregidos.actualizados+' de '+corregidos.length+' ID(s) corregido(s).';
+  if(bajas.length){
+    resumen += ' De los que no aparecieron: '+nuevasFaltas1+' en su 1ª falta, '+nuevasFaltas2+' en su 2ª'+
+      (nuevosPendientesBaja ? ', y '+nuevosPendientesBaja+' ya juntan 3 o más — revisa la pestaña "En riesgo" para confirmar su baja.' : '.');
+  }
   const omitidas = [];
   if(hcDiff.altas.length && !altas.length) omitidas.push(hcDiff.altas.length+' alta(s)');
-  if(hcDiff.bajas.length && !bajas.length) omitidas.push(hcDiff.bajas.length+' baja(s)');
   if(hcDiff.actualizados.length && !actualizados.length) omitidas.push(hcDiff.actualizados.length+' actualización(es)');
   if(hcDiff.corregidos.length && !corregidos.length) omitidas.push(hcDiff.corregidos.length+' corrección(es) de ID');
   if(omitidas.length) resumen += ' No se tocaron (casilla destildada): '+omitidas.join(', ')+'.';
@@ -2766,6 +2838,7 @@ async function cargarEmpleados(){
     snap.forEach(d=>lista.push(Object.assign({id:d.id}, d.data())));
     _empleadosListaCache = lista;
     renderResumenEmpleados(lista);
+    renderRiesgo(lista);
     if(snap.empty){ tbody.innerHTML='<tr><td colspan="6" style="text-align:center;padding:2rem;color:var(--g3)">Sin empleados registrados</td></tr>'; return; }
     tbody.innerHTML='';
     snap.forEach(d=>{
@@ -2914,6 +2987,120 @@ function renderListaSubsidiados(lista){
     '</div>';
   }).join('');
 }
+
+// ── EN RIESGO — control de faltas seguidas al Head Count semanal ──
+// Solo aplica a empleados de origen 'head_count' (los que trae el Head
+// Count): a los agregados a mano, admins y chefs nunca se les cuentan
+// faltas porque nunca se espera verlos en ese archivo.
+const COMEDOR_LABELS_RIESGO = { betel:'Betel', cuauhtemoc:'Cuauhtémoc', intelomas:'Intelomas' };
+
+function renderRiesgo(lista){
+  const contPend = document.getElementById('riesgo-pendientes-lista');
+  const cont2 = document.getElementById('riesgo-2-lista');
+  const cont1 = document.getElementById('riesgo-1-lista');
+  const badge = document.getElementById('riesgo-badge');
+  if (!contPend || !cont2 || !cont1) return;
+
+  const conFaltas = (lista||[]).filter(function(e){ return e.origen==='head_count' && (e.semanas_ausente_hc||0) > 0; });
+  const pendientes = conFaltas.filter(function(e){ return e.semanas_ausente_hc >= 3; }).sort(function(a,b){ return b.semanas_ausente_hc - a.semanas_ausente_hc; });
+  const nivel2 = conFaltas.filter(function(e){ return e.semanas_ausente_hc === 2; });
+  const nivel1 = conFaltas.filter(function(e){ return e.semanas_ausente_hc === 1; });
+
+  if (badge) {
+    if (pendientes.length) { badge.style.display='inline-block'; badge.textContent = pendientes.length; }
+    else { badge.style.display='none'; }
+  }
+
+  function filaInfo(e){
+    return '<div>'+
+        '<div style="font-size:.85rem;font-weight:600;color:var(--negro)">'+escHtml(e.nombre||'—')+'</div>'+
+        '<div style="font-size:.72rem;color:var(--g2)">'+escHtml(COMEDOR_LABELS_RIESGO[e.comedor]||e.comedor||'—')+' · ID '+escHtml(e.hc_id||'—')+(e.ultima_ausencia_hc?' · última falta: '+escHtml(e.ultima_ausencia_hc):'')+'</div>'+
+      '</div>';
+  }
+
+  if (!pendientes.length) {
+    contPend.innerHTML = '<div style="font-size:.82rem;color:var(--g3);padding:.4rem 0">Nadie por ahora — nadie lleva 3 faltas seguidas sin aparecer.</div>';
+  } else {
+    contPend.innerHTML =
+      (pendientes.length > 1 ? '<button class="btn btn-danger btn-sm" style="margin-bottom:.75rem" onclick="confirmarBajaTodosPendientes()">Dar de baja a los '+pendientes.length+'</button>' : '') +
+      pendientes.map(function(e){
+        return '<div style="display:flex;align-items:center;justify-content:space-between;gap:.75rem;padding:.6rem 0;border-bottom:1px solid var(--borde2)">'+
+          filaInfo(e) +
+          '<div style="display:flex;gap:.4rem;flex-wrap:wrap;align-items:center">'+
+            '<span class="badge badge-r" style="flex-shrink:0">'+e.semanas_ausente_hc+' falta(s)</span>'+
+            '<button class="btn btn-outline btn-sm" onclick="resetearAusenciaHC(\''+e.id+'\')">No es baja</button>'+
+            '<button class="btn btn-danger btn-sm" onclick="confirmarBajaPorAusencia(\''+e.id+'\')">Dar de baja</button>'+
+          '</div>'+
+        '</div>';
+      }).join('');
+  }
+
+  function listaInformativa(arr){
+    if (!arr.length) return '<div style="font-size:.82rem;color:var(--g3);padding:.4rem 0">Nadie por ahora.</div>';
+    return arr.map(function(e){
+      return '<div style="display:flex;align-items:center;justify-content:space-between;gap:.75rem;padding:.6rem 0;border-bottom:1px solid var(--borde2)">'+
+        filaInfo(e) +
+        '<button class="btn btn-outline btn-sm" onclick="resetearAusenciaHC(\''+e.id+'\')">No es baja</button>'+
+      '</div>';
+    }).join('');
+  }
+  cont2.innerHTML = listaInformativa(nivel2);
+  cont1.innerHTML = listaInformativa(nivel1);
+}
+
+// Confirma la baja de verdad: borra al empleado y deja registro en
+// movimientos_headcount (para que siga apareciendo en Reportes) — es la
+// ÚNICA forma en que alguien se borra por ausencias, y siempre requiere
+// este clic tuyo.
+window.confirmarBajaPorAusencia = async function(uid){
+  const e = _empleadosListaCache.find(function(x){ return x.id === uid; });
+  if (!e) return;
+  if (!confirm('¿Dar de baja a '+(e.nombre||'este empleado')+'? Lleva '+(e.semanas_ausente_hc||3)+' faltas seguidas sin aparecer en el Head Count. Esto no se puede deshacer.')) return;
+  try {
+    await addDoc(collection(db,'movimientos_headcount'), {
+      tipo:'baja', nombre:e.nombre, hc_id:e.hc_id, puesto:e.puesto, comedor:e.comedor,
+      fecha:hoy(), motivo:'ausencia_'+(e.semanas_ausente_hc||3)+'_semanas', creado_en:new Date()
+    });
+    await deleteDoc(doc(db,'empleados',uid));
+  } catch(err){
+    console.error('Error al dar de baja por ausencia:', err);
+    alert('No se pudo dar de baja a '+(e.nombre||'este empleado')+': '+err.message);
+  }
+};
+
+window.confirmarBajaTodosPendientes = async function(){
+  const pendientes = (_empleadosListaCache||[]).filter(function(e){ return e.origen==='head_count' && (e.semanas_ausente_hc||0) >= 3; });
+  if (!pendientes.length) return;
+  if (!confirm('¿Dar de baja a los '+pendientes.length+' que ya llevan 3 o más faltas seguidas? Esto no se puede deshacer.')) return;
+  const errores = [];
+  for (let i=0;i<pendientes.length;i+=450){
+    const lote = pendientes.slice(i,i+450);
+    const batch = db.batch();
+    lote.forEach(function(e){
+      batch.delete(db.collection('empleados').doc(e.id));
+      batch.set(db.collection('movimientos_headcount').doc(), {
+        tipo:'baja', nombre:e.nombre, hc_id:e.hc_id, puesto:e.puesto, comedor:e.comedor,
+        fecha:hoy(), motivo:'ausencia_'+(e.semanas_ausente_hc||3)+'_semanas', creado_en:new Date()
+      });
+    });
+    try { await batch.commit(); }
+    catch(err){ console.error('Error al dar de baja en lote por ausencia:', err); errores.push(err.message); }
+  }
+  if (errores.length) alert('Hubo un problema al dar de baja a algunos: '+errores.join(' | '));
+};
+
+// "No es baja" — regresa el contador de faltas a cero sin tocar nada más,
+// por ejemplo si sabes que esa persona sigue activa aunque no haya salido
+// en el Head Count (permiso, incapacidad, etc.).
+window.resetearAusenciaHC = async function(uid){
+  const e = _empleadosListaCache.find(function(x){ return x.id === uid; });
+  try {
+    await updateDoc(doc(db,'empleados',uid), { semanas_ausente_hc: 0 });
+  } catch(err){
+    console.error('Error al resetear ausencia:', err);
+    alert('No se pudo actualizar a '+((e&&e.nombre)||'este empleado')+': '+err.message);
+  }
+};
 
 // ── MODAL AGREGAR EMPLEADO ──
 window.mostrarModalEmpleado=function(){
@@ -3608,11 +3795,12 @@ function agregarOrdenesPorEmpleado(docs, comedorFiltro){
     // "Extras" y otra "Costo extras" por separado.
     const extrasTexto = (o.extras||[]).map(e=>typeof e==='string'?e:e.nombre).join(', ');
     const costoExtras = (o.extras||[]).reduce((s,e)=>s+(typeof e==='string'?0:(Number(e.precio)||0)), 0);
-    // Un empleado subsidiado al 100% no paga nada de su comida — la empresa
-    // cubre el buffet completo ($90, no solo los $45 de siempre) más
-    // cualquier extra, en vez del reparto normal 45/45.
-    const subsidio = o.subsidiado ? (((o.platillos||[]).length ? 90 : 0) + costoExtras) : 45;
-    const pagoEmp = o.subsidiado ? 0 : (Number(o.cargo) || 0); // blindaje: un dato mal formado nunca debe volverse "$NaN.00" en el total
+    // Un empleado subsidiado al 100% no paga el buffet — la empresa cubre
+    // el buffet completo ($90, no solo los $45 de siempre) — pero SÍ se le
+    // cobran los extras igual que a cualquiera, y eso sí se descuenta de
+    // nómina (pagoEmp), no lo cubre la empresa.
+    const subsidio = o.subsidiado ? ((o.platillos||[]).length ? 90 : 0) : 45;
+    const pagoEmp = o.subsidiado ? costoExtras : (Number(o.cargo) || 0); // blindaje: un dato mal formado nunca debe volverse "$NaN.00" en el total
     porEmp[o.empleado_uid].dias.push({
       id: o.id,
       fecha: o.fecha,
