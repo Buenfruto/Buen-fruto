@@ -15,7 +15,7 @@
 // fuerza una recarga limpia. sessionStorage evita que se quede en bucle si
 // version.txt no está disponible por algún motivo.
 (function(){
-  var V='20260822-7';
+  var V='20260822-9';
   try{
     fetch('version.txt?_='+Date.now(),{cache:'no-store'}).then(function(r){return r.ok?r.text():null;}).then(function(t){
       if(!t) return;
@@ -730,10 +730,13 @@ input[type=file]{display:none}
               <button class="btn btn-v btn-sm" id="btn-excel-reporte" onclick="descargarReporteExcel()">
                 📊 Descargar reporte
               </button>
+              <button class="btn btn-outline btn-sm" id="btn-excel-nomina" onclick="descargarReporteNomina()" title="Reporte aparte, un renglón por empleado: buffets, cuántos subsidiar, cuánto cobrar y cuánto cubrió la empresa">
+                💰 Reporte para nómina
+              </button>
               <button class="btn btn-outline btn-sm" id="btn-ver-asistencia" onclick="mostrarVistaAsistencia()" title="Ver en pantalla quién ha escaneado su gafete, antes de descargar">
                 👁 Ver asistencia
               </button>
-              <button class="btn btn-outline btn-sm" id="btn-excel-asistencia" onclick="descargarReporteAsistencia()" title="Solo empleado, sede, fecha y hora — organizado por comedor">
+              <button class="btn btn-outline btn-sm" id="btn-excel-asistencia" onclick="descargarReporteAsistencia()" title="Solo ID, nombre, sede, fecha y hora — organizado por comedor">
                 🕐 Descargar asistencia
               </button>
               <button class="btn btn-outline btn-sm" id="btn-plantilla-asistencia" onclick="descargarPlantillaAsistencia()" title="Formato de referencia del reporte de asistencia, sin depender de datos reales">
@@ -2535,33 +2538,49 @@ async function generarGafetesPDF(lista, nombreArchivo){
 }
 
 // ── DESCARGA DE CREDENCIALES EN EXCEL ──
+// Solo 5 columnas (ID, Nombre, Centro, Usuario, Contraseña) — abajo del
+// listado completo se repite la misma tabla nomás con los subsidiados,
+// para que se puedan ver aparte sin agregarles una columna extra arriba.
 window.descargarExcelEmpleados = async function(){
   const btn = document.getElementById('btn-excel-emp');
   if (btn) { btn.disabled = true; btn.textContent = 'Generando…'; }
   try {
     const comedorLabels = { betel:'Betel', cuauhtemoc:'Cuauhtémoc', intelomas:'Intelomas' };
     const snap = await db.collection('empleados').get();
-    const filas = [];
+    const todos = [];
     snap.forEach(function(d){
       const e = d.data();
-      filas.push({
-        'Nombre': e.nombre || '',
-        // Lo que el empleado realmente escribe en "Usuario" al iniciar sesión:
-        // su ID B360 tal cual (hc_id) si viene del Head Count, o su correo
-        // completo si es una cuenta agregada a mano (chef/admin) sin ID B360.
-        'Usuario': e.hc_id || e.email || '',
-        'Contraseña': e.password_texto || '',
-        'Código de gafete': e.codigo_gafete || '',
-        'Puesto': e.puesto || '',
-        'Comedor': comedorLabels[e.comedor] || e.comedor || '',
-        'Rol': e.rol || '',
-        'Estado': e.activo !== false ? 'Activo' : 'Inactivo'
+      todos.push({
+        subsidiado: !!e.subsidiado,
+        fila: {
+          'ID': e.hc_id || '',
+          'Nombre': e.nombre || '',
+          'Centro': comedorLabels[e.comedor] || e.comedor || '',
+          // Lo que el empleado realmente escribe en "Usuario" al iniciar
+          // sesión: su ID B360 tal cual (hc_id) si viene del Head Count, o
+          // su correo completo si es una cuenta agregada a mano (chef/
+          // admin) sin ID B360.
+          'Usuario': e.hc_id || e.email || '',
+          'Contraseña': e.password_texto || ''
+        }
       });
     });
-    if (!filas.length) { alert('No hay empleados registrados.'); return; }
-    filas.sort(function(a, b){ return (a['Nombre']||'').localeCompare(b['Nombre']||''); });
+    if (!todos.length) { alert('No hay empleados registrados.'); return; }
+    todos.sort(function(a, b){ return (a.fila['Nombre']||'').localeCompare(b.fila['Nombre']||''); });
+    const filas = todos.map(function(t){ return t.fila; });
+    const filasSubs = todos.filter(function(t){ return t.subsidiado; }).map(function(t){ return t.fila; });
+
     const ws = XLSX.utils.json_to_sheet(filas);
-    ws['!cols'] = [{wch:28},{wch:26},{wch:16},{wch:16},{wch:16},{wch:14},{wch:10},{wch:10}];
+    ws['!cols'] = [{wch:12},{wch:28},{wch:14},{wch:26},{wch:16}];
+
+    const filaTitulo = filas.length + 3; // encabezado(1) + N filas + 1 en blanco
+    XLSX.utils.sheet_add_aoa(ws, [['Subsidiados 100%']], { origin: 'A' + filaTitulo });
+    if (filasSubs.length) {
+      XLSX.utils.sheet_add_json(ws, filasSubs, { origin: 'A' + (filaTitulo + 1), skipHeader: false });
+    } else {
+      XLSX.utils.sheet_add_aoa(ws, [['Ningún empleado subsidiado por ahora.']], { origin: 'A' + (filaTitulo + 1) });
+    }
+
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Empleados');
     XLSX.writeFile(wb, 'empleados_buen_fruto_' + hoy() + '.xlsx');
@@ -3798,13 +3817,17 @@ function agregarOrdenesPorEmpleado(docs, comedorFiltro){
     // Un empleado subsidiado al 100% no paga el buffet — la empresa cubre
     // el buffet completo ($90, no solo los $45 de siempre) — pero SÍ se le
     // cobran los extras igual que a cualquiera, y eso sí se descuenta de
-    // nómina (pagoEmp), no lo cubre la empresa.
-    const subsidio = o.subsidiado ? ((o.platillos||[]).length ? 90 : 0) : 45;
+    // nómina (pagoEmp), no lo cubre la empresa. Si ese día no hubo buffet
+    // (solo extras), no hay nada que subsidiar — antes esto marcaba $45 de
+    // subsidio aunque no hubiera buffet ese día; ya corregido.
+    const tuvoBuffet = (o.platillos||[]).length > 0;
+    const subsidio = tuvoBuffet ? (o.subsidiado ? 90 : 45) : 0;
     const pagoEmp = o.subsidiado ? costoExtras : (Number(o.cargo) || 0); // blindaje: un dato mal formado nunca debe volverse "$NaN.00" en el total
     porEmp[o.empleado_uid].dias.push({
       id: o.id,
       fecha: o.fecha,
       platillos: (o.platillos||[]).join(', ')||'—',
+      tuvo_buffet: tuvoBuffet,
       extras: extrasTexto||'—',
       costo_extras: costoExtras,
       pago_empleado: pagoEmp,
@@ -4442,7 +4465,112 @@ async function construirWorkbookReporte(datosPorEmpleado, opts){
   return wb;
 }
 
-// Reporte simple de asistencia: Empleado, Sede, Fecha, Hora — nada de
+// ── REPORTE PARA NÓMINA — aparte del reporte de consumo de arriba ──
+// Un renglón por empleado (no uno por día, para eso está el reporte
+// normal) con nomás lo que nómina necesita para el descuento semanal:
+// cuántos buffets comió, cuántos le tocan subsidiados (gratis, si es
+// subsidiado 100%) contra cuántos hay que cobrarle, cuánto de extras se le
+// cobra, el total a cobrarle, y cuánto cubrió la empresa. Usa los mismos
+// datos ya agregados por empleado (_reporteRaw / agregarOrdenesPorEmpleado)
+// que el reporte normal, así que siempre van a cuadrar entre sí.
+async function construirWorkbookNomina(datosPorEmpleado, opts){
+  const etiquetaTipo = opts.etiquetaTipo, tituloRango = opts.tituloRango;
+  const VERDE = 'FF5C6B4A', CREMA = 'FFF5F0E8', BLANCO = 'FFFFFFFF';
+
+  const wb = new ExcelJS.Workbook();
+  wb.creator = 'Buen Fruto';
+  wb.created = new Date();
+  const ws = wb.addWorksheet('Nómina', { views: [{ state:'frozen', ySplit: 4 }] });
+
+  ws.mergeCells('A1:H1');
+  const titulo = ws.getCell('A1');
+  titulo.value = 'Buen Fruto — Reporte para nómina '+etiquetaTipo;
+  titulo.font = { name:'Arial', size:15, bold:true, color:{argb:BLANCO} };
+  titulo.alignment = { vertical:'middle' };
+  titulo.fill = { type:'pattern', pattern:'solid', fgColor:{argb:VERDE} };
+  ws.getRow(1).height = 26;
+
+  ws.mergeCells('A2:H2');
+  const subtitulo = ws.getCell('A2');
+  subtitulo.value = tituloRango + '   ·   Generado: ' + new Date().toLocaleString('es-MX');
+  subtitulo.font = { name:'Arial', size:10, italic:true, color:{argb:'FF666666'} };
+  ws.getRow(2).height = 18;
+  ws.getRow(3).height = 6;
+
+  const encabezados = ['ID','Nombre','Cantidad de Buffets','Cantidad por Subsidiar Buffets','Cantidad Buffets por cobrar','Extras por cobrar','Total por cobrar','Total Subsidiado por la empresa'];
+  const filaEnc = ws.getRow(4);
+  encabezados.forEach(function(h, i){
+    const cell = filaEnc.getCell(i+1);
+    cell.value = h;
+    cell.font = { name:'Arial', size:10, bold:true, color:{argb:BLANCO} };
+    cell.fill = { type:'pattern', pattern:'solid', fgColor:{argb:VERDE} };
+    cell.alignment = { vertical:'middle', horizontal: i>=2 ? 'right' : 'left', wrapText: true };
+  });
+  filaEnc.height = 34;
+
+  const filas = (datosPorEmpleado||[]).map(function(emp){
+    const buffets = emp.dias.filter(function(d){ return d.tuvo_buffet; }).length;
+    return {
+      id: emp.id_empleado || '—',
+      nombre: emp.nombre,
+      buffets: buffets,
+      buffetsSubsidiar: emp.subsidiado ? buffets : 0,
+      buffetsPorCobrar: emp.subsidiado ? 0 : buffets,
+      extrasPorCobrar: emp.dias.reduce(function(s,d){ return s+d.costo_extras; }, 0),
+      totalPorCobrar: emp.dias.reduce(function(s,d){ return s+d.pago_empleado; }, 0),
+      totalSubsidiado: emp.dias.reduce(function(s,d){ return s+d.subsidio_empresa; }, 0)
+    };
+  }).sort(function(a,b){ return (a.nombre||'').localeCompare(b.nombre||''); });
+
+  let fila = 5;
+  filas.forEach(function(f){
+    const r = ws.getRow(fila);
+    r.getCell(1).value = f.id;
+    r.getCell(2).value = f.nombre;
+    r.getCell(3).value = f.buffets;
+    r.getCell(4).value = f.buffetsSubsidiar;
+    r.getCell(5).value = f.buffetsPorCobrar;
+    r.getCell(6).value = f.extrasPorCobrar;
+    r.getCell(7).value = f.totalPorCobrar;
+    r.getCell(8).value = f.totalSubsidiado;
+    const bg = fila % 2 === 0 ? CREMA : BLANCO;
+    for (let c=1;c<=8;c++){
+      const cell = r.getCell(c);
+      cell.font = { name:'Arial', size:10 };
+      cell.fill = { type:'pattern', pattern:'solid', fgColor:{argb:bg} };
+      if (c>=3) cell.alignment = { horizontal:'right' };
+      if (c>=6) cell.numFmt = '$#,##0';
+    }
+    fila++;
+  });
+
+  function suma(campo){ return filas.reduce(function(s,f){ return s+f[campo]; }, 0); }
+  fila++;
+  const rTotal = ws.getRow(fila);
+  rTotal.getCell(2).value = 'TOTAL GENERAL';
+  rTotal.getCell(3).value = suma('buffets');
+  rTotal.getCell(4).value = suma('buffetsSubsidiar');
+  rTotal.getCell(5).value = suma('buffetsPorCobrar');
+  rTotal.getCell(6).value = suma('extrasPorCobrar');
+  rTotal.getCell(7).value = suma('totalPorCobrar');
+  rTotal.getCell(8).value = suma('totalSubsidiado');
+  for (let c=1;c<=8;c++){
+    const cell = rTotal.getCell(c);
+    cell.font = { name:'Arial', size:11, bold:true, color:{argb:BLANCO} };
+    cell.fill = { type:'pattern', pattern:'solid', fgColor:{argb:VERDE} };
+    if (c>=3) cell.alignment = { horizontal:'right' };
+    if (c>=6) cell.numFmt = '$#,##0';
+  }
+  rTotal.height = 22;
+
+  ws.columns = [
+    { width: 14 }, { width: 26 }, { width: 15 }, { width: 18 }, { width: 18 }, { width: 14 }, { width: 14 }, { width: 20 }
+  ];
+
+  return wb;
+}
+
+// Reporte simple de asistencia: ID, Nombre, Sede, Fecha, Hora — nada de
 // platillos ni montos. "docs" son órdenes crudas de Firestore (idealmente ya
 // filtradas por quien llama, pero aquí se vuelve a filtrar por si acaso —
 // una orden cancelada o sin escanear nunca debe aparecer como "asistencia").
@@ -4460,7 +4588,7 @@ async function construirWorkbookAsistencia(docsCrudos, opts){
   wb.created = new Date();
   const ws = wb.addWorksheet('Asistencia', { views: [{ state:'frozen', ySplit: 4 }] });
 
-  ws.mergeCells('A1:D1');
+  ws.mergeCells('A1:E1');
   const titulo = ws.getCell('A1');
   titulo.value = 'Buen Fruto — Asistencia '+etiquetaTipo+' por comedor';
   titulo.font = { name:'Arial', size:16, bold:true, color:{argb:BLANCO} };
@@ -4468,14 +4596,14 @@ async function construirWorkbookAsistencia(docsCrudos, opts){
   titulo.fill = { type:'pattern', pattern:'solid', fgColor:{argb:VERDE} };
   ws.getRow(1).height = 28;
 
-  ws.mergeCells('A2:D2');
+  ws.mergeCells('A2:E2');
   const subtitulo = ws.getCell('A2');
   subtitulo.value = tituloRango + '   ·   Generado: ' + new Date().toLocaleString('es-MX');
   subtitulo.font = { name:'Arial', size:11, italic:true, color:{argb:'FF555555'} };
   ws.getRow(2).height = 20;
   ws.getRow(3).height = 6;
 
-  const encabezados = ['Empleado','Sede','Fecha','Hora'];
+  const encabezados = ['ID','Nombre','Sede','Fecha','Hora'];
   const filaEnc = ws.getRow(4);
   encabezados.forEach(function(h, i){
     const cell = filaEnc.getCell(i+1);
@@ -4507,7 +4635,7 @@ async function construirWorkbookAsistencia(docsCrudos, opts){
     if (!filasCom.length) return; // sin asistencias en este comedor en el período — se omite la sección
 
     const rSeccion = ws.getRow(fila);
-    ws.mergeCells('A'+fila+':D'+fila);
+    ws.mergeCells('A'+fila+':E'+fila);
     rSeccion.getCell(1).value = comedorLabels[com] + ' — ' + filasCom.length + ' asistencia'+(filasCom.length!==1?'s':'');
     rSeccion.getCell(1).font = { name:'Arial', size:12, bold:true, color:{argb:BLANCO} };
     rSeccion.getCell(1).fill = { type:'pattern', pattern:'solid', fgColor:{argb:VERDE} };
@@ -4519,12 +4647,13 @@ async function construirWorkbookAsistencia(docsCrudos, opts){
       const dt = new Date((o.fecha||hoy())+'T12:00:00');
       const r = ws.getRow(fila);
       const idEmp = buscarIdEmpleado(o.empleado_uid);
-      r.getCell(1).value = (idEmp && idEmp !== '—' ? idEmp+' — ' : '') + (o.empleado_nombre || '—');
-      r.getCell(2).value = comedorLabels[com];
-      r.getCell(3).value = DS2[dt.getDay()]+' '+dt.getDate()+' '+MS2[dt.getMonth()];
-      r.getCell(4).value = formatearHora(o.escaneado_en);
+      r.getCell(1).value = (idEmp && idEmp !== '—') ? idEmp : '—';
+      r.getCell(2).value = o.empleado_nombre || '—';
+      r.getCell(3).value = comedorLabels[com];
+      r.getCell(4).value = DS2[dt.getDay()]+' '+dt.getDate()+' '+MS2[dt.getMonth()];
+      r.getCell(5).value = formatearHora(o.escaneado_en);
       const bg = fila % 2 === 0 ? CREMA : BLANCO;
-      for (let c=1;c<=4;c++){
+      for (let c=1;c<=5;c++){
         const cell = r.getCell(c);
         cell.font = { name:'Arial', size:12, color:{argb:'FF222222'} };
         cell.fill = { type:'pattern', pattern:'solid', fgColor:{argb:bg} };
@@ -4536,7 +4665,7 @@ async function construirWorkbookAsistencia(docsCrudos, opts){
   });
 
   ws.columns = [
-    { width: 38 }, { width: 18 }, { width: 18 }, { width: 12 }
+    { width: 12 }, { width: 30 }, { width: 18 }, { width: 18 }, { width: 12 }
   ];
 
   return wb;
@@ -4641,6 +4770,27 @@ window.descargarReporteExcel = async function(){
     alert('No se pudo generar el Excel: ' + err.message);
   } finally {
     if (btn) { btn.disabled = false; btn.textContent = '📊 Descargar reporte'; }
+  }
+};
+
+// Reporte para nómina — aparte del reporte normal: un renglón por empleado
+// (no por día) con solo lo que nómina necesita para el descuento semanal.
+// Usa el mismo período y comedor seleccionados arriba.
+window.descargarReporteNomina = async function(){
+  if(!_reporteRaw.length){ alert('No hay datos en este período para exportar.'); return; }
+  const btn = document.getElementById('btn-excel-nomina');
+  if (btn) { btn.disabled = true; btn.textContent = 'Generando…'; }
+  try {
+    const desde = _reporteRangoDesde, hasta = _reporteRangoHasta, tipo = _reporteRangoTipo;
+    const etiquetaTipo = tipo==='dia' ? 'Diario' : 'Semanal';
+    const tituloRango = tipo==='dia' ? ('Hoy, '+desde) : ('Del '+desde+' al '+hasta);
+    const wb = await construirWorkbookNomina(_reporteRaw, { etiquetaTipo, tituloRango });
+    await descargarWorkbook(wb, 'Nomina_Buen_Fruto_'+desde+'_al_'+hasta+'.xlsx');
+  } catch(err) {
+    console.error('Error al generar el Excel de nómina:', err);
+    alert('No se pudo generar el Excel: ' + err.message);
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = '💰 Reporte para nómina'; }
   }
 };
 
@@ -4880,7 +5030,7 @@ window.descargarPlantillaAsistencia = async function(){
     wb.created = new Date();
     const ws = wb.addWorksheet('Plantilla asistencia', { views: [{ state:'frozen', ySplit: 4 }] });
 
-    ws.mergeCells('A1:D1');
+    ws.mergeCells('A1:E1');
     const titulo = ws.getCell('A1');
     titulo.value = 'Buen Fruto — Plantilla de asistencia por comedor';
     titulo.font = { name:'Arial', size:16, bold:true, color:{argb:BLANCO} };
@@ -4888,14 +5038,14 @@ window.descargarPlantillaAsistencia = async function(){
     titulo.fill = { type:'pattern', pattern:'solid', fgColor:{argb:VERDE} };
     ws.getRow(1).height = 28;
 
-    ws.mergeCells('A2:D2');
+    ws.mergeCells('A2:E2');
     const subtitulo = ws.getCell('A2');
     subtitulo.value = 'Formato de referencia — así se organiza el reporte real, por comedor';
     subtitulo.font = { name:'Arial', size:11, italic:true, color:{argb:'FF555555'} };
     ws.getRow(2).height = 20;
     ws.getRow(3).height = 6;
 
-    const encabezados = ['Empleado','Sede','Fecha','Hora'];
+    const encabezados = ['ID','Nombre','Sede','Fecha','Hora'];
     const filaEnc = ws.getRow(4);
     encabezados.forEach(function(h, i){
       const cell = filaEnc.getCell(i+1);
@@ -4907,15 +5057,15 @@ window.descargarPlantillaAsistencia = async function(){
     filaEnc.height = 22;
 
     const ejemplos = [
-      { comedor:'Betel', filas: [['12345 — Ejemplo: Juan Pérez','Betel','Lun 18 ago','13:05'], ['12346 — Ejemplo: María López','Betel','Lun 18 ago','13:12']] },
-      { comedor:'Cuauhtémoc', filas: [['12347 — Ejemplo: Luis Ramírez','Cuauhtémoc','Lun 18 ago','13:20']] },
-      { comedor:'Intelomas', filas: [['12348 — Ejemplo: Sofía Torres','Intelomas','Lun 18 ago','14:00']] },
+      { comedor:'Betel', filas: [['12345','Ejemplo: Juan Pérez','Betel','Lun 18 ago','13:05'], ['12346','Ejemplo: María López','Betel','Lun 18 ago','13:12']] },
+      { comedor:'Cuauhtémoc', filas: [['12347','Ejemplo: Luis Ramírez','Cuauhtémoc','Lun 18 ago','13:20']] },
+      { comedor:'Intelomas', filas: [['12348','Ejemplo: Sofía Torres','Intelomas','Lun 18 ago','14:00']] },
     ];
 
     let fila = 5;
     ejemplos.forEach(function(grupo){
       const rSeccion = ws.getRow(fila);
-      ws.mergeCells('A'+fila+':D'+fila);
+      ws.mergeCells('A'+fila+':E'+fila);
       rSeccion.getCell(1).value = grupo.comedor + ' — ' + grupo.filas.length + ' asistencia'+(grupo.filas.length!==1?'s':'');
       rSeccion.getCell(1).font = { name:'Arial', size:12, bold:true, color:{argb:BLANCO} };
       rSeccion.getCell(1).fill = { type:'pattern', pattern:'solid', fgColor:{argb:VERDE} };
@@ -4926,7 +5076,7 @@ window.descargarPlantillaAsistencia = async function(){
       grupo.filas.forEach(function(valores){
         const r = ws.getRow(fila);
         valores.forEach(function(v, i){ r.getCell(i+1).value = v; });
-        for (let c=1;c<=4;c++){
+        for (let c=1;c<=5;c++){
           const cell = r.getCell(c);
           cell.font = { name:'Arial', size:12, italic:true, color:{argb:'FF555555'} };
           cell.fill = { type:'pattern', pattern:'solid', fgColor:{argb:CREMA} };
@@ -4938,7 +5088,7 @@ window.descargarPlantillaAsistencia = async function(){
     });
 
     ws.columns = [
-      { width: 38 }, { width: 18 }, { width: 18 }, { width: 12 }
+      { width: 12 }, { width: 30 }, { width: 18 }, { width: 18 }, { width: 12 }
     ];
 
     await descargarWorkbook(wb, 'Plantilla_Asistencia_Buen_Fruto.xlsx');
