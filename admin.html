@@ -15,7 +15,7 @@
 // fuerza una recarga limpia. sessionStorage evita que se quede en bucle si
 // version.txt no está disponible por algún motivo.
 (function(){
-  var V='20260822-9';
+  var V='20260822-10';
   try{
     fetch('version.txt?_='+Date.now(),{cache:'no-store'}).then(function(r){return r.ok?r.text():null;}).then(function(t){
       if(!t) return;
@@ -2546,12 +2546,16 @@ window.descargarExcelEmpleados = async function(){
   if (btn) { btn.disabled = true; btn.textContent = 'Generando…'; }
   try {
     const comedorLabels = { betel:'Betel', cuauhtemoc:'Cuauhtémoc', intelomas:'Intelomas' };
+    // Orden fijo de centros (no alfabético del label, por si algún día el
+    // texto cambia) — el que no tenga comedor reconocido se va al final.
+    const ordenComedores = ['betel','cuauhtemoc','intelomas'];
     const snap = await db.collection('empleados').get();
     const todos = [];
     snap.forEach(function(d){
       const e = d.data();
       todos.push({
         subsidiado: !!e.subsidiado,
+        ordenComedor: ordenComedores.indexOf(e.comedor),
         fila: {
           'ID': e.hc_id || '',
           'Nombre': e.nombre || '',
@@ -2566,7 +2570,14 @@ window.descargarExcelEmpleados = async function(){
       });
     });
     if (!todos.length) { alert('No hay empleados registrados.'); return; }
-    todos.sort(function(a, b){ return (a.fila['Nombre']||'').localeCompare(b.fila['Nombre']||''); });
+    // Primero agrupado por centro (Betel, Cuauhtémoc, Intelomas, en ese
+    // orden) y dentro de cada centro, alfabético por nombre.
+    todos.sort(function(a, b){
+      const oa = a.ordenComedor === -1 ? 99 : a.ordenComedor;
+      const ob = b.ordenComedor === -1 ? 99 : b.ordenComedor;
+      if (oa !== ob) return oa - ob;
+      return (a.fila['Nombre']||'').localeCompare(b.fila['Nombre']||'');
+    });
     const filas = todos.map(function(t){ return t.fila; });
     const filasSubs = todos.filter(function(t){ return t.subsidiado; }).map(function(t){ return t.fila; });
 
