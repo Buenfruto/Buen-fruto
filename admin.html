@@ -15,7 +15,7 @@
 // fuerza una recarga limpia. sessionStorage evita que se quede en bucle si
 // version.txt no está disponible por algún motivo.
 (function(){
-  var V='20260820-15';
+  var V='20260822-1';
   try{
     fetch('version.txt?_='+Date.now(),{cache:'no-store'}).then(function(r){return r.ok?r.text():null;}).then(function(t){
       if(!t) return;
@@ -297,6 +297,9 @@ input[type=file]{display:none}
       <div class="nav-item" data-sec="empleados" onclick="irSec('empleados',this)">
         <svg viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>Empleados
       </div>
+      <div class="nav-item" data-sec="ingresos" onclick="irSec('ingresos',this)">
+        <svg viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="8.5" cy="7" r="4"/><line x1="20" y1="8" x2="20" y2="14"/><line x1="23" y1="11" x2="17" y2="11"/></svg>Ingresos
+      </div>
       <div class="nav-item" data-sec="menus" onclick="irSec('menus',this)">
         <svg viewBox="0 0 24 24"><path d="M3 2v7c0 1.1.9 2 2 2h4a2 2 0 0 0 2-2V2"/><path d="M7 2v20"/><path d="M21 15V2"/><path d="M18 2v3a2 2 0 0 0 2 2h1"/><path d="M21 22H9"/></svg>Menús
       </div>
@@ -451,31 +454,11 @@ input[type=file]{display:none}
           </div>
         </div>
 
-        <!-- CORRECCIÓN DE IDs -->
-        <div class="card">
-          <div class="card-head"><span class="card-titulo">🛠 Corrección de IDs</span></div>
-          <div class="card-body">
-            <p style="font-size:.82rem;color:var(--g2);margin-bottom:1rem">Para corregir IDs equivocados: sube un Excel con columnas ID Nmna/BF, Nombre, Centro. Empareja por nombre completo contra el directorio actual y te muestra una vista previa (ID viejo → ID nuevo) antes de tocar nada. Al aplicar, corrige el ID guardado y también actualiza el acceso (login) de cada empleado para que pueda seguir entrando con su ID correcto. Nunca toca cuentas de admin ni chef.</p>
-            <div class="drop-area" id="correccion-drop-area" onclick="document.getElementById('correccion-input').click()">
-              <div class="drop-icon">
-                <svg viewBox="0 0 24 24" fill="none" stroke="var(--g3)" stroke-width="1.5" stroke-linecap="round">
-                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="12" x2="12" y2="18"/><polyline points="9 15 12 18 15 15"/>
-                </svg>
-              </div>
-              <div class="drop-txt">Arrastra el Excel de corrección aquí o haz clic para seleccionar</div>
-              <div class="drop-sub">ID Nmna/BF, Nombre, Centro</div>
-            </div>
-            <input type="file" id="correccion-input" accept=".csv,.xlsx,.xls"/>
-            <div id="correccion-preview" style="display:none;margin-top:1.25rem"></div>
-            <div class="msg" id="correccion-msg"></div>
-          </div>
-        </div>
-
         <!-- EMPLEADOS SUBSIDIADOS 100% -->
         <div class="card">
           <div class="card-head"><span class="card-titulo">💚 Empleados subsidiados 100%</span></div>
           <div class="card-body">
-            <p style="font-size:.82rem;color:var(--g2);margin-bottom:1rem">Empleados a los que la empresa les cubre toda la comida (no se les cobra nada, y sus comidas se ven aparte en Reportes y Dashboard). Sube un Excel con las mismas columnas del Head Count, o agrégalos uno por uno con la casilla "Subsidiado 100%" al agregar un empleado más abajo. Si el ID B360 ya existe en el directorio, nomás se marca como subsidiado; si no existe, se crea de cero.</p>
+            <p style="font-size:.82rem;color:var(--g2);margin-bottom:1rem">Empleados a los que la empresa les cubre toda la comida (no se les cobra nada, y sus comidas se ven aparte en Reportes y Dashboard). Sube un Excel con las mismas columnas del Head Count, o agrega uno por uno con el formulario de abajo. Si el ID ya existe en el directorio (por ID o por nombre), nomás se marca como subsidiado; si no existe, se crea de cero.</p>
             <div class="drop-area" id="subs-drop-area" onclick="document.getElementById('subs-input').click()">
               <div class="drop-icon">
                 <svg viewBox="0 0 24 24" fill="none" stroke="var(--g3)" stroke-width="1.5" stroke-linecap="round">
@@ -488,6 +471,27 @@ input[type=file]{display:none}
             <input type="file" id="subs-input" accept=".csv,.xlsx,.xls"/>
             <div id="subs-preview" style="display:none;margin-top:1.25rem"></div>
             <div class="msg" id="subs-msg"></div>
+
+            <div style="margin-top:1.5rem;padding-top:1.25rem;border-top:1px solid var(--borde2)">
+              <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.5rem">
+                <div style="font-size:.72rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--g2)">Agregar uno por uno</div>
+                <button type="button" class="btn btn-outline btn-sm" onclick="toggleFormSubsUnico()">+ Agregar</button>
+              </div>
+              <div id="subs-unico-form" style="display:none">
+                <div class="campo"><label>ID</label><input type="text" id="subs-unico-id" placeholder="Ej. 123456"/></div>
+                <div class="campo"><label>Nombre completo</label><input type="text" id="subs-unico-nombre" placeholder="Juan García López"/></div>
+                <div class="campo"><label>Centro</label>
+                  <select id="subs-unico-centro">
+                    <option value="betel">Betel</option>
+                    <option value="cuauhtemoc">Cuauhtémoc</option>
+                    <option value="intelomas">Intelomas</option>
+                  </select>
+                </div>
+                <button class="btn btn-v btn-sm" id="btn-subs-unico-guardar" onclick="agregarSubsidiadoUnico()">Guardar</button>
+                <div class="msg" id="subs-unico-msg"></div>
+              </div>
+            </div>
+
             <div style="margin-top:1.5rem;padding-top:1.25rem;border-top:1px solid var(--borde2)">
               <div style="font-size:.72rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--g2);margin-bottom:.75rem">Subsidiados actuales</div>
               <div id="lista-subsidiados"></div>
@@ -533,6 +537,77 @@ input[type=file]{display:none}
             <p style="font-size:.82rem;color:var(--g2);margin-bottom:1rem">Borra PARA SIEMPRE (no se puede deshacer) a todos los empleados y cuentas de chef del sistema — junto con su acceso de login. Las cuentas de admin nunca se tocan. Úsalo solo para empezar de cero, por ejemplo después de corregir todos los IDs y antes de recargar el Head Count completo.</p>
             <button class="btn btn-danger btn-sm" id="btn-eliminar-no-admin" onclick="eliminarTodosMenosAdmin()">🗑 Eliminar a todos menos admin</button>
             <div class="msg" id="eliminar-no-admin-msg"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- INGRESOS (altas entre semana, fuera del ciclo del Head Count) -->
+      <div class="seccion" id="sec-ingresos">
+        <div class="sec-titulo">Ingresos</div>
+        <div class="sec-sub">Para dar de alta a alguien que entra a media semana, antes de que le toque aparecer en el Head Count semanal. Cuando llegue ese Head Count, esta persona ya va a estar ahí — si trae un ID distinto pero es el mismo nombre, se corrige solo, nunca se duplica.</div>
+
+        <div class="card">
+          <div class="card-head"><span class="card-titulo">Subir archivo de ingresos</span></div>
+          <div class="card-body">
+            <p style="font-size:.82rem;color:var(--g2);margin-bottom:1rem">Mismo formato que el Head Count: ID, Nombre, Centro. Esto solo da de alta (o corrige el ID de alguien que ya existe) — nunca da de baja a nadie desde aquí. Las bajas de verdad solo se manejan desde el Head Count semanal.</p>
+            <div class="drop-area" id="ing-drop-area" onclick="document.getElementById('ing-input').click()">
+              <div class="drop-icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="var(--g3)" stroke-width="1.5" stroke-linecap="round">
+                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="12" x2="12" y2="18"/><polyline points="9 15 12 18 15 15"/>
+                </svg>
+              </div>
+              <div class="drop-txt">Arrastra el Excel de ingresos aquí o haz clic para seleccionar</div>
+              <div class="drop-sub">ID, Nombre, Centro</div>
+            </div>
+            <input type="file" id="ing-input" accept=".csv,.xlsx,.xls"/>
+            <div id="ing-preview" style="display:none;margin-top:1.25rem"></div>
+            <div class="msg" id="ing-msg"></div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-head"><span class="card-titulo">Agregar uno por uno</span></div>
+          <div class="card-body">
+            <p style="font-size:.82rem;color:var(--g2);margin-bottom:1rem">Para dar de alta a una sola persona sin subir archivo.</p>
+            <div class="campo"><label>ID</label><input type="text" id="ing-unico-id" placeholder="Ej. 123456"/></div>
+            <div class="campo"><label>Nombre completo</label><input type="text" id="ing-unico-nombre" placeholder="Juan García López"/></div>
+            <div class="campo"><label>Centro</label>
+              <select id="ing-unico-centro">
+                <option value="betel">Betel</option>
+                <option value="cuauhtemoc">Cuauhtémoc</option>
+                <option value="intelomas">Intelomas</option>
+              </select>
+            </div>
+            <button class="btn btn-v btn-sm" id="btn-ing-unico-guardar" onclick="agregarIngresoUnico()">Dar de alta</button>
+            <div class="msg" id="ing-unico-msg"></div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-head"><span class="card-titulo">Corregir un empleado uno por uno</span></div>
+          <div class="card-body">
+            <p style="font-size:.82rem;color:var(--g2);margin-bottom:1rem">Busca a alguien por su nombre y corrige su ID, nombre o centro a mano. Si cambias el ID, su acceso (login) se sincroniza junto con él para que pueda seguir entrando.</p>
+            <div style="position:relative">
+              <input type="text" id="ing-editar-buscar" placeholder="🔎 Buscar empleado por nombre..." autocomplete="off"
+                oninput="buscarEmpleadoParaEditar()" onfocus="buscarEmpleadoParaEditar()"
+                onblur="setTimeout(function(){var o=document.getElementById('ing-editar-opciones'); if(o) o.style.display='none';},150)"
+                style="width:100%;padding:.6rem .9rem;border:1px solid var(--borde2);border-radius:8px;font-size:.85rem;font-family:inherit;box-sizing:border-box"/>
+              <div id="ing-editar-opciones" style="display:none;position:absolute;left:0;right:0;top:100%;margin-top:2px;background:var(--w);border:1px solid var(--borde2);border-radius:8px;box-shadow:0 6px 18px rgba(0,0,0,.1);max-height:280px;overflow-y:auto;z-index:20"></div>
+            </div>
+            <div id="ing-editar-form" style="display:none;margin-top:1rem;padding-top:1rem;border-top:1px solid var(--borde2)">
+              <div class="campo"><label>ID</label><input type="text" id="ing-editar-id"/></div>
+              <div class="campo"><label>Nombre completo</label><input type="text" id="ing-editar-nombre"/></div>
+              <div class="campo"><label>Centro</label>
+                <select id="ing-editar-centro">
+                  <option value="betel">Betel</option>
+                  <option value="cuauhtemoc">Cuauhtémoc</option>
+                  <option value="intelomas">Intelomas</option>
+                </select>
+              </div>
+              <button class="btn btn-v btn-sm" id="btn-ing-editar-guardar" onclick="guardarEdicionEmpleado()">Guardar cambios</button>
+              <button class="btn btn-outline btn-sm" onclick="cancelarEdicionEmpleado()">Cancelar</button>
+              <div class="msg" id="ing-editar-msg"></div>
+            </div>
           </div>
         </div>
       </div>
@@ -955,21 +1030,21 @@ document.addEventListener('DOMContentLoaded', function(){
     if(e.dataTransfer.files && e.dataTransfer.files[0]) procesarArchivoHeadCount(e.dataTransfer.files[0]);
   });
 
-  // Corrección de IDs
-  document.getElementById('correccion-input').addEventListener('change', function(e){
-    if(e.target.files && e.target.files[0]) procesarArchivoCorreccion(e.target.files[0]);
+  // Ingresos (altas entre semana)
+  document.getElementById('ing-input').addEventListener('change', function(e){
+    if(e.target.files && e.target.files[0]) procesarArchivoIngresos(e.target.files[0]);
   });
-  const correccionDropArea = document.getElementById('correccion-drop-area');
+  const ingDropArea = document.getElementById('ing-drop-area');
   ['dragover','dragenter'].forEach(function(evt){
-    correccionDropArea.addEventListener(evt, function(e){ e.preventDefault(); e.stopPropagation(); correccionDropArea.classList.add('drag'); });
+    ingDropArea.addEventListener(evt, function(e){ e.preventDefault(); e.stopPropagation(); ingDropArea.classList.add('drag'); });
   });
   ['dragleave','dragend'].forEach(function(evt){
-    correccionDropArea.addEventListener(evt, function(e){ e.preventDefault(); e.stopPropagation(); correccionDropArea.classList.remove('drag'); });
+    ingDropArea.addEventListener(evt, function(e){ e.preventDefault(); e.stopPropagation(); ingDropArea.classList.remove('drag'); });
   });
-  correccionDropArea.addEventListener('drop', function(e){
+  ingDropArea.addEventListener('drop', function(e){
     e.preventDefault(); e.stopPropagation();
-    correccionDropArea.classList.remove('drag');
-    if(e.dataTransfer.files && e.dataTransfer.files[0]) procesarArchivoCorreccion(e.dataTransfer.files[0]);
+    ingDropArea.classList.remove('drag');
+    if(e.dataTransfer.files && e.dataTransfer.files[0]) procesarArchivoIngresos(e.dataTransfer.files[0]);
   });
 
   // Empleados subsidiados 100%
@@ -1025,7 +1100,7 @@ window.irSec=function(sec,el){
   el.classList.add('on');
   document.querySelectorAll('.seccion').forEach(s=>s.classList.remove('on'));
   document.getElementById('sec-'+sec).classList.add('on');
-  const titulos={dashboard:'Dashboard',empleados:'Empleados',menus:'Menús de la semana',reportes:'Reportes',pendientes:'Órdenes pendientes'};
+  const titulos={dashboard:'Dashboard',empleados:'Empleados',ingresos:'Ingresos',menus:'Menús de la semana',reportes:'Reportes',pendientes:'Órdenes pendientes'};
   document.getElementById('topbar-titulo').textContent=titulos[sec]||sec;
   if(sec==='reportes')cargarReporte();
   if(sec==='pendientes')cargarPendientes();
@@ -1178,6 +1253,10 @@ let hcDuplicados = [];
 let hcDiff = null;
 let subsRegistros = [];
 let subsDuplicados = [];
+let ingRegistros = [];
+let ingDuplicados = [];
+let ingDiff = { altas:[], actualizados:[], sinCambios:[], corregidos:[], ambiguos:[] };
+let _empleadoEnEdicion = null;
 
 // Normaliza un ID B360/ID Plata para COMPARAR (no para guardar ni mostrar):
 // el mismo identificador puede llegar distinto entre un día y otro del
@@ -1411,17 +1490,83 @@ async function aplicarSubsidiados(){
   if(btn) btn.disabled = false;
 }
 
-// ── CORRECCIÓN DE IDs (Excel: ID, Nombre, Centro) ──
-// A diferencia del Head Count diario (que se identifica por ID y compara
-// día a día), esto sirve para el caso contrario: cuando el ID guardado ya
-// está mal y hay que corregirlo desde una fuente nueva y confiable. Como
-// el ID viejo ya no sirve para encontrar a la persona, aquí se empareja
-// por NOMBRE COMPLETO contra el directorio actual.
-let correccionCambios = [];
-let correccionSinCambios = 0;
-let correccionNoEncontrados = [];
-let correccionAmbiguosArchivo = [];
-let correccionAmbiguosDirectorio = [];
+window.toggleFormSubsUnico = function(){
+  const form = document.getElementById('subs-unico-form');
+  form.style.display = (form.style.display==='none') ? 'block' : 'none';
+};
+
+// Agrega a UNA sola persona como subsidiada, sin subir archivo. Primero
+// revisa si ya existe en el directorio (por ID, o por nombre si el ID
+// cambió) para nomás marcarla como subsidiada sin duplicarla; si de plano
+// no existe, la crea de cero ya marcada como subsidiada.
+async function agregarSubsidiadoUnico(){
+  const idEl = document.getElementById('subs-unico-id');
+  const nombreEl = document.getElementById('subs-unico-nombre');
+  const centroEl = document.getElementById('subs-unico-centro');
+  const msg = document.getElementById('subs-unico-msg');
+  const id = idEl.value.trim();
+  const nombre = nombreEl.value.trim();
+  const centro = centroEl.value;
+  function mostrarMsg(txt, ok){ msg.textContent = txt; msg.className = 'msg '+(ok?'ok':'err'); msg.style.display='block'; }
+  if(!id || !nombre){ mostrarMsg('Completa el ID y el nombre.', false); return; }
+
+  const btn = document.getElementById('btn-subs-unico-guardar');
+  if(btn){ btn.disabled = true; btn.textContent = 'Guardando...'; }
+  try {
+    const registro = { hc_id: id, nombre: normalizarNombreHC(nombre), puesto: null, comedor: normalizarCentroHC(centro), login_base: id };
+    const resultado = await emparejarConDirectorioHC([registro]);
+
+    if(resultado.corregidos.length || resultado.actualizados.length || resultado.sinCambios.length){
+      // Ya existe en el directorio — solo se marca como subsidiado,
+      // corrigiendo el ID/nombre/comedor primero si hacía falta.
+      let uidObjetivo = null;
+      if(resultado.corregidos.length){
+        await aplicarCorregidosLote(resultado.corregidos);
+        uidObjetivo = resultado.corregidos[0].uid;
+      } else if(resultado.actualizados.length){
+        const a = resultado.actualizados[0];
+        await db.collection('empleados').doc(a.uid).update({ nombre:a.despues.nombre, comedor:a.despues.comedor });
+        uidObjetivo = a.uid;
+      } else {
+        uidObjetivo = resultado.sinCambios[0].uid;
+      }
+      await db.collection('empleados').doc(uidObjetivo).update({ subsidiado: true, activo: true });
+      mostrarMsg('Ya existía en el directorio — se marcó como subsidiado.', true);
+    } else if(resultado.ambiguos.length){
+      mostrarMsg('Hay más de un empleado con ese nombre en el directorio — usa "Corregir un empleado uno por uno" en Ingresos para elegir a cuál.', false);
+    } else {
+      // No existe — se crea de cero, ya marcado como subsidiado.
+      const email = emailSinteticoHC(id);
+      const password = Math.random().toString(36).slice(2,10);
+      const usados = await cargarGafetesUsados();
+      const uid = await crearEmpleadoAuth(email, password);
+      await db.collection('empleados').doc(uid).set({
+        nombre: normalizarNombreHC(nombre), email: email, password_texto: password,
+        rol: 'empleado', comedor: normalizarCentroHC(centro), puesto: 'Sin puesto',
+        activo: true, subsidiado: true,
+        codigo_gafete: generarCodigoGafeteUnico(usados),
+        hc_id: id, origen: 'manual'
+      });
+      mostrarMsg('Empleado creado y marcado como subsidiado.', true);
+    }
+    idEl.value=''; nombreEl.value='';
+  } catch(e){
+    console.error('Error al agregar subsidiado uno por uno:', e);
+    mostrarMsg('Error: '+e.message, false);
+  } finally {
+    if(btn){ btn.disabled=false; btn.textContent='Guardar'; }
+  }
+}
+
+// ── EMPAREJAR POR NOMBRE (utilidades compartidas) ──
+// Antes existía una tarjeta aparte ("Corrección de IDs") para corregir a
+// mano un ID equivocado emparejando por nombre completo. Ya no hace falta
+// como tarjeta separada — este mismo emparejamiento por nombre ahora vive
+// DENTRO del Head Count diario y de Ingresos (ver emparejarConDirectorioHC
+// más abajo), así que si a alguien le cambia el ID, se corrige solo en el
+// momento de subir el archivo, en vez de tener que correr una herramienta
+// aparte. Las funciones de abajo (normalizar nombre, reparar mojibake) son
+// las que hacen ese emparejamiento y se quedan como utilidades compartidas.
 
 // Normaliza un nombre SOLO para comparar (no para guardar ni mostrar): sin
 // acentos, sin distinguir mayúsculas/minúsculas, sin espacios repetidos ni
@@ -1479,37 +1624,175 @@ function repararMojibake(s){
   }
 }
 
-function parseCorreccionIdFilas(filas){
-  if(!filas || !filas.length) return [];
-  const headers = filas[0];
-  const iId = buscarColId(headers);
-  const iNombre = buscarCol(headers, ['nombre','nombre completo']);
-  const iCentro = buscarCol(headers, ['centro','comedor']);
-  function val(fila, idx){ return idx>=0 && fila[idx]!==undefined && fila[idx]!==null ? String(fila[idx]).trim() : ''; }
-  const out = [];
-  for(let r=1;r<filas.length;r++){
-    const fila = filas[r];
-    if(!fila || !fila.length) continue;
-    const nombre = val(fila,iNombre);
-    const id = val(fila,iId);
-    if(!nombre || !id) continue;
-    const nombreReparado = repararMojibake(nombre);
-    out.push({
-      id_nuevo: id,
-      nombre_excel: nombre,
-      nombre_reparado: nombreReparado !== nombre ? nombreReparado : null,
-      nombre_comparar: normalizarNombreComparar(nombre),
-      nombre_ordenado: normalizarNombreOrdenado(nombre),
-      nombre_comparar_reparado: normalizarNombreComparar(nombreReparado),
-      nombre_ordenado_reparado: normalizarNombreOrdenado(nombreReparado),
-      comedor_nuevo: normalizarCentroHC(val(fila,iCentro))
+// Compara una lista de registros (formato ID/Nombre/Centro, la misma forma
+// que usan Head Count, Ingresos y las altas "uno por uno") contra el
+// directorio ACTUAL del Head Count. A cada registro primero se le busca su
+// pareja por ID — igual que siempre — pero si no aparece por ID, se le
+// busca por NOMBRE antes de darlo por alta nueva: primero el nombre tal
+// cual, luego con las palabras en otro orden, y por último reparando
+// acentos/Ñ rotos (mojibake), en ambas variantes de orden. Así, si a
+// alguien le cambiaron el ID pero es la misma persona, se detecta como
+// "corregido" en vez de leerse como una baja + una alta duplicada — esto
+// es lo que hacía antes la tarjeta separada "Corrección de IDs", ahora
+// integrado aquí para que corra solo cada vez que se sube un archivo.
+// Nunca adivina: si el nombre del archivo se repite entre los que no
+// matchearon por ID, o si un nombre del directorio le podría aplicar a más
+// de un candidato, esos casos se dejan como alta nueva sin tocar a nadie
+// (aparecen aparte, marcados como "ambiguos", para revisar a mano).
+async function emparejarConDirectorioHC(registros){
+  const snap = await db.collection('empleados').where('origen','==','head_count').get();
+  const actuales = {};
+  snap.forEach(function(d){
+    const e = d.data();
+    if(!e.hc_id) return;
+    actuales[normalizarHcId(e.hc_id)] = { uid:d.id, nombre:e.nombre, puesto:e.puesto, comedor:e.comedor, hc_id:e.hc_id };
+  });
+  const restantes = Object.assign({}, actuales);
+
+  const altas = [], actualizados = [], sinCambios = [], sinMatchId = [];
+  const porNombreArchivo = {};
+
+  // 1) Emparejar por ID — igual que siempre.
+  registros.forEach(function(r){
+    const key = normalizarHcId(r.hc_id);
+    const actual = actuales[key];
+    if(actual){
+      if(actual.nombre !== r.nombre || actual.comedor !== r.comedor){
+        actualizados.push({ uid:actual.uid, antes:actual, despues:r });
+      } else {
+        sinCambios.push(Object.assign({ uid:actual.uid }, r));
+      }
+      delete restantes[key];
+    } else {
+      sinMatchId.push(r);
+      const kn = normalizarNombreComparar(r.nombre);
+      (porNombreArchivo[kn] = porNombreArchivo[kn]||[]).push(r);
+    }
+  });
+
+  // 2) Los que no matchearon por ID — intenta emparejar por NOMBRE contra
+  // quien sigue sin encontrarse (a quien ya matcheó por ID en el paso 1 no
+  // se le vuelve a tocar aquí).
+  const porNombreDir = {}, porNombreDirOrdenado = {};
+  Object.keys(restantes).forEach(function(k){
+    const item = restantes[k];
+    const kn = normalizarNombreComparar(item.nombre);
+    (porNombreDir[kn] = porNombreDir[kn]||[]).push(k);
+    const ko = normalizarNombreOrdenado(item.nombre);
+    (porNombreDirOrdenado[ko] = porNombreDirOrdenado[ko]||[]).push(k);
+  });
+
+  const corregidos = [], ambiguos = [];
+  sinMatchId.forEach(function(r){
+    const kn = normalizarNombreComparar(r.nombre);
+    if(porNombreArchivo[kn] && porNombreArchivo[kn].length > 1){
+      // Este nombre se repite en el archivo entre los que no matchearon
+      // por ID — no se puede saber a cuál de los dos aplica, así que
+      // ninguno intenta emparejar por nombre.
+      altas.push(r);
+      return;
+    }
+    const ko = normalizarNombreOrdenado(r.nombre);
+    const nombreReparado = repararMojibake(r.nombre);
+    const knRep = nombreReparado !== r.nombre ? normalizarNombreComparar(nombreReparado) : null;
+    const koRep = nombreReparado !== r.nombre ? normalizarNombreOrdenado(nombreReparado) : null;
+
+    let candidatos = porNombreDir[kn];
+    let viaOrden = false, viaMojibake = false;
+    if(!candidatos || !candidatos.length){ candidatos = porNombreDirOrdenado[ko]; viaOrden = true; }
+    if((!candidatos || !candidatos.length) && knRep){
+      candidatos = porNombreDir[knRep]; viaOrden = false; viaMojibake = true;
+      if(!candidatos || !candidatos.length){ candidatos = porNombreDirOrdenado[koRep]; viaOrden = true; }
+    }
+    candidatos = (candidatos||[]).filter(function(k){ return restantes[k]; });
+
+    if(!candidatos.length){ altas.push(r); return; }
+    if(candidatos.length > 1){ ambiguos.push(r); altas.push(r); return; }
+
+    const k = candidatos[0];
+    const actual = restantes[k];
+    corregidos.push({
+      uid: actual.uid, nombreAntes: actual.nombre, nombreDespues: r.nombre,
+      idViejo: actual.hc_id, idNuevo: r.hc_id,
+      centroViejo: actual.comedor, centroNuevo: r.comedor,
+      viaOrden: viaOrden, viaMojibake: viaMojibake
     });
-  }
-  return out;
+    delete restantes[k];
+  });
+
+  const bajas = Object.keys(restantes).map(function(k){ return restantes[k]; });
+  return { altas: altas, actualizados: actualizados, sinCambios: sinCambios, corregidos: corregidos, ambiguos: ambiguos, bajas: bajas };
 }
 
-function procesarArchivoCorreccion(file){
-  const msg = document.getElementById('correccion-msg');
+// Da de alta, en lotes, a través de la Cloud Function crearEmpleadosHeadCount
+// (mismo mecanismo que usa el Head Count diario) — reutilizado por Head
+// Count, Ingresos y las altas "uno por uno".
+async function crearAltasLote(altas, fechaStr){
+  const nuevosCreados = [];
+  const errores = [];
+  if(!altas.length) return { nuevosCreados: nuevosCreados, errores: errores };
+  const LOTE_HC = 200;
+  const usados = await cargarGafetesUsados();
+  for(let i=0;i<altas.length;i+=LOTE_HC){
+    const lote = altas.slice(i, i+LOTE_HC).map(function(r){
+      return {
+        hc_id: r.hc_id, nombre: r.nombre, puesto: r.puesto || 'Sin puesto', comedor: r.comedor,
+        email: emailSinteticoHC(r.login_base), password: Math.random().toString(36).slice(2,10),
+        codigo_gafete: generarCodigoGafeteUnico(usados)
+      };
+    });
+    try {
+      const resultados = await crearEmpleadosHeadCountLote(lote, fechaStr);
+      resultados.forEach(function(res){
+        if(res.ok) nuevosCreados.push({ nombre:res.nombre, codigo_gafete:res.codigo_gafete, puesto:res.puesto, comedor:res.comedor });
+        else errores.push((res.nombre || res.hc_id)+': '+res.error);
+      });
+    } catch(err){
+      errores.push('No se pudo procesar un lote de '+lote.length+' altas: '+(err.message || err));
+    }
+  }
+  return { nuevosCreados: nuevosCreados, errores: errores };
+}
+
+// Aplica una lista de "corregidos" (mismo nombre, ID distinto): corrige el
+// ID/nombre/comedor guardado y luego sincroniza el acceso (login) de todos
+// los empleados del Head Count de un jalón, para que quien haya cambiado
+// de ID pueda seguir entrando con el nuevo. Reutilizado por Head Count,
+// Ingresos y la corrección "uno por uno".
+async function aplicarCorregidosLote(corregidos){
+  if(!corregidos.length) return { actualizados:0, erroresDirectorio:[], loginOk:0, loginConflictos:[], loginErrores:[], loginFallo:null };
+  let actualizados = 0;
+  const erroresDirectorio = [];
+  for(let i=0;i<corregidos.length;i+=450){
+    const lote = corregidos.slice(i,i+450);
+    const batch = db.batch();
+    lote.forEach(function(c){
+      batch.update(db.collection('empleados').doc(c.uid), { hc_id: c.idNuevo, nombre: c.nombreDespues, comedor: c.centroNuevo });
+    });
+    try { await batch.commit(); actualizados += lote.length; }
+    catch(err){ lote.forEach(function(c){ erroresDirectorio.push(c.nombreDespues+': '+err.message); }); }
+  }
+  let loginOk = 0, loginConflictos = [], loginErrores = [], loginFallo = null;
+  try {
+    const resultados = await migrarLoginsEmpleadosLote();
+    loginOk = resultados.filter(function(r){ return r.ok; }).length;
+    loginConflictos = resultados.filter(function(r){ return !r.ok && r.conflicto; });
+    loginErrores = resultados.filter(function(r){ return !r.ok && !r.conflicto; });
+  } catch(err){
+    loginFallo = (err && err.message) || String(err);
+  }
+  return { actualizados: actualizados, erroresDirectorio: erroresDirectorio, loginOk: loginOk, loginConflictos: loginConflictos, loginErrores: loginErrores, loginFallo: loginFallo };
+}
+
+// ── INGRESOS (altas entre semana, fuera del ciclo del Head Count) ──
+// Mismo formato de archivo (ID, Nombre, Centro) y el mismo emparejamiento
+// por ID/nombre que el Head Count — la diferencia es que Ingresos NUNCA da
+// de baja a nadie: a quien le "tocaría" ser baja aquí (no aparece en este
+// archivo chico) simplemente se ignora sin tocarlo, porque este archivo no
+// es la lista completa de la empresa, solo los ingresos de la semana. Las
+// bajas de verdad solo las decide el Head Count semanal completo.
+function procesarArchivoIngresos(file){
+  const msg = document.getElementById('ing-msg');
   msg.style.display='none';
   const nombreArchivo = file.name.toLowerCase();
   const esExcel = nombreArchivo.endsWith('.xlsx') || nombreArchivo.endsWith('.xls');
@@ -1524,15 +1807,17 @@ function procesarArchivoCorreccion(file){
       } else {
         filas = parseCSVTexto(String(e.target.result));
       }
-      const registros = parseCorreccionIdFilas(filas);
-      if(!registros.length){
-        msg.textContent = 'No se encontraron filas válidas. Verifica que el archivo tenga las columnas ID Nmna/BF (o ID), Nombre, Centro.';
+      const resultado = parseHeadCountFilas(filas);
+      ingRegistros = resultado.registros;
+      ingDuplicados = resultado.duplicadosArchivo;
+      if(!ingRegistros.length && !ingDuplicados.length){
+        msg.textContent = 'No se encontraron filas válidas. Verifica que el archivo tenga las columnas ID (o ID Nmna/BF), Nombre, Centro.';
         msg.className = 'msg err'; msg.style.display='block';
         return;
       }
-      await calcularPreviewCorreccion(registros);
+      await calcularDiffIngresos();
     } catch(err){
-      console.error('Error al leer archivo de corrección de IDs:', err);
+      console.error('Error al leer archivo de ingresos:', err);
       msg.textContent = 'No se pudo leer el archivo. Verifica que sea un Excel o CSV válido.';
       msg.className = 'msg err'; msg.style.display='block';
     }
@@ -1541,247 +1826,280 @@ function procesarArchivoCorreccion(file){
   else reader.readAsText(file, 'UTF-8');
 }
 
-async function calcularPreviewCorreccion(registros){
-  const preview = document.getElementById('correccion-preview');
+async function calcularDiffIngresos(){
+  const preview = document.getElementById('ing-preview');
   preview.style.display='block';
   preview.innerHTML = '<div style="display:flex;align-items:center;gap:.5rem;color:var(--g2);font-size:.85rem"><div class="spinner"></div>Comparando contra el directorio actual...</div>';
-
-  // Duplicados de nombre DENTRO del archivo nuevo — no se puede saber a
-  // cuál de los dos aplica cada ID, así que se dejan fuera para revisar a
-  // mano en vez de adivinar.
-  const porNombre = {};
-  registros.forEach(function(r){ (porNombre[r.nombre_comparar] = porNombre[r.nombre_comparar]||[]).push(r); });
-  const unicos = [];
-  correccionAmbiguosArchivo = [];
-  Object.keys(porNombre).forEach(function(k){
-    const grupo = porNombre[k];
-    if(grupo.length > 1) correccionAmbiguosArchivo.push(grupo);
-    else unicos.push(grupo[0]);
-  });
-
-  // Directorio actual — solo empleados (nunca admin ni chef). Se indexa de
-  // dos formas: por nombre tal cual, y por nombre con las palabras en
-  // orden alfabético (para reconocer a la misma persona aunque esté
-  // guardada en otro orden de nombre/apellidos que el Excel nuevo).
-  const snap = await db.collection('empleados').where('rol','==','empleado').get();
-  const porNombreDir = {};
-  const porNombreDirOrdenado = {};
-  snap.forEach(function(d){
-    const e = d.data();
-    const item = { uid:d.id, nombre:e.nombre, hc_id:e.hc_id, comedor:e.comedor };
-    const k = normalizarNombreComparar(e.nombre);
-    (porNombreDir[k] = porNombreDir[k]||[]).push(item);
-    const ko = normalizarNombreOrdenado(e.nombre);
-    (porNombreDirOrdenado[ko] = porNombreDirOrdenado[ko]||[]).push(item);
-  });
-
-  correccionCambios = [];
-  correccionSinCambios = 0;
-  correccionNoEncontrados = [];
-  correccionAmbiguosDirectorio = [];
-
-  unicos.forEach(function(r){
-    let candidatos = porNombreDir[r.nombre_comparar];
-    let viaOrden = false, viaMojibake = false;
-    if(!candidatos || !candidatos.length){
-      // No hubo coincidencia exacta — intenta de nuevo ignorando el orden
-      // de las palabras (mismo nombre, distinto orden de apellidos/nombre).
-      candidatos = porNombreDirOrdenado[r.nombre_ordenado];
-      viaOrden = true;
-    }
-    if((!candidatos || !candidatos.length) && r.nombre_reparado){
-      // Tampoco — si el nombre del Excel trae acentos/Ñ rotos (mojibake),
-      // intenta otra vez con el nombre ya reparado, tal cual y revuelto.
-      candidatos = porNombreDir[r.nombre_comparar_reparado];
-      viaOrden = false; viaMojibake = true;
-      if(!candidatos || !candidatos.length){
-        candidatos = porNombreDirOrdenado[r.nombre_ordenado_reparado];
-        viaOrden = true;
-      }
-    }
-    if(!candidatos || !candidatos.length){
-      correccionNoEncontrados.push(r);
-      return;
-    }
-    if(candidatos.length > 1){
-      correccionAmbiguosDirectorio.push({ registro:r, candidatos:candidatos });
-      return;
-    }
-    const emp = candidatos[0];
-    const idViejo = emp.hc_id || '—';
-    const centroViejo = emp.comedor || '—';
-    if(normalizarHcId(emp.hc_id) === normalizarHcId(r.id_nuevo) && emp.comedor === r.comedor_nuevo){
-      correccionSinCambios++;
-      return;
-    }
-    correccionCambios.push({
-      uid: emp.uid, nombre: emp.nombre,
-      viaMojibake: viaMojibake,
-      idViejo: idViejo, idNuevo: r.id_nuevo,
-      centroViejo: centroViejo, centroNuevo: r.comedor_nuevo,
-      viaOrden: viaOrden
-    });
-  });
-
-  renderPreviewCorreccion();
+  const resultado = await emparejarConDirectorioHC(ingRegistros);
+  ingDiff = { altas: resultado.altas, actualizados: resultado.actualizados, sinCambios: resultado.sinCambios, corregidos: resultado.corregidos, ambiguos: resultado.ambiguos };
+  renderPreviewIngresos();
 }
 
-function renderPreviewCorreccion(){
-  const preview = document.getElementById('correccion-preview');
+function renderPreviewIngresos(){
+  const preview = document.getElementById('ing-preview');
+  const altas = ingDiff.altas, actualizados = ingDiff.actualizados, sinCambios = ingDiff.sinCambios, corregidos = ingDiff.corregidos, ambiguos = ingDiff.ambiguos;
   const comedorLabels = { betel:'Betel', cuauhtemoc:'Cuauhtémoc', intelomas:'Intelomas' };
-  let html = '<div style="font-size:.85rem;color:var(--g2);margin-bottom:.75rem">'
-    + correccionCambios.length + ' cambio(s) para aplicar, '
-    + correccionSinCambios + ' sin cambios, '
-    + correccionNoEncontrados.length + ' no encontrado(s) en el directorio, '
-    + (correccionAmbiguosArchivo.length + correccionAmbiguosDirectorio.length) + ' ambiguo(s).'
-    + '</div>';
 
-  if(correccionCambios.length){
-    html += '<div style="font-size:.72rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--g2);margin-bottom:.4rem">Cambios a aplicar</div>'
-      + '<div style="max-height:260px;overflow-y:auto;margin-bottom:1rem;border:1px solid var(--borde2);border-radius:8px">'
-      + correccionCambios.slice(0,80).map(function(c){
-          const cambioCentro = c.centroViejo !== c.centroNuevo;
-          return '<div style="font-size:.8rem;padding:.4rem .6rem;border-bottom:1px solid var(--borde2)">'
-            + '<strong>' + escHtml(c.nombre) + '</strong>'
-            + (c.viaOrden ? ' <span style="font-size:.68rem;color:var(--naranja);font-weight:700">· nombre en otro orden, revisa</span>' : '')
-            + (c.viaMojibake ? ' <span style="font-size:.68rem;color:var(--rojo);font-weight:700">· acentos/Ñ rotos en el Excel, revisa</span>' : '')
-            + '<br>'
-            + 'ID: ' + escHtml(String(c.idViejo)) + ' → <strong style="color:var(--v)">' + escHtml(String(c.idNuevo)) + '</strong>'
-            + (cambioCentro ? ' · Centro: ' + escHtml(comedorLabels[c.centroViejo]||c.centroViejo) + ' → <strong style="color:var(--v)">' + escHtml(comedorLabels[c.centroNuevo]||c.centroNuevo) + '</strong>' : '')
-            + '</div>';
-        }).join('')
-      + (correccionCambios.length>80 ? '<div style="font-size:.75rem;color:var(--g3);padding:.4rem .6rem">+'+(correccionCambios.length-80)+' más</div>' : '')
-      + '</div>';
+  function statTile(label,val,color){
+    return '<div style="background:var(--crema);border-radius:12px;padding:.85rem 1rem;text-align:center">'+
+      '<div style="font-size:1.4rem;font-weight:800;color:'+color+'">'+val+'</div>'+
+      '<div style="font-size:.66rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--g2);margin-top:.2rem">'+label+'</div></div>';
+  }
+  function listaHtml(items, getTexto){
+    if(!items.length) return '<div style="font-size:.78rem;color:var(--g3);padding:.3rem 0">Ninguno</div>';
+    return items.slice(0,50).map(function(it){
+      return '<div style="font-size:.8rem;padding:.25rem 0;border-bottom:1px solid var(--borde2)">'+escHtml(getTexto(it))+'</div>';
+    }).join('') + (items.length>50 ? '<div style="font-size:.75rem;color:var(--g3);padding:.3rem 0">+'+(items.length-50)+' más</div>' : '');
+  }
+  function detalle(titulo, items, getTexto){
+    if(!items.length) return '';
+    return '<details style="margin-bottom:.85rem"><summary style="cursor:pointer;font-size:.82rem;font-weight:700;color:var(--negro);padding:.3rem 0">'+titulo+' ('+items.length+')</summary><div style="max-height:220px;overflow-y:auto;padding:.4rem .2rem">'+listaHtml(items, getTexto)+'</div></details>';
   }
 
-  if(correccionNoEncontrados.length){
-    html += '<div style="font-size:.72rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--naranja);margin-bottom:.4rem">No encontrados en el directorio (revisa el nombre a mano)</div>'
-      + '<div style="max-height:160px;overflow-y:auto;margin-bottom:1rem;font-size:.8rem;color:var(--g2)">'
-      + correccionNoEncontrados.slice(0,50).map(function(r){ return '<div style="padding:.2rem 0">'+escHtml(r.nombre_excel)+(r.nombre_reparado?' <span style="color:var(--g3)">(¿'+escHtml(r.nombre_reparado)+'?)</span>':'')+' — ID '+escHtml(r.id_nuevo)+'</div>'; }).join('')
-      + (correccionNoEncontrados.length>50 ? '<div style="color:var(--g3)">+'+(correccionNoEncontrados.length-50)+' más</div>' : '')
-      + '</div>';
-  }
+  preview.innerHTML =
+    '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:.75rem;margin-bottom:1.25rem">' +
+      statTile('Altas', altas.length, 'var(--v)') +
+      statTile('ID corregido', corregidos.length, 'var(--naranja)') +
+      statTile('Actualizados', actualizados.length, 'var(--naranja)') +
+      statTile('Sin cambios', sinCambios.length, 'var(--g2)') +
+      statTile('Duplicados en archivo', ingDuplicados.length, 'var(--rojo)') +
+    '</div>' +
+    detalle('Altas — nuevo ingreso', altas, function(r){ return r.nombre+' · '+(comedorLabels[r.comedor]||r.comedor); }) +
+    detalle('ID corregido — mismo nombre, ID distinto', corregidos, function(c){
+      return c.nombreDespues + (c.viaOrden?' · nombre en otro orden':'') + (c.viaMojibake?' · acentos/Ñ rotos en el Excel':'') + ' — ID ' + c.idViejo + ' → ' + c.idNuevo;
+    }) +
+    detalle('Actualizados — cambió nombre o comedor (mismo ID)', actualizados, function(a){ return a.despues.nombre+' — '+(comedorLabels[a.antes.comedor]||a.antes.comedor)+' → '+(comedorLabels[a.despues.comedor]||a.despues.comedor); }) +
+    (ambiguos.length ? detalle('Ambiguos — hay más de un empleado con este nombre, no se tocan (revisa a mano)', ambiguos, function(r){ return r.nombre; }) : '') +
+    (ingDuplicados.length ? detalle('Duplicados en el archivo — revisa a mano, no se procesan solos', ingDuplicados, function(g){ return g.map(function(x){return x.nombre;}).join(' / ')+' (mismo identificador: '+g[0].hc_id+')'; }) : '') +
+    '<div style="display:flex;gap:.75rem;margin-top:1.25rem;flex-wrap:wrap;align-items:center">' +
+      '<button class="btn btn-v" id="btn-aplicar-ing">Aplicar cambios</button>' +
+      '<button class="btn btn-outline" id="btn-cancelar-ing">Cancelar</button>' +
+    '</div>' +
+    '<div class="progreso-wrap" id="ing-progreso-wrap" style="display:none;margin-top:.75rem"><div class="progreso-bar" id="ing-progreso-bar" style="width:0%"></div></div>';
 
-  const ambiguosTotal = correccionAmbiguosArchivo.length + correccionAmbiguosDirectorio.length;
-  if(ambiguosTotal){
-    html += '<div style="font-size:.72rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--rojo);margin-bottom:.4rem">Ambiguos — no se tocan, revisa a mano</div>'
-      + '<div style="max-height:160px;overflow-y:auto;margin-bottom:1rem;font-size:.8rem;color:var(--g2)">'
-      + correccionAmbiguosArchivo.map(function(grupo){ return '<div style="padding:.2rem 0">'+escHtml(grupo[0].nombre_excel)+' — este nombre aparece '+grupo.length+' veces en el archivo nuevo</div>'; }).join('')
-      + correccionAmbiguosDirectorio.map(function(x){ return '<div style="padding:.2rem 0">'+escHtml(x.registro.nombre_excel)+' — hay '+x.candidatos.length+' empleados con este nombre en el directorio</div>'; }).join('')
-      + '</div>';
-  }
-
-  html += '<button class="btn btn-v" id="btn-aplicar-correccion"' + (!correccionCambios.length ? ' disabled' : '') + '>Aplicar corrección (' + correccionCambios.length + ')</button> '
-    + '<button class="btn btn-outline" id="btn-cancelar-correccion">Cancelar</button>';
-
-  preview.innerHTML = html;
-  document.getElementById('btn-aplicar-correccion').addEventListener('click', aplicarCorreccionIds);
-  document.getElementById('btn-cancelar-correccion').addEventListener('click', function(){
-    correccionCambios = []; correccionNoEncontrados = []; correccionAmbiguosArchivo = []; correccionAmbiguosDirectorio = [];
-    document.getElementById('correccion-input').value = '';
+  document.getElementById('btn-aplicar-ing').addEventListener('click', aplicarCambiosIngresos);
+  document.getElementById('btn-cancelar-ing').addEventListener('click', function(){
+    ingRegistros = []; ingDuplicados = [];
+    document.getElementById('ing-input').value = '';
     preview.style.display='none'; preview.innerHTML='';
   });
 }
 
-async function aplicarCorreccionIds(){
-  if(!correccionCambios.length) return;
-  if(!confirm('Esto va a corregir el ID de ' + correccionCambios.length + ' empleado(s) y actualizar su acceso (login) para que puedan seguir entrando con su ID correcto. ¿Continuar?')) return;
+async function aplicarCambiosIngresos(){
+  const altas = ingDiff.altas, actualizados = ingDiff.actualizados, corregidos = ingDiff.corregidos;
+  const btn = document.getElementById('btn-aplicar-ing');
+  const btnCancelar = document.getElementById('btn-cancelar-ing');
+  const wrap = document.getElementById('ing-progreso-wrap');
+  const bar = document.getElementById('ing-progreso-bar');
+  const msg = document.getElementById('ing-msg');
+  btn.disabled = true; btnCancelar.disabled = true;
+  wrap.style.display='block';
+  msg.style.display='none';
 
-  const btn = document.getElementById('btn-aplicar-correccion');
-  const msg = document.getElementById('correccion-msg');
-  if(btn) btn.disabled = true;
-  msg.style.display='block'; msg.className='msg'; msg.textContent='Corrigiendo IDs…';
+  const hoyStr = hoy();
 
-  let actualizados = 0;
-  const errores = [];
-  for (const c of correccionCambios) {
-    try {
-      await db.collection('empleados').doc(c.uid).update({ hc_id: c.idNuevo, comedor: c.centroNuevo });
-      actualizados++;
-    } catch(e){
-      errores.push(c.nombre + ': ' + e.message);
-    }
+  // 1) Altas — misma Cloud Function que el Head Count.
+  const resAltas = await crearAltasLote(altas, hoyStr);
+  bar.style.width = '50%';
+
+  // 2) Actualizados (nombre/comedor cambiaron, mismo ID) — en lote.
+  const erroresActualizados = [];
+  for(let i=0;i<actualizados.length;i+=450){
+    const lote = actualizados.slice(i,i+450);
+    const batch = db.batch();
+    lote.forEach(function(a){ batch.update(db.collection('empleados').doc(a.uid), { nombre:a.despues.nombre, comedor:a.despues.comedor }); });
+    try { await batch.commit(); }
+    catch(err){ lote.forEach(function(a){ erroresActualizados.push(a.despues.nombre+': '+err.message); }); }
   }
+  bar.style.width = '70%';
 
-  let html = actualizados + ' empleado(s) con ID corregido.';
-  if (errores.length) html += '<br>' + errores.length + ' con error al guardar: ' + errores.join(', ');
+  // 3) Corregidos (mismo nombre, ID distinto) — corrige ID + sincroniza login.
+  const resCorregidos = await aplicarCorregidosLote(corregidos);
+  bar.style.width = '100%';
+
+  btn.disabled = false; btnCancelar.disabled = false;
+  msg.style.display='block';
+
+  let resumen = resAltas.nuevosCreados.length+' de '+altas.length+' alta(s) aplicada(s), '+actualizados.length+' actualizado(s), '+resCorregidos.actualizados+' de '+corregidos.length+' ID(s) corregido(s).';
+  const errores = resAltas.errores.concat(erroresActualizados).concat(resCorregidos.erroresDirectorio);
   let huboProblemaLogin = false;
+  if(corregidos.length){
+    resumen += ' Acceso sincronizado para '+resCorregidos.loginOk+' empleado(s).';
+    if(resCorregidos.loginConflictos.length){
+      huboProblemaLogin = true;
+      resumen += ' '+resCorregidos.loginConflictos.length+' con conflicto de correo (revisa a mano): '+resCorregidos.loginConflictos.map(function(c){return c.nombre;}).join(', ')+'.';
+    }
+    if(resCorregidos.loginErrores.length){
+      huboProblemaLogin = true;
+      resumen += ' '+resCorregidos.loginErrores.length+' sin sincronizar: '+resCorregidos.loginErrores.map(function(e){return (e.nombre||e.uid)+' — '+e.error;}).join(', ')+'.';
+    }
+    if(resCorregidos.loginFallo){
+      huboProblemaLogin = true;
+      resumen += ' No se pudo sincronizar el acceso automáticamente ('+resCorregidos.loginFallo+') — avísame para revisarlo.';
+    }
+  }
+  if(errores.length) resumen += ' '+errores.length+' error(es): '+errores.slice(0,5).join(' | ')+(errores.length>5?' …':'');
+  msg.className = 'msg ' + ((errores.length || huboProblemaLogin) ? 'err' : 'ok');
+  msg.textContent = resumen;
 
-  // El ID ya quedó corregido en el directorio — ahora hace falta sincronizar
-  // el acceso (Firebase Auth) para que puedan entrar con el ID nuevo.
-  msg.innerHTML = html + '<br>Sincronizando accesos…';
-  try {
-    const resultados = await migrarLoginsEmpleadosLote();
-    const ok = resultados.filter(function(r){ return r.ok; }).length;
-    const conflictos = resultados.filter(function(r){ return !r.ok && r.conflicto; });
-    const otrosErrores = resultados.filter(function(r){ return !r.ok && !r.conflicto; });
-    html += '<br>Acceso sincronizado para ' + ok + ' empleado(s).';
-    if (conflictos.length) {
-      huboProblemaLogin = true;
-      html += '<br>' + conflictos.length + ' con conflicto de correo (revisa a mano): ' + conflictos.map(function(c){ return c.nombre; }).join(', ');
-    }
-    if (otrosErrores.length) {
-      huboProblemaLogin = true;
-      html += '<br>' + otrosErrores.length + ' sin sincronizar: ' + otrosErrores.map(function(e){ return (e.nombre||e.uid)+' — '+e.error; }).join(', ');
-    }
-  } catch(errMigrar) {
-    console.error('Error al sincronizar accesos:', errMigrar);
-    huboProblemaLogin = true;
-    html += '<br><strong>No se pudo sincronizar el acceso automáticamente</strong> (' + errMigrar.message + '). Los IDs ya quedaron corregidos en el directorio, pero hasta que esto corra, esas personas no van a poder entrar con su ID nuevo — avísame para revisarlo.';
+  if(resAltas.nuevosCreados.length){
+    const btnGafetes = document.createElement('button');
+    btnGafetes.className = 'btn btn-v btn-sm';
+    btnGafetes.style.marginTop = '.75rem';
+    btnGafetes.type = 'button';
+    btnGafetes.textContent = '🖨 Imprimir gafetes de los '+resAltas.nuevosCreados.length+' nuevos';
+    btnGafetes.addEventListener('click', function(){ imprimirGafetesLote(resAltas.nuevosCreados); });
+    document.getElementById('ing-preview').appendChild(btnGafetes);
   }
 
-  msg.className = (errores.length || huboProblemaLogin) ? 'msg err' : 'msg ok';
-  msg.innerHTML = html;
+  ingRegistros = []; ingDuplicados = [];
+  document.getElementById('ing-input').value = '';
+  cargarEmpleados();
+}
 
-  correccionCambios = []; correccionNoEncontrados = []; correccionAmbiguosArchivo = []; correccionAmbiguosDirectorio = [];
-  document.getElementById('correccion-input').value = '';
-  document.getElementById('correccion-preview').style.display='none';
-  document.getElementById('correccion-preview').innerHTML='';
-  if(btn) btn.disabled = false;
+// Alta de una sola persona en Ingresos, sin subir archivo. Igual que el
+// alta uno por uno de Subsidiados: primero revisa si ya existe (por ID o
+// por nombre) para corregir/actualizar en vez de duplicar.
+async function agregarIngresoUnico(){
+  const idEl = document.getElementById('ing-unico-id');
+  const nombreEl = document.getElementById('ing-unico-nombre');
+  const centroEl = document.getElementById('ing-unico-centro');
+  const msg = document.getElementById('ing-unico-msg');
+  const id = idEl.value.trim();
+  const nombre = nombreEl.value.trim();
+  const centro = centroEl.value;
+  function mostrarMsg(txt, ok){ msg.textContent = txt; msg.className = 'msg '+(ok?'ok':'err'); msg.style.display='block'; }
+  if(!id || !nombre){ mostrarMsg('Completa el ID y el nombre.', false); return; }
+
+  const btn = document.getElementById('btn-ing-unico-guardar');
+  if(btn){ btn.disabled = true; btn.textContent = 'Guardando...'; }
+  try {
+    const registro = { hc_id: id, nombre: normalizarNombreHC(nombre), puesto: null, comedor: normalizarCentroHC(centro), login_base: id };
+    const resultado = await emparejarConDirectorioHC([registro]);
+    if(resultado.corregidos.length){
+      await aplicarCorregidosLote(resultado.corregidos);
+      mostrarMsg('Ya existía con otro ID — se corrigió a ' + id + ' y se sincronizó su acceso.', true);
+    } else if(resultado.actualizados.length){
+      const a = resultado.actualizados[0];
+      await db.collection('empleados').doc(a.uid).update({ nombre:a.despues.nombre, comedor:a.despues.comedor });
+      mostrarMsg('Ya existía — se actualizó su nombre/comedor.', true);
+    } else if(resultado.sinCambios.length){
+      mostrarMsg('Ya existía en el directorio, sin cambios.', true);
+    } else if(resultado.ambiguos.length){
+      mostrarMsg('Hay más de un empleado con ese nombre en el directorio — usa "Corregir un empleado uno por uno" para elegir a cuál.', false);
+    } else {
+      const res = await crearAltasLote([registro], hoy());
+      if(res.errores.length){ mostrarMsg('Error: '+res.errores.join(', '), false); }
+      else { mostrarMsg('Dado de alta correctamente.', true); }
+    }
+    idEl.value=''; nombreEl.value='';
+    cargarEmpleados();
+  } catch(e){
+    console.error('Error al agregar ingreso uno por uno:', e);
+    mostrarMsg('Error: '+e.message, false);
+  } finally {
+    if(btn){ btn.disabled=false; btn.textContent='Dar de alta'; }
+  }
+}
+
+// ── CORREGIR UN EMPLEADO UNO POR UNO (búsqueda + edición manual) ──
+window.buscarEmpleadoParaEditar = function(){
+  const input = document.getElementById('ing-editar-buscar');
+  const opciones = document.getElementById('ing-editar-opciones');
+  const qRaw = input.value.trim();
+  const q = normalizarTexto(qRaw);
+  if(!q){ opciones.style.display='none'; opciones.innerHTML=''; return; }
+  const matches = _empleadosListaCache.filter(function(e){ return normalizarTexto(e.nombre||'').indexOf(q) >= 0; }).slice(0,8);
+  if(!matches.length){
+    opciones.innerHTML = '<div style="padding:.7rem .9rem;font-size:.8rem;color:var(--g3)">Sin resultados</div>';
+  } else {
+    opciones.innerHTML = matches.map(function(e){
+      return `<div style="padding:.55rem .9rem;font-size:.82rem;cursor:pointer;border-bottom:1px solid var(--borde2)"
+        onmouseover="this.style.background='var(--crema)'" onmouseout="this.style.background=''"
+        onmousedown="seleccionarEmpleadoParaEditar('${e.id}')">
+        <span style="font-weight:600;color:var(--negro)">${e.nombre||'—'}</span>
+        <span style="color:var(--g3);font-size:.75rem"> · ID ${e.hc_id||'—'} · ${e.comedor||'—'}</span>
+      </div>`;
+    }).join('');
+  }
+  opciones.style.display='block';
+};
+
+window.seleccionarEmpleadoParaEditar = function(id){
+  const e = _empleadosListaCache.find(function(x){ return x.id === id; });
+  const opciones = document.getElementById('ing-editar-opciones');
+  if(opciones){ opciones.style.display='none'; opciones.innerHTML=''; }
+  if(!e) return;
+  _empleadoEnEdicion = e;
+  document.getElementById('ing-editar-buscar').value = e.nombre || '';
+  document.getElementById('ing-editar-id').value = e.hc_id || '';
+  document.getElementById('ing-editar-nombre').value = e.nombre || '';
+  document.getElementById('ing-editar-centro').value = e.comedor || 'betel';
+  const msg = document.getElementById('ing-editar-msg');
+  msg.style.display='none'; msg.textContent=''; msg.className='msg';
+  document.getElementById('ing-editar-form').style.display='block';
+};
+
+window.cancelarEdicionEmpleado = function(){
+  _empleadoEnEdicion = null;
+  document.getElementById('ing-editar-form').style.display='none';
+  document.getElementById('ing-editar-buscar').value = '';
+};
+
+async function guardarEdicionEmpleado(){
+  if(!_empleadoEnEdicion) return;
+  const idNuevo = document.getElementById('ing-editar-id').value.trim();
+  const nombreNuevo = normalizarNombreHC(document.getElementById('ing-editar-nombre').value.trim());
+  const centroNuevo = document.getElementById('ing-editar-centro').value;
+  const msg = document.getElementById('ing-editar-msg');
+  function mostrarMsg(txt, ok){ msg.textContent = txt; msg.className = 'msg '+(ok?'ok':'err'); msg.style.display='block'; }
+  if(!idNuevo || !nombreNuevo){ mostrarMsg('Completa el ID y el nombre.', false); return; }
+
+  const btn = document.getElementById('btn-ing-editar-guardar');
+  if(btn){ btn.disabled = true; btn.textContent = 'Guardando...'; }
+  try {
+    const idCambio = normalizarHcId(_empleadoEnEdicion.hc_id) !== normalizarHcId(idNuevo);
+    await db.collection('empleados').doc(_empleadoEnEdicion.id).update({ hc_id: idNuevo, nombre: nombreNuevo, comedor: centroNuevo });
+    if(idCambio){
+      mostrarMsg('Guardado. Sincronizando acceso…', true);
+      try {
+        const resultados = await migrarLoginsEmpleadosLote();
+        const r = resultados.find(function(x){ return x.uid === _empleadoEnEdicion.id; });
+        if(r && !r.ok){
+          mostrarMsg('El ID se guardó, pero no se pudo sincronizar su acceso: ' + r.error, false);
+        } else {
+          mostrarMsg('Guardado y acceso sincronizado.', true);
+        }
+      } catch(errMigrar){
+        console.error('Error al sincronizar acceso tras editar empleado:', errMigrar);
+        mostrarMsg('El ID se guardó, pero no se pudo sincronizar el acceso automáticamente (' + errMigrar.message + ') — avísame para revisarlo.', false);
+      }
+    } else {
+      mostrarMsg('Guardado.', true);
+    }
+    _empleadoEnEdicion = null;
+    document.getElementById('ing-editar-form').style.display='none';
+    document.getElementById('ing-editar-buscar').value = '';
+    cargarEmpleados();
+  } catch(e){
+    console.error('Error al guardar edición de empleado:', e);
+    mostrarMsg('Error: '+e.message, false);
+  } finally {
+    if(btn){ btn.disabled=false; btn.textContent='Guardar cambios'; }
+  }
 }
 
 async function calcularDiffHeadCount(){
   const preview = document.getElementById('hc-preview');
   preview.style.display='block';
   preview.innerHTML = '<div style="display:flex;align-items:center;gap:.5rem;color:var(--g2);font-size:.85rem"><div class="spinner"></div>Comparando contra el directorio actual...</div>';
-
-  const snap = await db.collection('empleados').where('origen','==','head_count').get();
-  const actuales = {};
-  snap.forEach(function(d){
-    const e = d.data();
-    if(e.hc_id) actuales[normalizarHcId(e.hc_id)] = { uid:d.id, nombre:e.nombre, puesto:e.puesto, comedor:e.comedor, hc_id:e.hc_id };
-  });
-
-  const hcIdsNuevo = {};
-  hcRegistros.forEach(function(r){ hcIdsNuevo[normalizarHcId(r.hc_id)] = r; });
-
-  const altas = [];
-  const actualizados = [];
-  const sinCambios = [];
-  hcRegistros.forEach(function(r){
-    const actual = actuales[normalizarHcId(r.hc_id)];
-    if(!actual){ altas.push(r); return; }
-    // El puesto no viene en este archivo (formato ID, Nombre, Centro) — no
-    // se compara ni se toca, para no borrar el puesto real ya guardado.
-    if(actual.nombre !== r.nombre || actual.comedor !== r.comedor){
-      actualizados.push({ uid:actual.uid, antes:actual, despues:r });
-    } else {
-      sinCambios.push(r);
-    }
-  });
-
-  const bajas = [];
-  Object.keys(actuales).forEach(function(hcIdNorm){
-    if(!hcIdsNuevo[hcIdNorm]) bajas.push(actuales[hcIdNorm]);
-  });
-
-  hcDiff = { altas: altas, bajas: bajas, actualizados: actualizados, sinCambios: sinCambios };
+  hcDiff = await emparejarConDirectorioHC(hcRegistros);
   renderPreviewHeadCount();
 }
 
 function renderPreviewHeadCount(){
   const preview = document.getElementById('hc-preview');
-  const altas = hcDiff.altas, bajas = hcDiff.bajas, actualizados = hcDiff.actualizados, sinCambios = hcDiff.sinCambios;
+  const altas = hcDiff.altas, bajas = hcDiff.bajas, actualizados = hcDiff.actualizados, sinCambios = hcDiff.sinCambios, corregidos = hcDiff.corregidos, ambiguos = hcDiff.ambiguos;
 
   function statTile(label,val,color){
     return '<div style="background:var(--crema);border-radius:12px;padding:.85rem 1rem;text-align:center">'+
@@ -1804,12 +2122,17 @@ function renderPreviewHeadCount(){
       statTile('Altas', altas.length, 'var(--v)') +
       statTile('Bajas', bajas.length, 'var(--rojo)') +
       statTile('Actualizados', actualizados.length, 'var(--naranja)') +
+      statTile('ID corregido', corregidos.length, 'var(--naranja)') +
       statTile('Sin cambios', sinCambios.length, 'var(--g2)') +
       statTile('Duplicados en archivo', hcDuplicados.length, 'var(--rojo)') +
     '</div>' +
     detalle('Altas — nuevo ingreso', altas, function(r){ return r.nombre+' · '+r.comedor; }) +
     detalle('Bajas — ya no aparecen en el Head Count', bajas, function(r){ return r.nombre+' — '+r.puesto+' · '+r.comedor; }) +
-    detalle('Actualizados — cambió nombre o comedor', actualizados, function(r){ return r.despues.nombre+' — '+r.antes.comedor+' → '+r.despues.comedor; }) +
+    detalle('Actualizados — cambió nombre o comedor (mismo ID)', actualizados, function(r){ return r.despues.nombre+' — '+r.antes.comedor+' → '+r.despues.comedor; }) +
+    detalle('ID corregido — mismo nombre, ID distinto (se sincroniza el acceso solo)', corregidos, function(c){
+      return c.nombreDespues + (c.viaOrden?' · nombre en otro orden':'') + (c.viaMojibake?' · acentos/Ñ rotos en el Excel':'') + ' — ID ' + c.idViejo + ' → ' + c.idNuevo;
+    }) +
+    (ambiguos.length ? detalle('Ambiguos — hay más de un empleado con este nombre, se tratan como alta nueva sin corregir nada (revisa a mano)', ambiguos, function(r){ return r.nombre; }) : '') +
     (hcDuplicados.length ? detalle('Duplicados en el archivo — revisa a mano, no se procesan solos', hcDuplicados, function(g){ return g.map(function(x){return x.nombre;}).join(' / ')+' (mismo identificador: '+g[0].hc_id+')'; }) : '') +
     '<div style="margin-top:1rem;padding-top:1rem;border-top:1px solid var(--borde2)">' +
       '<div style="font-size:.72rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--g2);margin-bottom:.6rem">Qué aplicar</div>' +
@@ -1817,8 +2140,9 @@ function renderPreviewHeadCount(){
         '<label style="display:flex;align-items:center;gap:.5rem;cursor:pointer"><input type="checkbox" id="hc-chk-altas" style="width:auto"'+(altas.length?' checked':' disabled')+'/> Dar de alta a los '+altas.length+' nuevo(s)</label>' +
         '<label style="display:flex;align-items:center;gap:.5rem;cursor:pointer"><input type="checkbox" id="hc-chk-bajas" style="width:auto"'+(bajas.length?' checked':' disabled')+'/> Dar de baja (borrar) a los '+bajas.length+' que ya no aparecen</label>' +
         '<label style="display:flex;align-items:center;gap:.5rem;cursor:pointer"><input type="checkbox" id="hc-chk-actualizados" style="width:auto"'+(actualizados.length?' checked':' disabled')+'/> Actualizar nombre/comedor de los '+actualizados.length+' que cambiaron</label>' +
+        '<label style="display:flex;align-items:center;gap:.5rem;cursor:pointer"><input type="checkbox" id="hc-chk-corregidos" style="width:auto"'+(corregidos.length?' checked':' disabled')+'/> Corregir el ID de los '+corregidos.length+' que cambiaron de ID (misma persona, mismo nombre)</label>' +
       '</div>' +
-      '<div style="font-size:.72rem;color:var(--g3);margin-top:.5rem">Destíldalas para aplicar solo lo que quieras esta vez — por ejemplo, si las bajas te parecen sospechosas (como cuando los IDs todavía no están corregidos), destilda esa y aplica nomás las altas y los actualizados.</div>' +
+      '<div style="font-size:.72rem;color:var(--g3);margin-top:.5rem">Destíldalas para aplicar solo lo que quieras esta vez — por ejemplo, si las bajas te parecen sospechosas, destilda esa y aplica nomás el resto.</div>' +
     '</div>' +
     '<div style="display:flex;gap:.75rem;margin-top:1.25rem;flex-wrap:wrap;align-items:center">' +
       '<button class="btn btn-v" id="btn-aplicar-hc">Aplicar cambios</button>' +
@@ -1841,16 +2165,18 @@ window.cancelarHeadCount = function(){
 function cancelarHeadCount(){ window.cancelarHeadCount(); }
 
 async function aplicarCambiosHeadCount(){
-  // Cada grupo (altas/bajas/actualizados) solo se procesa si su casilla
-  // sigue marcada — así el admin puede destildar, por ejemplo, las bajas
-  // si le parecen sospechosas (típico cuando los IDs aún no están
-  // corregidos) y aplicar solo el resto, en vez de todo o nada.
+  // Cada grupo (altas/bajas/actualizados/corregidos) solo se procesa si su
+  // casilla sigue marcada — así el admin puede destildar, por ejemplo, las
+  // bajas si le parecen sospechosas, y aplicar solo el resto, en vez de
+  // todo o nada.
   const chkAltas = document.getElementById('hc-chk-altas');
   const chkBajas = document.getElementById('hc-chk-bajas');
   const chkActualizados = document.getElementById('hc-chk-actualizados');
+  const chkCorregidos = document.getElementById('hc-chk-corregidos');
   const altas = (chkAltas && !chkAltas.checked) ? [] : hcDiff.altas;
   const bajas = (chkBajas && !chkBajas.checked) ? [] : hcDiff.bajas;
   const actualizados = (chkActualizados && !chkActualizados.checked) ? [] : hcDiff.actualizados;
+  const corregidos = (chkCorregidos && !chkCorregidos.checked) ? [] : hcDiff.corregidos;
   const btn = document.getElementById('btn-aplicar-hc');
   const btnCancelar = document.getElementById('btn-cancelar-hc');
   const wrap = document.getElementById('hc-progreso-wrap');
@@ -1861,45 +2187,14 @@ async function aplicarCambiosHeadCount(){
   msg.style.display='none';
 
   const hoyStr = hoy();
-  const nuevosCreados = [];
-  const errores = [];
-  const totalPasos = altas.length + 1;
-  let pasoActual = 0;
-  function avanzar(){ pasoActual++; bar.style.width = Math.round((pasoActual/totalPasos)*100)+'%'; }
 
   // 1) ALTAS — en lotes, vía la Cloud Function crearEmpleadosHeadCount. Como
   // esa función corre en un servidor con permisos de administrador (no en
   // este navegador), no existe el límite de "actividad inusual" que Firebase
   // aplica a cuentas creadas desde el cliente — puede procesar cientos de
-  // altas de golpe sin bloquearse. Se divide en lotes de 200 solo para que
-  // ninguna llamada tarde tanto que se pase del tiempo máximo de la función,
-  // no por ningún límite de Firebase.
-  const LOTE_HC = 200;
-  const _gafetesUsadosHC = await cargarGafetesUsados();
-  for(let i=0;i<altas.length;i+=LOTE_HC){
-    const lote = altas.slice(i, i+LOTE_HC).map(function(r){
-      return {
-        hc_id: r.hc_id, nombre: r.nombre, puesto: r.puesto || 'Sin puesto', comedor: r.comedor,
-        email: emailSinteticoHC(r.login_base), password: Math.random().toString(36).slice(2,10),
-        codigo_gafete: generarCodigoGafeteUnico(_gafetesUsadosHC)
-      };
-    });
-    try {
-      const resultados = await crearEmpleadosHeadCountLote(lote, hoyStr);
-      resultados.forEach(function(res){
-        if(res.ok){
-          nuevosCreados.push({ nombre:res.nombre, codigo_gafete:res.codigo_gafete, puesto:res.puesto, comedor:res.comedor });
-        } else {
-          errores.push((res.nombre || res.hc_id)+': '+res.error);
-        }
-      });
-    } catch(err){
-      console.error('Error al llamar crearEmpleadosHeadCount:', err);
-      errores.push('No se pudo procesar un lote de '+lote.length+' altas: '+(err.message || err));
-    }
-    pasoActual += lote.length;
-    bar.style.width = Math.round((pasoActual/totalPasos)*100)+'%';
-  }
+  // altas de golpe sin bloquearse.
+  const resAltas = await crearAltasLote(altas, hoyStr);
+  bar.style.width = '40%';
 
   // 2) BAJAS + ACTUALIZADOS — en lotes atómicos (máx 450 operaciones por lote)
   const operaciones = [];
@@ -1917,6 +2212,7 @@ async function aplicarCambiosHeadCount(){
     }});
   });
 
+  const erroresBatch = [];
   for(let i=0;i<operaciones.length;i+=450){
     const lote = operaciones.slice(i,i+450);
     const batch = db.batch();
@@ -1929,31 +2225,56 @@ async function aplicarCambiosHeadCount(){
       await batch.commit();
     } catch(err){
       console.error('Error al aplicar lote de bajas/actualizados:', err);
-      errores.push('Error al aplicar '+lote.length+' cambio(s) en lote: '+err.message);
+      erroresBatch.push('Error al aplicar '+lote.length+' cambio(s) en lote: '+err.message);
     }
   }
-  avanzar();
+  bar.style.width = '70%';
+
+  // 3) CORREGIDOS — mismo nombre, ID distinto: corrige el ID (y nombre/
+  // comedor) y sincroniza el acceso (login) de una vez, para que puedan
+  // seguir entrando con su ID correcto.
+  const resCorregidos = await aplicarCorregidosLote(corregidos);
+  bar.style.width = '100%';
 
   btn.disabled = false; btnCancelar.disabled = false;
   msg.style.display='block';
 
-  let resumen = nuevosCreados.length+' de '+altas.length+' alta(s) aplicada(s), '+bajas.length+' baja(s), '+actualizados.length+' actualizado(s).';
+  let resumen = resAltas.nuevosCreados.length+' de '+altas.length+' alta(s) aplicada(s), '+bajas.length+' baja(s), '+actualizados.length+' actualizado(s), '+resCorregidos.actualizados+' de '+corregidos.length+' ID(s) corregido(s).';
   const omitidas = [];
   if(hcDiff.altas.length && !altas.length) omitidas.push(hcDiff.altas.length+' alta(s)');
   if(hcDiff.bajas.length && !bajas.length) omitidas.push(hcDiff.bajas.length+' baja(s)');
   if(hcDiff.actualizados.length && !actualizados.length) omitidas.push(hcDiff.actualizados.length+' actualización(es)');
+  if(hcDiff.corregidos.length && !corregidos.length) omitidas.push(hcDiff.corregidos.length+' corrección(es) de ID');
   if(omitidas.length) resumen += ' No se tocaron (casilla destildada): '+omitidas.join(', ')+'.';
+
+  let huboProblemaLogin = false;
+  if(corregidos.length){
+    resumen += ' Acceso sincronizado para '+resCorregidos.loginOk+' empleado(s).';
+    if(resCorregidos.loginConflictos.length){
+      huboProblemaLogin = true;
+      resumen += ' '+resCorregidos.loginConflictos.length+' con conflicto de correo (revisa a mano): '+resCorregidos.loginConflictos.map(function(c){return c.nombre;}).join(', ')+'.';
+    }
+    if(resCorregidos.loginErrores.length){
+      huboProblemaLogin = true;
+      resumen += ' '+resCorregidos.loginErrores.length+' sin sincronizar: '+resCorregidos.loginErrores.map(function(e){return (e.nombre||e.uid)+' — '+e.error;}).join(', ')+'.';
+    }
+    if(resCorregidos.loginFallo){
+      huboProblemaLogin = true;
+      resumen += ' No se pudo sincronizar el acceso automáticamente ('+resCorregidos.loginFallo+') — avísame para revisarlo.';
+    }
+  }
+  const errores = resAltas.errores.concat(erroresBatch).concat(resCorregidos.erroresDirectorio);
   if(errores.length) resumen += ' '+errores.length+' error(es): '+errores.slice(0,5).join(' | ')+(errores.length>5?' …':'');
-  msg.className = 'msg ' + (errores.length ? 'err' : 'ok');
+  msg.className = 'msg ' + ((errores.length || huboProblemaLogin) ? 'err' : 'ok');
   msg.textContent = resumen;
 
-  if(nuevosCreados.length){
+  if(resAltas.nuevosCreados.length){
     const btnGafetes = document.createElement('button');
     btnGafetes.className = 'btn btn-v btn-sm';
     btnGafetes.style.marginTop = '.75rem';
     btnGafetes.type = 'button';
-    btnGafetes.textContent = '🖨 Imprimir gafetes de los '+nuevosCreados.length+' nuevos';
-    btnGafetes.addEventListener('click', function(){ imprimirGafetesLote(nuevosCreados); });
+    btnGafetes.textContent = '🖨 Imprimir gafetes de los '+resAltas.nuevosCreados.length+' nuevos';
+    btnGafetes.addEventListener('click', function(){ imprimirGafetesLote(resAltas.nuevosCreados); });
     document.getElementById('hc-preview').appendChild(btnGafetes);
   }
 
