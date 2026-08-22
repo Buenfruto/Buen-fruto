@@ -15,7 +15,7 @@
 // fuerza una recarga limpia. sessionStorage evita que se quede en bucle si
 // version.txt no está disponible por algún motivo.
 (function(){
-  var V='20260822-3';
+  var V='20260822-4';
   try{
     fetch('version.txt?_='+Date.now(),{cache:'no-store'}).then(function(r){return r.ok?r.text():null;}).then(function(t){
       if(!t) return;
@@ -2306,7 +2306,6 @@ window.imprimirGafetesLote = function(lista){
       + '</div>'
       + '<div class="body">'
       + '<div class="nombre">' + e.nombre + '</div>'
-      + '<div class="puesto">' + (e.puesto||'Empleado') + '</div>'
       + '<div class="bc-wrap">'
       + '<div class="bc-label">Código de acceso al comedor</div>'
       + '<svg id="bc-' + i + '"></svg>'
@@ -2334,8 +2333,7 @@ window.imprimirGafetesLote = function(lista){
     + '.avatar{width:156px;height:156px;border-radius:50%;background:rgba(255,255,255,.85);border:3px solid rgba(255,255,255,.5);display:flex;align-items:center;justify-content:center;margin:0 auto;padding:14px}'
     + '.avatar-logo{width:100%;height:100%;object-fit:contain}'
     + '.body{padding:16px 24px 10px;text-align:center}'
-    + '.nombre{font-family:"Cormorant Garamond",serif;font-size:22px;font-weight:700;color:#5C6B4A;margin-bottom:4px;line-height:1.2}'
-    + '.puesto{font-size:12px;font-weight:600;color:#fff;background:#5C6B4A;display:inline-block;padding:3px 14px;border-radius:20px;margin-bottom:12px}'
+    + '.nombre{font-family:"Cormorant Garamond",serif;font-size:22px;font-weight:700;color:#5C6B4A;margin-bottom:16px;line-height:1.2}'
     + '.bc-wrap{background:#F5F0E8;border-radius:10px;padding:10px 16px 6px;margin:0 0 4px}'
     + '.bc-label{font-size:9px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#8FA882;margin-bottom:6px}'
     + 'svg{width:100%;height:52px}'
@@ -2427,18 +2425,10 @@ async function generarGafetesPDF(lista, nombreArchivo){
     const nombreLineas = doc.splitTextToSize(e.nombre || '—', bw - 10);
     doc.text(nombreLineas.slice(0, 2), x + bw / 2, y + 40, { align: 'center' });
 
-    // Puesto (píldora)
-    const puestoTxt = e.puesto || 'Empleado';
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(6.8);
-    const tw = doc.getTextWidth(puestoTxt) + 8;
-    const pillY = y + (nombreLineas.length > 1 ? 49.5 : 44.5);
-    doc.setFillColor(92, 107, 74);
-    doc.roundedRect(x + bw / 2 - tw / 2, pillY, tw, 5.8, 2.9, 2.9, 'F');
-    doc.setTextColor(255, 255, 255);
-    doc.text(puestoTxt, x + bw / 2, pillY + 4, { align: 'center' });
-
-    // Etiqueta + código de barras
+    // Etiqueta + código de barras (ya no lleva la píldora de puesto — el
+    // Head Count ya no trae esa columna, así que a todos les salía
+    // "Sin puesto" y se veía feo; se subió esta parte para llenar el hueco).
+    const pillY = y + (nombreLineas.length > 1 ? 48 : 43);
     doc.setTextColor(143, 168, 130);
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(4.8);
@@ -2739,6 +2729,11 @@ function renderResumenEmpleados(lista){
   const porComedor = { betel:0, cuauhtemoc:0, intelomas:0 };
   lista.forEach(e=>{ if(porComedor.hasOwnProperty(e.comedor)) porComedor[e.comedor]++; });
   const headCount = lista.filter(e=>e.origen==='head_count').length;
+  const manual = lista.filter(e=>e.origen==='manual').length;
+  const subsidiados = lista.filter(e=>e.subsidiado).length;
+  const admins = lista.filter(e=>e.rol==='admin').length;
+  const chefs = lista.filter(e=>e.rol==='chef').length;
+  const sinGafete = lista.filter(e=>!e.codigo_gafete).length;
 
   function tile(label, val, color){
     return '<div style="background:var(--crema);border-radius:10px;padding:.55rem .9rem;text-align:center;min-width:88px">'+
@@ -2752,7 +2747,12 @@ function renderResumenEmpleados(lista){
     tile('Betel', porComedor.betel, 'var(--g2)') +
     tile('Cuauhtémoc', porComedor.cuauhtemoc, 'var(--g2)') +
     tile('Intelomas', porComedor.intelomas, 'var(--g2)') +
-    tile('Del Head Count', headCount, 'var(--naranja)');
+    tile('Del Head Count', headCount, 'var(--naranja)') +
+    tile('Agregados a mano', manual, 'var(--g2)') +
+    tile('Subsidiados', subsidiados, 'var(--v)') +
+    tile('Admin', admins, 'var(--g2)') +
+    tile('Chef', chefs, 'var(--g2)') +
+    tile('Sin gafete', sinGafete, sinGafete ? 'var(--rojo)' : 'var(--g2)');
 }
 
 let _empleadosListaCache = [];
@@ -2995,8 +2995,7 @@ window.imprimirGafete=function(uid, nombre, codigo, puesto, comedor){
     + '.avatar{width:156px;height:156px;border-radius:50%;background:rgba(255,255,255,.85);border:3px solid rgba(255,255,255,.5);display:flex;align-items:center;justify-content:center;margin:0 auto;padding:14px}'
     + '.avatar-logo{width:100%;height:100%;object-fit:contain}'
     + '.body{padding:16px 24px 10px;text-align:center}'
-    + '.nombre{font-family:"Cormorant Garamond",serif;font-size:22px;font-weight:700;color:#5C6B4A;margin-bottom:4px;line-height:1.2}'
-    + '.puesto{font-size:12px;font-weight:600;color:#fff;background:#5C6B4A;display:inline-block;padding:3px 14px;border-radius:20px;margin-bottom:12px}'
+    + '.nombre{font-family:"Cormorant Garamond",serif;font-size:22px;font-weight:700;color:#5C6B4A;margin-bottom:16px;line-height:1.2}'
     + '.bc-wrap{background:#F5F0E8;border-radius:10px;padding:10px 16px 6px;margin:0 0 4px}'
     + '.bc-label{font-size:9px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#8FA882;margin-bottom:6px}'
     + 'svg{width:100%;height:52px}'
@@ -3015,7 +3014,6 @@ window.imprimirGafete=function(uid, nombre, codigo, puesto, comedor){
     + '</div>'
     + '<div class="body">'
     + '<div class="nombre">' + nombre + '</div>'
-    + '<div class="puesto">' + (puesto||'Empleado') + '</div>'
     + '<div class="bc-wrap">'
     + '<div class="bc-label">Código de acceso al comedor</div>'
     + '<svg id="bc"></svg>'
