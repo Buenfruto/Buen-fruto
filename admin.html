@@ -15,7 +15,7 @@
 // fuerza una recarga limpia. sessionStorage evita que se quede en bucle si
 // version.txt no está disponible por algún motivo.
 (function(){
-  var V='20260822-12';
+  var V='20260823-1';
   try{
     fetch('version.txt?_='+Date.now(),{cache:'no-store'}).then(function(r){return r.ok?r.text():null;}).then(function(t){
       if(!t) return;
@@ -654,7 +654,7 @@ input[type=file]{display:none}
         <div class="card" style="margin-bottom:1.25rem">
           <div class="card-head"><span class="card-titulo">Subir menú de la semana (Excel)</span></div>
           <div class="card-body">
-            <p style="font-size:.82rem;color:var(--g2);margin-bottom:1rem">El chef llena la plantilla cada semana con el menú de lunes a viernes y tú solo la subes aquí — la app se actualiza sola, sin necesidad de capturar cada platillo a mano.</p>
+            <p style="font-size:.82rem;color:var(--g2);margin-bottom:1rem">El chef llena la plantilla cada semana con el menú de lunes a domingo (si algún día no hay menú, esa fila se deja vacía) y tú solo la subes aquí — la app se actualiza sola, sin necesidad de capturar cada platillo a mano.</p>
             <div style="margin-bottom:1rem">
               <button class="btn btn-outline btn-sm" onclick="descargarPlantillaMenuSemana()">📥 Descargar plantilla de esta semana</button>
             </div>
@@ -996,19 +996,18 @@ function hoy(){ return fechaLocal(new Date()); }
 // en México eso adelanta la fecha un día (el bug de "sábado 22").
 function fechaLocal(d){ return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
 function fmtF(f){ const d=new Date(f+'T12:00:00'); return DS[d.getDay()]+' '+d.getDate()+' de '+MS[d.getMonth()]; }
-// Los 5 días (lunes a viernes) de la semana actual, SIEMPRE — el comedor no
-// opera sábados ni domingos. Las fechas se arman con componentes locales
-// (como hoy()), NUNCA con toISOString(): toISOString() convierte a UTC, y en
-// la tarde/noche en México eso adelantaba la fecha un día — así un viernes
+// Los 7 días (lunes a domingo) de la semana actual, SIEMPRE — todos son
+// capturables aunque el comedor no opere algún día; ese día simplemente se
+// deja sin menú. Las fechas se arman con componentes locales (como hoy()),
+// NUNCA con toISOString(): toISOString() convierte a UTC, y en la
+// tarde/noche en México eso adelantaba la fecha un día — así un viernes
 // terminaba guardado/mostrado como "sábado" (el bug de "sábado 22" en menús
 // y reportes, y la razón por la que lo que el admin publicaba para hoy
 // quedaba guardado bajo la fecha de mañana y el empleado nunca lo veía).
 function getDias(){
-  const h=new Date(),dia=h.getDay(),lun=new Date(h);
-  if(dia===0)lun.setDate(h.getDate()+1);
-  else if(dia===6)lun.setDate(h.getDate()+2);
-  else lun.setDate(h.getDate()-(dia-1));
-  return Array.from({length:5},(_,i)=>{const d=new Date(lun);d.setDate(lun.getDate()+i);return fechaLocal(d);});
+  const h=new Date(),dia=h.getDay(),lun=new Date(h); // dia: 0=Dom..6=Sáb
+  lun.setDate(h.getDate()-((dia+6)%7)); // retrocede al lunes de ESTA semana, cualquier día que sea hoy
+  return Array.from({length:7},(_,i)=>{const d=new Date(lun);d.setDate(lun.getDate()+i);return fechaLocal(d);});
 }
 
 let perfil=null, unsubOrdenes=null, unsubEmpleados=null;
@@ -3459,10 +3458,12 @@ async function borrarMenuDia(){
 // El chef llena una plantilla (Día, Nombre del menú, Platillos, Extras) y el
 // admin solo la sube — mismo patrón de "vista previa antes de aplicar" que el
 // Head Count de empleados, pero aquí cada fila reemplaza el menú de un día
-// de la semana ACTUAL (lunes a viernes), igual que ya hace el editor manual
-// de arriba. Se identifica el día por su NOMBRE (Lunes..Viernes), no por una
-// fecha en la celda, para no depender de cómo Excel formatee esa columna.
-const DIAS_LARGOS = ['Lunes','Martes','Miércoles','Jueves','Viernes'];
+// de la semana ACTUAL (lunes a domingo), igual que ya hace el editor manual
+// de arriba. Si un día no trae nombre de menú en el Excel, simplemente se
+// deja sin menú ese día — no es un error. Se identifica el día por su
+// NOMBRE (Lunes..Domingo), no por una fecha en la celda, para no depender de
+// cómo Excel formatee esa columna.
+const DIAS_LARGOS = ['Lunes','Martes','Miércoles','Jueves','Viernes','Sábado','Domingo'];
 let menuImportDiff = null;
 
 window.descargarPlantillaMenuSemana = function(){
@@ -3493,7 +3494,7 @@ function parseMenuSemanaFilas(filas){
   const mapaDias = {};
   DIAS_LARGOS.forEach(function(nombreDia, i){ mapaDias[quitarAcentos(nombreDia).toLowerCase()] = dias[i]; });
   // Acepta también abreviaturas comunes por si el chef las usa.
-  const abreviaturas = {lun:0, mar:1, mie:2, jue:3, vie:4};
+  const abreviaturas = {lun:0, mar:1, mie:2, jue:3, vie:4, sab:5, dom:6};
   Object.keys(abreviaturas).forEach(function(ab){ mapaDias[ab] = dias[abreviaturas[ab]]; });
 
   const resultado = [];
@@ -3539,7 +3540,7 @@ function procesarArchivoMenuSemana(file){
       }
       const resultado = parseMenuSemanaFilas(filas);
       if(!resultado.filas.length){
-        msg.textContent = 'No se encontraron días válidos. Verifica que la columna "Día" tenga Lunes, Martes, Miércoles, Jueves o Viernes, y que cada fila tenga un nombre de menú.';
+        msg.textContent = 'No se encontraron días válidos. Verifica que la columna "Día" tenga Lunes, Martes, Miércoles, Jueves, Viernes, Sábado o Domingo, y que cada fila tenga un nombre de menú.';
         msg.className = 'msg err'; msg.style.display='block';
         return;
       }
