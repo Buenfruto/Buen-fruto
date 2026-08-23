@@ -15,7 +15,7 @@
 // fuerza una recarga limpia. sessionStorage evita que se quede en bucle si
 // version.txt no está disponible por algún motivo.
 (function(){
-  var V='20260822-10';
+  var V='20260822-12';
   try{
     fetch('version.txt?_='+Date.now(),{cache:'no-store'}).then(function(r){return r.ok?r.text():null;}).then(function(t){
       if(!t) return;
@@ -24,7 +24,7 @@
         var k='bf_v_'+v;
         if(sessionStorage.getItem(k)) return;
         sessionStorage.setItem(k,'1');
-        location.replace(location.pathname+'?_v='+Date.now());
+        location.replace(location.pathname+location.search+(location.search?'&':'?')+'_v='+Date.now());
       }
     }).catch(function(){});
   }catch(e){}
