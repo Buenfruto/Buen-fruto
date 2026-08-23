@@ -12,7 +12,7 @@
 <meta http-equiv="Expires" content="0"/>
 <script>
 (function(){
-  var V='20260822-7';
+  var V='20260822-12';
   try{
     fetch('version.txt?_='+Date.now(),{cache:'no-store'}).then(function(r){return r.ok?r.text():null;}).then(function(t){
       if(!t) return;
@@ -21,7 +21,7 @@
         var k='bf_v_'+v;
         if(sessionStorage.getItem(k)) return;
         sessionStorage.setItem(k,'1');
-        location.replace(location.pathname+'?_v='+Date.now());
+        location.replace(location.pathname+location.search+(location.search?'&':'?')+'_v='+Date.now());
       }
     }).catch(function(){});
   }catch(e){}
@@ -327,8 +327,8 @@ html,body{height:100%;font-family:'Inter',system-ui,sans-serif;background:var(--
           <div class="pf-nombre" id="pf-nombre">—</div>
           <div class="pf-email" id="pf-email">—</div>
           <div style="margin-top:1.5rem">
-            <div class="pf-row"><span class="l">Empresa</span><span>Betel</span></div>
-            <div class="pf-row"><span class="l">Rol</span><span>Empleado</span></div>
+            <div class="pf-row"><span class="l">Comedor</span><span id="pf-comedor">—</span></div>
+            <div class="pf-row"><span class="l">Rol</span><span id="pf-rol">—</span></div>
             <div class="pf-row"><span class="l">Código de gafete</span><span id="pf-gafete">—</span></div>
           </div>
           <div style="margin-top:1.25rem;background:var(--vl2);border:1px solid #C8DEB0;border-radius:12px;padding:1rem 1.1rem">
@@ -611,6 +611,12 @@ async function iniciarApp() {
     set('pf-email', perfil.email || '');
     set('pf-av', n.split(' ').map(function(x){return x[0];}).slice(0,2).join(''));
     set('pf-gafete', perfil.codigo_gafete || '—');
+    // Antes decía "Betel" y "Empleado" fijos para todos, sin importar el
+    // comedor o rol real de quien iniciara sesión — ya se toman del perfil.
+    var comedorLabelsPf = { betel:'Betel', cuauhtemoc:'Cuauhtémoc', intelomas:'Intelomas' };
+    var rolLabelsPf = { admin:'Administrador', chef:'Chef', empleado:'Empleado' };
+    set('pf-comedor', comedorLabelsPf[perfil.comedor] || perfil.comedor || '—');
+    set('pf-rol', rolLabelsPf[perfil.rol] || perfil.rol || 'Empleado');
     pg('pg-emp');
     suscribirOrdenes();
     await cargarMenuHoy();
