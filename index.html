@@ -12,7 +12,7 @@
 <meta http-equiv="Expires" content="0"/>
 <script>
 (function(){
-  var V='20260822-12';
+  var V='20260823-1';
   try{
     fetch('version.txt?_='+Date.now(),{cache:'no-store'}).then(function(r){return r.ok?r.text():null;}).then(function(t){
       if(!t) return;
@@ -176,6 +176,7 @@ html,body{height:100%;font-family:'Inter',system-ui,sans-serif;background:var(--
 .dia-tab .dn{font-size:1.05rem;font-weight:700;color:var(--negro);margin-top:1px}
 .dia-tab.on .dl{color:rgba(255,255,255,.65)}
 .dia-tab.on .dn{color:var(--w)}
+.dia-tab.pasado:not(.on){opacity:.45}
 .dia-dot{width:5px;height:5px;border-radius:50%;margin-top:3px}
 
 /* PEDIDOS */
@@ -469,29 +470,43 @@ function mkTicketHTML(buf, ext, pls, subsidiado) {
   h += `<div class="t-div"></div><div class="t-row tot"><span class="l">Total a pagar</span><span class="v">$${cg}.00</span></div>`;
   return h;
 }
-// Los 5 días (lunes a viernes) de la semana actual, SIEMPRE — el comedor no
-// opera sábados ni domingos. Las fechas se arman con los componentes locales
-// (como hoy()), NUNCA con toISOString(), porque toISOString() convierte a
-// UTC: en la tarde/noche en México eso adelanta la fecha un día y corría
-// viernes a "sábado" (justo el bug reportado: el menú/reporte del viernes
-// aparecía fechado sábado, y lo que el admin publicaba para "hoy" quedaba
-// guardado bajo la fecha de mañana, por lo que el empleado nunca lo veía).
+// Los 7 días (lunes a domingo) de la semana actual, SIEMPRE — todos se
+// muestran aunque algún día no tenga menú capturado (ese día simplemente se
+// ve "Sin menú para este día"). Las pestañas nunca se recorren ni se ocultan
+// por falta de menú. Las fechas se arman con los componentes locales (como
+// hoy()), NUNCA con toISOString(), porque toISOString() convierte a UTC: en
+// la tarde/noche en México eso adelanta la fecha un día y corría viernes a
+// "sábado" (el bug reportado: el menú/reporte del viernes aparecía fechado
+// sábado, y lo que el admin publicaba para "hoy" quedaba guardado bajo la
+// fecha de mañana, por lo que el empleado nunca lo veía).
 function getDias() {
-  const hoyD = new Date(), dia = hoyD.getDay();
+  const hoyD = new Date(), dia = hoyD.getDay(); // 0=Dom..6=Sáb
   const lunes = new Date(hoyD);
-  if (dia === 0) lunes.setDate(hoyD.getDate() + 1);
-  else if (dia === 6) lunes.setDate(hoyD.getDate() + 2);
-  else lunes.setDate(hoyD.getDate() - (dia - 1));
-  return Array.from({length: 5}, (_, i) => {
+  lunes.setDate(hoyD.getDate() - ((dia + 6) % 7)); // retrocede al lunes de ESTA semana, cualquier día que sea hoy
+  return Array.from({length: 7}, (_, i) => {
     const d = new Date(lunes);
     d.setDate(lunes.getDate() + i);
     return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
   });
 }
-// Igual que getDias(), pero solo hoy y los días futuros de la semana — se usa
-// para las pestañas de días y para impedir ordenar/ver un día que ya pasó.
-function diasFuturos() {
-  return getDias().filter(f => f >= hoy());
+function diaSiguiente(f) {
+  const d = new Date(f+'T12:00:00');
+  d.setDate(d.getDate() + 1);
+  return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+}
+// A partir de las 8am el corte de "hoy" para la pestaña de Menús (planeación
+// a futuro) ya pasó — pedir HOY no tiene límite de hora y se hace desde
+// Inicio/Menú de hoy; esto solo mueve el día seleccionado por defecto en la
+// pestaña de Menús hacia el día siguiente, marcado "Siguiente día". Los 7
+// días siguen siendo navegables a mano.
+function huboCorteHoy() {
+  return new Date().getHours() >= 8;
+}
+function diaDefaultIdx(dias) {
+  const base = huboCorteHoy() ? diaSiguiente(hoy()) : hoy();
+  let idx = dias.indexOf(base);
+  if (idx < 0) idx = dias.indexOf(hoy());
+  return idx >= 0 ? idx : 0;
 }
 
 // ── LOGIN ──
@@ -917,14 +932,14 @@ async function crearOrden(fecha, horaPreorden) {
 const unsubMenus = [];
 async function cargarMenuSemana() {
   document.getElementById('menu-det-contenido').innerHTML = '<div class="loading"><div class="spinner"></div>Cargando menús...</div>';
-  const diasSemana = getDias(); // siempre los 5 días completos (lunes a viernes) de esta semana
-  const dias = diasFuturos(); // solo hoy y futuros — lo que se muestra/se puede ordenar
-  const d0 = new Date(diasSemana[0]+'T12:00:00'), d4 = new Date(diasSemana[diasSemana.length-1]+'T12:00:00');
-  document.getElementById('subtitulo-semana').textContent = `${d0.getDate()} de ${MS[d0.getMonth()]} – ${d4.getDate()} de ${MS[d4.getMonth()]}`;
+  const dias = getDias(); // siempre los 7 días completos (lunes a domingo) de esta semana, todos visibles
+  const d0 = new Date(dias[0]+'T12:00:00'), d6 = new Date(dias[dias.length-1]+'T12:00:00');
+  document.getElementById('subtitulo-semana').textContent = `${d0.getDate()} de ${MS[d0.getMonth()]} – ${d6.getDate()} de ${MS[d6.getMonth()]}`;
   // Cancelar suscripciones anteriores
   unsubMenus.forEach(u => u());
   unsubMenus.length = 0;
   menusSemana = dias.map(f => ({ fecha: f, nombre: null }));
+  diaIdx = diaDefaultIdx(dias);
   dias.forEach((f, i) => {
     const unsub = db.collection('menus').doc(f).onSnapshot(snap => {
       menusSemana[i] = snap.exists ? { fecha: f, ...snap.data() } : { fecha: f, nombre: null };
@@ -944,12 +959,13 @@ function renderDiasTabs() {
   const wrap = document.getElementById('dias-tabs');
   if (!wrap) return;
   wrap.innerHTML = '';
-  const dias = diasFuturos();
+  const dias = getDias();
   dias.forEach((f, i) => {
     const d = new Date(f+'T12:00:00');
     const tieneOrden = !!ordenes[f];
+    const esPasado = f < hoy();
     const btn = document.createElement('div');
-    btn.className = 'dia-tab' + (i === 0 ? ' on' : '');
+    btn.className = 'dia-tab' + (i === diaIdx ? ' on' : '') + (esPasado ? ' pasado' : '');
     btn.innerHTML = `<span class="dl">${DS[d.getDay()]}</span><span class="dn">${d.getDate()}</span><span class="dia-dot" style="background:${tieneOrden?'var(--v)':'transparent'}"></span>`;
     btn.addEventListener('click', () => { diaIdx = i; selDia(i); });
     wrap.appendChild(btn);
@@ -958,22 +974,24 @@ function renderDiasTabs() {
 
 function selDia(i) {
   document.querySelectorAll('.dia-tab').forEach((t, j) => t.classList.toggle('on', j === i));
-  const dias = diasFuturos(), fecha = dias[i];
+  const dias = getDias(), fecha = dias[i];
   const menu = menusSemana[i];
   const esHoy = fecha === hoy();
+  const esPasado = fecha < hoy();
+  const esSiguiente = huboCorteHoy() && fecha === diaSiguiente(hoy());
   const tieneOrden = !!(ordenes[fecha] && ordenes[fecha].estado !== 'cancelado');
   buffetDet = false; extrasDet = [];
   if (menu) platDet = menu.platillos?.slice() || [];
 
   const cont = document.getElementById('menu-det-contenido');
   if (!menu || !menu.nombre) {
-    cont.innerHTML = `<div class="empty"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg><div class="empty-t">Sin menú para este día</div></div>`;
+    cont.innerHTML = `<div class="empty"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg><div class="empty-t">Sin menú para este día</div>${esPasado?'<div class="empty-s">Este día ya pasó</div>':''}</div>`;
     return;
   }
 
   cont.innerHTML = `
     <div class="card">
-      <div class="card-head"><span class="card-label">${fmtFecha(fecha)}${esHoy?' — Hoy':''}</span><span class="badge badge-verde">Disponible</span></div>
+      <div class="card-head"><span class="card-label">${fmtFecha(fecha)}${esHoy?' — Hoy':''}${esSiguiente?' — Siguiente día':''}</span><span class="badge badge-verde">Disponible</span></div>
       <div class="card-bod">
         <div class="plato-nombre">${menu.nombre}</div>
         <div class="subsidio"><svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="8" cy="8" r="6"/><path d="M8 5v3l2 1.5"/></svg>${perfil.subsidiado ? 'Eres subsidiado — tu buffet no cuesta nada' : 'La empresa subsidia $45.00'}</div>
@@ -981,12 +999,14 @@ function selDia(i) {
         <div class="ticket" id="ticket-det"><div id="ticket-det-rows"></div></div>
         ${tieneOrden
           ? `<button class="btn-fill" disabled style="margin-top:.9rem;background:var(--vl);color:var(--v)">✓ Ya ordenaste este día</button>`
-          : `<button class="btn-fill" id="btn-accion-dia" style="margin-top:.9rem">${esHoy ? 'Pedir ahora' : 'Ordenar para este día'}</button>`
+          : esPasado
+            ? `<button class="btn-fill" disabled style="margin-top:.9rem;background:var(--borde);color:var(--g3)">Este día ya pasó</button>`
+            : `<button class="btn-fill" id="btn-accion-dia" style="margin-top:.9rem">${esHoy ? 'Pedir ahora' : 'Ordenar para este día'}</button>`
         }
       </div>
     </div>`;
 
-  if (!tieneOrden) {
+  if (!tieneOrden && !esPasado) {
     renderItems(document.getElementById('items-det'), menu, 'D');
 
     // Elegir el menú del día con anticipación — no requiere hora, el gafete es
