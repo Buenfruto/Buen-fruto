@@ -15,7 +15,7 @@
 // fuerza una recarga limpia. sessionStorage evita que se quede en bucle si
 // version.txt no está disponible por algún motivo.
 (function(){
-  var V='20260823-1';
+  var V='20260824-2';
   try{
     fetch('version.txt?_='+Date.now(),{cache:'no-store'}).then(function(r){return r.ok?r.text():null;}).then(function(t){
       if(!t) return;
@@ -437,7 +437,7 @@ input[type=file]{display:none}
         <div class="card">
           <div class="card-head"><span class="card-titulo">Head Count semanal</span></div>
           <div class="card-body">
-            <p style="font-size:.82rem;color:var(--g2);margin-bottom:1rem">Este es la base de todo: súbelo cada semana (normalmente los martes) con el archivo completo. El sistema lo compara contra el directorio actual, te muestra exactamente qué va a cambiar (altas, actualizados, corregidos) antes de tocar nada, y solo entonces aplica los cambios. A quien no aparezca se le suma una falta — nadie se borra de una sola vez; a la 3ª falta seguida sin aparecer queda lista en "En riesgo" para que tú confirmes la baja. Nunca toca cuentas de admin, chef ni empleados agregados a mano.</p>
+            <p style="font-size:.82rem;color:var(--g2);margin-bottom:1rem">Este es la base de todo: súbelo cada semana (normalmente los martes) con el archivo completo. El sistema lo compara contra el directorio actual, te muestra exactamente qué va a cambiar (altas, actualizados, corregidos) antes de tocar nada, y solo entonces aplica los cambios. A quien no aparezca se le suma una falta — nadie se borra de una sola vez; a la 3ª falta seguida sin aparecer queda lista en "En riesgo" para que tú confirmes la baja. Reconoce por ID o nombre a cualquier empleado normal aunque lo hayas agregado tú a mano (ej. un subsidiado) para no duplicarlo — nunca toca cuentas de admin ni chef, ni el indicador de subsidiado o el puesto de nadie.</p>
             <div class="drop-area" id="hc-drop-area" onclick="document.getElementById('hc-input').click()">
               <div class="drop-icon">
                 <svg viewBox="0 0 24 24" fill="none" stroke="var(--g3)" stroke-width="1.5" stroke-linecap="round">
@@ -447,12 +447,12 @@ input[type=file]{display:none}
               <div class="drop-txt">Arrastra el Excel de Head Count aquí o haz clic para seleccionar</div>
               <div class="drop-sub">ID Nmna/BF, Nombre, Centro</div>
             </div>
-            <input type="file" id="hc-input" accept=".csv,.xlsx,.xls"/>
+            <input type="file" id="hc-input" accept=".csv,.xlsx,.xls,.xltx,.xltm,.xlsm"/>
             <div id="hc-preview" style="display:none;margin-top:1.25rem"></div>
             <div class="msg" id="hc-msg"></div>
             <div id="revisar-directorio-wrap" style="margin-top:1rem;padding-top:1rem;border-top:1px solid var(--borde2)">
               <button class="btn btn-danger btn-sm" id="btn-revisar-directorio" onclick="revisarYCorregirDirectorio()">🔎 Revisar y corregir directorio</button>
-              <div style="font-size:.72rem;color:var(--g3);margin-top:.4rem">Revisa todo el directorio de una vez: corrige solo ID B360 duplicados donde está claro cuál copia tiene el correo correcto (borra las demás para siempre, reactiva la buena si hacía falta) — y avisa de cualquier otra cosa rara que encuentre (gafetes repetidos, correos repetidos, empleados del Head Count sin ID B360, duplicados donde no está claro cuál es el bueno) sin tocarla, para que la revises a mano. No toca a nadie que hayas desactivado tú por otra razón.</div>
+              <div style="font-size:.72rem;color:var(--g3);margin-top:.4rem">Revisa todo el directorio de una vez: corrige solo ID B360 duplicados donde está claro cuál copia tiene el correo correcto (borra las demás para siempre, reactiva la buena si hacía falta) — y avisa de cualquier otra cosa rara que encuentre (posibles duplicados con el MISMO nombre pero ID distinto, gafetes repetidos, correos repetidos, empleados del Head Count sin ID B360, duplicados donde no está claro cuál es el bueno) sin tocarla, para que la revises a mano. No toca a nadie que hayas desactivado tú por otra razón, ni a cuentas de admin o chef.</div>
               <div class="msg" id="revisar-directorio-msg"></div>
             </div>
           </div>
@@ -472,7 +472,7 @@ input[type=file]{display:none}
               <div class="drop-txt">Arrastra el Excel de subsidiados aquí o haz clic para seleccionar</div>
               <div class="drop-sub">ID Nmna/BF, Nombre, Centro</div>
             </div>
-            <input type="file" id="subs-input" accept=".csv,.xlsx,.xls"/>
+            <input type="file" id="subs-input" accept=".csv,.xlsx,.xls,.xltx,.xltm,.xlsm"/>
             <div id="subs-preview" style="display:none;margin-top:1.25rem"></div>
             <div class="msg" id="subs-msg"></div>
 
@@ -592,7 +592,7 @@ input[type=file]{display:none}
               <div class="drop-txt">Arrastra el Excel de ingresos aquí o haz clic para seleccionar</div>
               <div class="drop-sub">ID, Nombre, Centro</div>
             </div>
-            <input type="file" id="ing-input" accept=".csv,.xlsx,.xls"/>
+            <input type="file" id="ing-input" accept=".csv,.xlsx,.xls,.xltx,.xltm,.xlsm"/>
             <div id="ing-preview" style="display:none;margin-top:1.25rem"></div>
             <div class="msg" id="ing-msg"></div>
           </div>
@@ -656,7 +656,7 @@ input[type=file]{display:none}
           <div class="card-body">
             <p style="font-size:.82rem;color:var(--g2);margin-bottom:1rem">El chef llena la plantilla cada semana con el menú de lunes a domingo (si algún día no hay menú, esa fila se deja vacía) y tú solo la subes aquí — la app se actualiza sola, sin necesidad de capturar cada platillo a mano.</p>
             <div style="margin-bottom:1rem">
-              <button class="btn btn-outline btn-sm" onclick="descargarPlantillaMenuSemana()">📥 Descargar plantilla de esta semana</button>
+              <button class="btn btn-outline btn-sm" onclick="descargarPlantillaMenuSemana()">📥 Descargar plantilla de la semana seleccionada</button>
             </div>
             <div class="drop-area" id="menu-drop-area" onclick="document.getElementById('menu-input').click()">
               <div class="drop-icon">
@@ -667,10 +667,18 @@ input[type=file]{display:none}
               <div class="drop-txt">Arrastra el Excel del menú aquí o haz clic para seleccionar</div>
               <div class="drop-sub">Día, Nombre del menú, Platillos, Extras</div>
             </div>
-            <input type="file" id="menu-input" accept=".csv,.xlsx,.xls"/>
+            <input type="file" id="menu-input" accept=".csv,.xlsx,.xls,.xltx,.xltm,.xlsm"/>
             <div id="menu-import-preview" style="display:none;margin-top:1.25rem"></div>
             <div class="msg" id="menu-import-msg"></div>
           </div>
+        </div>
+
+        <!-- NAVEGACIÓN ENTRE SEMANAS -->
+        <div style="display:flex;align-items:center;gap:.6rem;flex-wrap:wrap;margin-bottom:1rem">
+          <button class="btn btn-outline btn-sm" id="btn-semana-menu-prev" type="button">← Semana anterior</button>
+          <span id="semana-menu-label" style="font-weight:700;font-size:.85rem;color:var(--negro)"></span>
+          <button class="btn btn-outline btn-sm" id="btn-semana-menu-next" type="button">Semana siguiente →</button>
+          <button class="btn btn-outline btn-sm" id="btn-semana-menu-hoy" type="button" style="margin-left:auto">Ir a semana actual</button>
         </div>
 
         <div class="dia-selector" id="dia-selector"></div>
@@ -1099,6 +1107,11 @@ document.addEventListener('DOMContentLoaded', function(){
     if(e.dataTransfer.files && e.dataTransfer.files[0]) procesarArchivoSubsidiados(e.dataTransfer.files[0]);
   });
 
+  // Navegación entre semanas del editor de menús
+  document.getElementById('btn-semana-menu-prev').addEventListener('click', function(){ cambiarSemanaMenu(-1); });
+  document.getElementById('btn-semana-menu-next').addEventListener('click', function(){ cambiarSemanaMenu(1); });
+  document.getElementById('btn-semana-menu-hoy').addEventListener('click', irSemanaActualMenu);
+
   // Menú semanal por Excel
   document.getElementById('menu-input').addEventListener('change', function(e){
     if(e.target.files && e.target.files[0]) procesarArchivoMenuSemana(e.target.files[0]);
@@ -1255,6 +1268,19 @@ function buscarColId(headers){
   }
   return -1;
 }
+// Un archivo cuenta como "Excel binario" (se lee con XLSX.read, no como
+// texto/CSV) si termina en cualquiera de estas extensiones. Antes solo se
+// reconocían .xlsx/.xls — cualquier otra cosa (ej. una PLANTILLA .xltx,
+// muy común cuando alguien guarda "Guardar como > Plantilla de Excel" o
+// reenvía un archivo ya basado en una plantilla) caía sin darse cuenta al
+// modo CSV, que intenta leer el binario del Excel como si fuera texto y
+// nunca encuentra filas válidas — de ahí el error "No se encontraron filas
+// válidas" con un archivo que en realidad sí tenía las columnas correctas
+// (bug detectado el 24 de agosto de 2026 con un .xltx de boletos).
+function esArchivoExcelBinario(nombreArchivo){
+  const n = String(nombreArchivo||'').toLowerCase();
+  return n.endsWith('.xlsx') || n.endsWith('.xls') || n.endsWith('.xltx') || n.endsWith('.xltm') || n.endsWith('.xlsm') || n.endsWith('.xlsb');
+}
 function parseCSVTexto(texto){
   const filas = [];
   let fila = [], campo = '', enComillas = false;
@@ -1280,8 +1306,10 @@ function parseCSVTexto(texto){
 // existe nunca se toca desde aquí (solo se define a mano en el directorio),
 // y el correo de acceso se sintetiza a partir del ID.
 // Cada persona se identifica por su ID para poder compararla día a día.
-// Solo se tocan empleados con origen:'head_count' — nunca admin, chef, ni
-// empleados agregados a mano o por el importador manual de arriba.
+// El emparejamiento (ver emparejarConDirectorioHC) considera a cualquier
+// empleado normal, sea de origen 'head_count' o agregado a mano — nunca
+// toca cuentas de admin ni chef, y nunca toca el indicador de subsidiado
+// ni el puesto de nadie, solo ID/nombre/comedor y faltas.
 const HC_EMAIL_DOMINIO = 'buenfruto.mx';
 let hcRegistros = [];
 let hcDuplicados = [];
@@ -1371,7 +1399,7 @@ function procesarArchivoHeadCount(file){
   const msg = document.getElementById('hc-msg');
   msg.style.display='none';
   const nombreArchivo = file.name.toLowerCase();
-  const esExcel = nombreArchivo.endsWith('.xlsx') || nombreArchivo.endsWith('.xls');
+  const esExcel = esArchivoExcelBinario(nombreArchivo);
   const reader = new FileReader();
   reader.onload = async function(e){
     try {
@@ -1412,7 +1440,7 @@ function procesarArchivoSubsidiados(file){
   const msg = document.getElementById('subs-msg');
   msg.style.display='none';
   const nombreArchivo = file.name.toLowerCase();
-  const esExcel = nombreArchivo.endsWith('.xlsx') || nombreArchivo.endsWith('.xls');
+  const esExcel = esArchivoExcelBinario(nombreArchivo);
   const reader = new FileReader();
   reader.onload = async function(e){
     try {
@@ -1466,31 +1494,54 @@ function renderPreviewSubsidiados(){
 
 async function aplicarSubsidiados(){
   if(!subsRegistros.length) return;
-  if(!confirm('Esto va a marcar como subsidiados al 100% a ' + subsRegistros.length + ' persona(s) — las que ya existan en el directorio se actualizan, las que no existan se crean de cero con acceso por ID B360. ¿Continuar?')) return;
+  if(!confirm('Esto va a marcar como subsidiados al 100% a ' + subsRegistros.length + ' persona(s) — las que ya existan en el directorio (por ID o por nombre, aunque las hayas agregado tú a mano) se actualizan, las que no existan se crean de cero con acceso por ID B360. ¿Continuar?')) return;
 
   const btn = document.getElementById('btn-aplicar-subs');
   const msg = document.getElementById('subs-msg');
   if(btn) btn.disabled = true;
   msg.style.display='block'; msg.className='msg'; msg.textContent='Procesando…';
 
-  // Directorio actual, para saber quién ya existe por ID B360 (sin importar
-  // si vino del Head Count o se agregó a mano).
-  const snap = await db.collection('empleados').get();
-  const porHcId = {};
-  snap.forEach(function(d){ const e=d.data(); if(e.hc_id) porHcId[normalizarHcId(e.hc_id)] = Object.assign({uid:d.id}, e); });
-  const usados = await cargarGafetesUsados();
+  try {
+    // Mismo emparejamiento por ID y por nombre que usa el Head Count —
+    // reconoce a alguien que ya existe (venga del Head Count o se haya
+    // agregado a mano antes, como un subsidiado previo) aunque el ID no
+    // coincida exactamente, en vez de crearle una segunda cuenta duplicada.
+    // Antes esta pantalla solo comparaba por ID exacto, que fue la causa
+    // raíz de los duplicados "subsidiados" detectados el 24 de agosto de
+    // 2026 (fix del 2026-08-24).
+    const resultado = await emparejarConDirectorioHC(subsRegistros);
+    const usados = await cargarGafetesUsados();
 
-  let actualizados = 0, creados = 0;
-  const errores = [];
-  for (const r of subsRegistros) {
-    try {
-      const existente = porHcId[normalizarHcId(r.hc_id)];
-      if (existente) {
-        // Un empleado que se marca como subsidiado siempre queda activo —
-        // esa es la decisión del admin al subirlo aquí, sin excepción.
-        await db.collection('empleados').doc(existente.uid).update({ subsidiado: true, activo: true });
+    let actualizados = 0, creados = 0;
+    const errores = [];
+
+    // Emparejados por ID, sin cambios de nombre/centro — solo marcar subsidiado.
+    for (const s of resultado.sinCambios) {
+      try {
+        await db.collection('empleados').doc(s.uid).update({ subsidiado: true, activo: true });
         actualizados++;
-      } else {
+      } catch(e){ errores.push((s.nombre||s.hc_id)+': '+e.message); }
+    }
+    // Emparejados por ID, con nombre/centro corregido — actualizar y marcar subsidiado.
+    for (const a of resultado.actualizados) {
+      try {
+        await db.collection('empleados').doc(a.uid).update({ nombre: a.despues.nombre, comedor: a.despues.comedor, subsidiado: true, activo: true });
+        actualizados++;
+      } catch(e){ errores.push((a.despues.nombre||a.uid)+': '+e.message); }
+    }
+    // Emparejados por NOMBRE (le cambió el ID) — corregir ID/nombre/centro y marcar subsidiado.
+    if (resultado.corregidos.length) {
+      await aplicarCorregidosLote(resultado.corregidos);
+      for (const c of resultado.corregidos) {
+        try {
+          await db.collection('empleados').doc(c.uid).update({ subsidiado: true, activo: true });
+          actualizados++;
+        } catch(e){ errores.push((c.nombreDespues||c.uid)+': '+e.message); }
+      }
+    }
+    // Nadie los encontró en el directorio — se crean de cero, ya marcados como subsidiados.
+    for (const r of resultado.altas) {
+      try {
         const email = emailSinteticoHC(r.login_base);
         const password = Math.random().toString(36).slice(2,10);
         const uid = await crearEmpleadoAuth(email, password);
@@ -1502,21 +1553,28 @@ async function aplicarSubsidiados(){
           hc_id: r.hc_id, origen: 'manual'
         });
         creados++;
+      } catch(e){
+        errores.push((r.nombre||r.hc_id)+': '+e.message);
       }
-    } catch(e){
-      errores.push((r.nombre||r.hc_id)+': '+e.message);
     }
-  }
 
-  let html = actualizados + ' empleado(s) ya existente(s) marcado(s) como subsidiado(s), ' + creados + ' cuenta(s) nueva(s) creada(s) como subsidiadas.';
-  if (subsDuplicados.length) {
-    html += '<br>' + subsDuplicados.length + ' se omitieron por tener el identificador repetido dentro del archivo.';
+    let html = actualizados + ' empleado(s) ya existente(s) marcado(s) como subsidiado(s), ' + creados + ' cuenta(s) nueva(s) creada(s) como subsidiadas.';
+    if (resultado.ambiguos.length) {
+      html += '<br>⚠️ ' + resultado.ambiguos.length + ' se crearon como cuenta nueva porque hay más de un empleado con ese nombre en el directorio y no está claro a cuál aplican — revísalos a mano en Empleados para no dejar un duplicado.';
+    }
+    if (subsDuplicados.length) {
+      html += '<br>' + subsDuplicados.length + ' se omitieron por tener el identificador repetido dentro del archivo.';
+    }
+    if (errores.length) {
+      html += '<br>' + errores.length + ' con error: ' + errores.join(', ');
+    }
+    msg.className = (errores.length || resultado.ambiguos.length) ? 'msg err' : 'msg ok';
+    msg.innerHTML = html;
+  } catch(err) {
+    console.error('Error al aplicar subsidiados:', err);
+    msg.className = 'msg err';
+    msg.textContent = 'Error: ' + err.message;
   }
-  if (errores.length) {
-    html += '<br>' + errores.length + ' con error: ' + errores.join(', ');
-  }
-  msg.className = errores.length ? 'msg err' : 'msg ok';
-  msg.innerHTML = html;
 
   subsRegistros = []; subsDuplicados = [];
   document.getElementById('subs-input').value = '';
@@ -1675,12 +1733,28 @@ function repararMojibake(s){
 // de un candidato, esos casos se dejan como alta nueva sin tocar a nadie
 // (aparecen aparte, marcados como "ambiguos", para revisar a mano).
 async function emparejarConDirectorioHC(registros){
-  const snap = await db.collection('empleados').where('origen','==','head_count').get();
+  // Antes esto solo miraba a empleados con origen:'head_count' — así que a
+  // quien se agregaba a mano (ej. un subsidiado dado de alta desde la
+  // tarjeta de "Empleados subsidiados 100%") el Head Count nunca lo
+  // reconocía, y cada semana lo volvía a dar de alta como si fuera nuevo,
+  // creando una cuenta duplicada (esta fue la causa raíz de los duplicados
+  // "subsidiados" detectados el 24 de agosto de 2026). Ahora se considera a
+  // cualquier empleado normal (rol 'empleado', sin importar si origen es
+  // 'head_count' o 'manual') como candidato a emparejar por ID o por
+  // nombre, para no duplicarlo y mantenerle el nombre/comedor al día —
+  // nunca se toca ni se considera a cuentas de admin o chef, y aquí nunca
+  // se toca el indicador de subsidiado ni el puesto de nadie. El conteo de
+  // faltas seguidas (semanas_ausente_hc) sigue siendo exclusivo de
+  // origen:'head_count' — ver el filtro al construir "bajas" más abajo —
+  // para no empezar a acumularle faltas silenciosas a alguien agregado a
+  // mano que nunca fue pensado para el proceso de bajas automáticas.
+  const snap = await db.collection('empleados').get();
   const actuales = {};
   snap.forEach(function(d){
     const e = d.data();
+    if(e.rol==='admin' || e.rol==='chef') return;
     if(!e.hc_id) return;
-    actuales[normalizarHcId(e.hc_id)] = { uid:d.id, nombre:e.nombre, puesto:e.puesto, comedor:e.comedor, hc_id:e.hc_id, semanas_ausente_hc:e.semanas_ausente_hc||0 };
+    actuales[normalizarHcId(e.hc_id)] = { uid:d.id, nombre:e.nombre, puesto:e.puesto, comedor:e.comedor, hc_id:e.hc_id, origen:e.origen, semanas_ausente_hc:e.semanas_ausente_hc||0 };
   });
   const restantes = Object.assign({}, actuales);
 
@@ -1758,8 +1832,11 @@ async function emparejarConDirectorioHC(registros){
   // "bajas" aquí es solo "no apareció esta vez" — cada quién trae su
   // semanas_ausente_hc actual (de antes de esta subida); quien la llama
   // decide qué hacer con eso (el Head Count semanal es el único que lleva
-  // el conteo de faltas seguidas — ver aplicarCambiosHeadCount).
-  const bajas = Object.keys(restantes).map(function(k){ return restantes[k]; });
+  // el conteo de faltas seguidas — ver aplicarCambiosHeadCount). Filtrado a
+  // origen:'head_count' nada más: a alguien agregado a mano (ej. un
+  // subsidiado) ya no se le duplica, pero tampoco se le empieza a contar
+  // faltas silenciosas por un proceso que nunca fue pensado para él.
+  const bajas = Object.keys(restantes).map(function(k){ return restantes[k]; }).filter(function(x){ return x.origen === 'head_count'; });
   return { altas: altas, actualizados: actualizados, sinCambios: sinCambios, corregidos: corregidos, ambiguos: ambiguos, bajas: bajas };
 }
 
@@ -1836,7 +1913,7 @@ function procesarArchivoIngresos(file){
   const msg = document.getElementById('ing-msg');
   msg.style.display='none';
   const nombreArchivo = file.name.toLowerCase();
-  const esExcel = nombreArchivo.endsWith('.xlsx') || nombreArchivo.endsWith('.xls');
+  const esExcel = esArchivoExcelBinario(nombreArchivo);
   const reader = new FileReader();
   reader.onload = async function(e){
     try {
@@ -2671,7 +2748,8 @@ window.descargarGafetesDeHoy = async function(){
 
 // Revisión y corrección de una sola pasada para todo el directorio:
 //
-// 1) Duplicados por ID B360 (dentro de origen:'head_count'): agrupa por ID
+// 1) Duplicados por ID B360 (cualquier empleado normal, venga del Head
+//    Count o se haya agregado a mano — nunca admin ni chef): agrupa por ID
 //    normalizado, y para cada grupo con más de un registro identifica cuál
 //    tiene el correo CORRECTO (el que corresponde a su ID B360, calculado
 //    con emailSinteticoHC — no se fía de la bandera "Activo"). Si hay
@@ -2683,6 +2761,13 @@ window.descargarGafetesDeHoy = async function(){
 //
 // 2) Otras rarezas — se REPORTAN pero nunca se tocan solas, porque no hay
 //    forma segura de adivinar cuál copia es la correcta:
+//    - Posibles duplicados por NOMBRE con ID B360 distinto — el caso que
+//      el paso 1 no puede ver, porque ahí cada copia tiene un ID diferente
+//      (típicamente: alguien se agregó a mano como subsidiado y luego el
+//      Head Count le creó una segunda cuenta porque no lo reconoció — bug
+//      de emparejamiento arreglado el 24 de agosto de 2026, pero las
+//      copias ya creadas ANTES de ese arreglo siguen ahí y hay que
+//      limpiarlas a mano).
 //    - Código de gafete repetido entre distintos empleados.
 //    - Correo repetido entre distintas cuentas (fuera de los duplicados ya
 //      resueltos en el paso 1).
@@ -2698,18 +2783,22 @@ window.revisarYCorregirDirectorio = async function(){
   try {
     const snap = await db.collection('empleados').get();
     const porHcId = {};
+    const porNombre = {};
     const porGafete = {};
     const porEmail = {};
     const sinHcId = [];
     snap.forEach(function(d){
       const e = d.data();
-      const item = { uid: d.id, nombre: e.nombre, email: e.email, activo: e.activo !== false, hc_id: e.hc_id, codigo_gafete: e.codigo_gafete };
-      if (e.origen === 'head_count') {
+      const esAdminChef = e.rol === 'admin' || e.rol === 'chef';
+      const item = { uid: d.id, nombre: e.nombre, email: e.email, activo: e.activo !== false, hc_id: e.hc_id, codigo_gafete: e.codigo_gafete, subsidiado: !!e.subsidiado };
+      if (!esAdminChef) {
         if (!e.hc_id) {
-          sinHcId.push(item);
+          if (e.origen === 'head_count') sinHcId.push(item);
         } else {
           const norm = normalizarHcId(e.hc_id);
           (porHcId[norm] = porHcId[norm] || []).push(item);
+          const kn = normalizarNombreComparar(e.nombre);
+          (porNombre[kn] = porNombre[kn] || []).push(item);
         }
       }
       if (e.codigo_gafete) (porGafete[e.codigo_gafete] = porGafete[e.codigo_gafete] || []).push(item);
@@ -2745,6 +2834,21 @@ window.revisarYCorregirDirectorio = async function(){
     }
     const gafetesRepetidos = repetidosExcluyendo(porGafete);
     const emailsRepetidos = repetidosExcluyendo(porEmail);
+
+    // Posibles duplicados por NOMBRE con ID B360 distinto (excluyendo lo que
+    // el paso 1 ya va a eliminar). Nunca se tocan solos: puede ser la misma
+    // persona con dos cuentas (el caso típico) o, más raro, dos personas
+    // distintas que de casualidad comparten nombre — por eso solo se
+    // reporta, para que se revise a mano cuál conservar.
+    const duplicadosPorNombre = [];
+    Object.keys(porNombre).forEach(function(kn){
+      const grupo = porNombre[kn].filter(function(g){ return !uidsAEliminar[g.uid]; });
+      if (grupo.length < 2) return;
+      const idsDistintos = {};
+      grupo.forEach(function(g){ idsDistintos[normalizarHcId(g.hc_id)] = true; });
+      if (Object.keys(idsDistintos).length < 2) return; // mismo ID, ya lo cubre el paso 1
+      duplicadosPorNombre.push(grupo);
+    });
 
     const hayAutoFix = aEliminar.length > 0 || aReactivar.length > 0;
     if (hayAutoFix) {
@@ -2790,6 +2894,11 @@ window.revisarYCorregirDirectorio = async function(){
     }
 
     const rarezas = [];
+    if (duplicadosPorNombre.length) {
+      rarezas.push('⚠️ ' + duplicadosPorNombre.length + ' posible(s) duplicado(s) por NOMBRE con ID B360 distinto (revísalos a mano, no se tocaron): ' + duplicadosPorNombre.map(function(grupo){
+        return grupo.map(function(g){ return g.nombre + ' [ID ' + g.hc_id + (g.subsidiado ? ', subsidiado' : '') + (g.activo ? '' : ', inactivo') + ']'; }).join(' vs ');
+      }).join('; '));
+    }
     if (ambiguos.length) {
       rarezas.push(ambiguos.length + ' grupo(s) de ID B360 duplicado donde no está claro cuál copia es la correcta: ' + ambiguos.map(function(a){ return a.grupo.map(function(g){ return g.nombre; }).join(' / '); }).join('; '));
     }
@@ -3296,8 +3405,37 @@ async function limpiarOrdenesNoEscaneadas(){
 // el empleado ve "Sin menú disponible" ese día.
 let menusSemanaAdmin = {};
 
+// getDias() (arriba) siempre es la semana calendario ACTUAL — la usan los
+// Reportes para "semana actual"/"semana pasada" y no debe moverse. El editor
+// de Menús necesita poder navegar a otras semanas (para subir el menú de la
+// que sigue con anticipación, o revisar una que ya pasó), así que usa esta
+// versión con desplazamiento en semanas completas a partir de la actual.
+function getDiasSemana(offsetSemanas){
+  const h=new Date(),dia=h.getDay(),lun=new Date(h);
+  lun.setDate(h.getDate()-((dia+6)%7)+7*offsetSemanas);
+  return Array.from({length:7},(_,i)=>{const d=new Date(lun);d.setDate(lun.getDate()+i);return fechaLocal(d);});
+}
+// Semana que se muestra por defecto en el editor: si hoy ya no es lunes, el
+// lunes de esta semana "ya pasó" y se adelanta automáticamente a la semana
+// siguiente, para que el admin siempre esté preparando la semana que sigue
+// en vez de quedarse viendo una que el empleado ya vivió. Las flechas de
+// abajo navegan libremente a cualquier semana.
+let semanaMenuOffset = (new Date().getDay() === 1) ? 0 : 1;
+
+function renderSemanaMenuLabel(dias){
+  const lbl = document.getElementById('semana-menu-label');
+  if(!lbl) return;
+  const d0 = new Date(dias[0]+'T12:00:00'), d6 = new Date(dias[dias.length-1]+'T12:00:00');
+  let texto = d0.getDate()+' de '+MF[d0.getMonth()]+' al '+d6.getDate()+' de '+MF[d6.getMonth()];
+  if(semanaMenuOffset===0) texto += ' · semana actual';
+  else if(semanaMenuOffset===1) texto += ' · semana siguiente';
+  else if(semanaMenuOffset<0) texto += ' · semana pasada';
+  lbl.textContent = texto;
+}
+
 async function initMenuEditor(){
-  const dias = getDias();
+  const dias = getDiasSemana(semanaMenuOffset);
+  renderSemanaMenuLabel(dias);
   try {
     const snaps = await Promise.all(dias.map(f => db.collection('menus').doc(f).get()));
     menusSemanaAdmin = {};
@@ -3310,8 +3448,19 @@ async function initMenuEditor(){
   seleccionarDiaMenu(idxHoy >= 0 ? idxHoy : 0);
 }
 
+function cambiarSemanaMenu(delta){
+  semanaMenuOffset += delta;
+  if(typeof window.cancelarMenuSemana==='function') window.cancelarMenuSemana();
+  initMenuEditor();
+}
+function irSemanaActualMenu(){
+  semanaMenuOffset = 0;
+  if(typeof window.cancelarMenuSemana==='function') window.cancelarMenuSemana();
+  initMenuEditor();
+}
+
 function renderDiaSelectorAdmin(){
-  const dias = getDias();
+  const dias = getDiasSemana(semanaMenuOffset);
   const wrap = document.getElementById('dia-selector');
   wrap.innerHTML = '';
   dias.forEach((f,i)=>{
@@ -3326,7 +3475,7 @@ function renderDiaSelectorAdmin(){
 }
 
 function seleccionarDiaMenu(i){
-  const dias = getDias();
+  const dias = getDiasSemana(semanaMenuOffset);
   diaMenuSel = dias[i];
   const data = menusSemanaAdmin[diaMenuSel];
   platillosBuf = (data && data.platillos) ? data.platillos.slice() : [];
@@ -3467,7 +3616,7 @@ const DIAS_LARGOS = ['Lunes','Martes','Miércoles','Jueves','Viernes','Sábado',
 let menuImportDiff = null;
 
 window.descargarPlantillaMenuSemana = function(){
-  const dias = getDias();
+  const dias = getDiasSemana(semanaMenuOffset);
   const filas = [
     ['Día','Fecha','Nombre del menú','Platillos (separados por coma)','Extras (Nombre $Precio, separados por coma)']
   ];
@@ -3490,7 +3639,7 @@ function parseMenuSemanaFilas(filas){
   const iPlatillos = buscarCol(headers, ['platillos (separados por coma)','platillos']);
   const iExtras = buscarCol(headers, ['extras (nombre $precio, separados por coma)','extras']);
 
-  const dias = getDias();
+  const dias = getDiasSemana(semanaMenuOffset);
   const mapaDias = {};
   DIAS_LARGOS.forEach(function(nombreDia, i){ mapaDias[quitarAcentos(nombreDia).toLowerCase()] = dias[i]; });
   // Acepta también abreviaturas comunes por si el chef las usa.
@@ -3526,7 +3675,7 @@ function procesarArchivoMenuSemana(file){
   const msg = document.getElementById('menu-import-msg');
   msg.style.display='none';
   const nombreArchivo = file.name.toLowerCase();
-  const esExcel = nombreArchivo.endsWith('.xlsx') || nombreArchivo.endsWith('.xls');
+  const esExcel = esArchivoExcelBinario(nombreArchivo);
   const reader = new FileReader();
   reader.onload = function(e){
     try {
