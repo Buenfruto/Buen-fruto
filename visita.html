@@ -12,7 +12,7 @@
 <meta http-equiv="Expires" content="0"/>
 <script>
 (function(){
-  var V='20260822-5';
+  var V='20260825-7';
   try{
     fetch('version.txt?_='+Date.now(),{cache:'no-store'}).then(function(r){return r.ok?r.text():null;}).then(function(t){
       if(!t) return;
@@ -221,7 +221,7 @@ function hoy(){ const d=new Date(); return d.getFullYear()+'-'+String(d.getMonth
 const COMEDORES = [
   { id:'betel', nombre:'Betel' },
   { id:'cuauhtemoc', nombre:'Cuauhtémoc' },
-  { id:'intelomas', nombre:'Intelomas' }
+  { id:'interlomas', nombre:'Interlomas' }
 ];
 
 // Si esta pestaña ya generó un pedido de visita hoy, no dejamos volver a
