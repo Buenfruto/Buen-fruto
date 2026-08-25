@@ -12,7 +12,7 @@
 <meta http-equiv="Expires" content="0"/>
 <script>
 (function(){
-  var V='20260825-5';
+  var V='20260825-7';
   try{
     fetch('version.txt?_='+Date.now(),{cache:'no-store'}).then(function(r){return r.ok?r.text():null;}).then(function(t){
       if(!t) return;
@@ -245,13 +245,19 @@ const _listoAuth = signInAnonymously(_authAnon).catch(err=>{
 // "intelomas" siempre haga match aquí aunque la URL diga "Interlomas".
 function normalizarComedorURL(s){
   const t = String(s||'').normalize('NFD').replace(/[̀-ͯ]/g,'').trim().toLowerCase();
-  if (t.indexOf('interlomas')>=0 || t.indexOf('intelomas')>=0) return 'intelomas';
+  if (t.indexOf('interlomas')>=0 || t.indexOf('intelomas')>=0) return 'interlomas';
   if (t.indexOf('cuauhtemoc')>=0) return 'cuauhtemoc';
   if (t.indexOf('betel')>=0) return 'betel';
   return t || 'betel';
 }
+// Compatibilidad: registros guardados antes de la corrección de nombre
+// pueden traer el comedor de una orden como "intelomas" (mal escrito) — se
+// normaliza igual que el de la URL para que siempre hagan match aquí.
+function canonicalizarComedor(v){
+  return v === 'intelomas' ? 'interlomas' : v;
+}
 const _comedor = normalizarComedorURL(new URLSearchParams(window.location.search).get('comedor'));
-const _comedorLabels = { betel:'Betel', cuauhtemoc:'Cuauhtémoc', intelomas:'Intelomas' };
+const _comedorLabels = { betel:'Betel', cuauhtemoc:'Cuauhtémoc', interlomas:'Interlomas' };
 const _comedorNombre = _comedorLabels[_comedor] || _comedor;
 document.title = 'Buen Fruto — Entrada ' + _comedorNombre;
 document.getElementById('tb-seccion').textContent = 'Entrada comedor · ' + _comedorNombre;
@@ -291,7 +297,7 @@ window.escanear=async function(){
     // Buscar la orden de hoy para este empleado (que no esté cancelada)
     const qOrd=query(collection(db,'ordenes'),where('empleado_uid','==',empDoc.id),where('fecha','==',hoy()));
     const ordSnap=await getDocs(qOrd);
-    ordSnap.forEach(d=>{ const data=d.data(); if(data.estado!=='cancelado') ordenesHoy.push({id:d.id,...data}); });
+    ordSnap.forEach(d=>{ const data=d.data(); if(data.estado!=='cancelado') ordenesHoy.push({id:d.id,...data, comedor: canonicalizarComedor(data.comedor)}); });
 
     if(!ordenesHoy.length){
       mostrarRes('error','Sin orden hoy',nombrePersona,'Este empleado no tiene ninguna orden para hoy');
@@ -305,7 +311,7 @@ window.escanear=async function(){
     // directo en ordenes.
     const qVis=query(collection(db,'ordenes'),where('codigo_visita','==',code),where('fecha','==',hoy()));
     const visSnap=await getDocs(qVis);
-    visSnap.forEach(d=>{ const data=d.data(); if(data.estado!=='cancelado') ordenesHoy.push({id:d.id,...data}); });
+    visSnap.forEach(d=>{ const data=d.data(); if(data.estado!=='cancelado') ordenesHoy.push({id:d.id,...data, comedor: canonicalizarComedor(data.comedor)}); });
 
     if(!ordenesHoy.length){
       mostrarRes('error','Código inválido','—','No se encontró ningún empleado ni visita con este código');
