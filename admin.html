@@ -15,7 +15,7 @@
 // fuerza una recarga limpia. sessionStorage evita que se quede en bucle si
 // version.txt no está disponible por algún motivo.
 (function(){
-  var V='20260825-1';
+  var V='20260825-7';
   try{
     fetch('version.txt?_='+Date.now(),{cache:'no-store'}).then(function(r){return r.ok?r.text():null;}).then(function(t){
       if(!t) return;
@@ -353,7 +353,9 @@ input[type=file]{display:none}
           <div class="metrica verde"><div class="metrica-label">Órdenes totales</div><div class="metrica-val" id="m-ordenes">—</div><div class="metrica-sub">Todos los centros</div></div>
           <div class="metrica"><div class="metrica-label">Empleados activos</div><div class="metrica-val" id="m-empleados">—</div><div class="metrica-sub">Registrados</div></div>
           <div class="metrica ciruela"><div class="metrica-label">Pre-órdenes hoy</div><div class="metrica-val" id="m-preordenes">—</div><div class="metrica-sub">Con hora agendada</div></div>
-          <div class="metrica"><div class="metrica-label">Recaudado hoy</div><div class="metrica-val" id="m-recaudado">—</div><div class="metrica-sub">Empleados + empresa</div></div>
+          <div class="metrica"><div class="metrica-label">Pagos empleados</div><div class="metrica-val" id="m-recaudado">—</div><div class="metrica-sub">Solo lo que se les cobra a ellos</div></div>
+          <div class="metrica"><div class="metrica-label">Pagos empleados + Subsidio</div><div class="metrica-val" id="m-valor-total">—</div><div class="metrica-sub">$90 por buffet + extras, de todos</div></div>
+          <div class="metrica"><div class="metrica-label">Corresponde a Sistema</div><div class="metrica-val" id="m-sistema">—</div><div class="metrica-sub">5% de Pagos empleados + Subsidio</div></div>
           <div class="metrica verde"><div class="metrica-label">Subsidiados hoy</div><div class="metrica-val" id="m-subsidiados">—</div><div class="metrica-sub">Comida 100% empresa</div></div>
           <div class="metrica ciruela"><div class="metrica-label">Visitas hoy</div><div class="metrica-val" id="m-visitas">—</div><div class="metrica-sub">Sin cuenta, por link</div></div>
         </div>
@@ -397,19 +399,19 @@ input[type=file]{display:none}
           </div>
 
           <div class="card" style="margin:0">
-            <div class="card-head"><span class="card-titulo">Intelomas</span><span id="c-hora-intelomas" style="font-size:.7rem;color:var(--g3)">—</span></div>
+            <div class="card-head"><span class="card-titulo">Interlomas</span><span id="c-hora-interlomas" style="font-size:.7rem;color:var(--g3)">—</span></div>
             <div class="card-body" style="padding:1rem">
               <div style="display:grid;grid-template-columns:1fr 1fr;gap:.75rem;margin-bottom:.75rem">
                 <div style="text-align:center;background:var(--vl);border-radius:10px;padding:.75rem">
-                  <div style="font-size:1.8rem;font-weight:800;color:var(--v)" id="c-ord-intelomas">—</div>
+                  <div style="font-size:1.8rem;font-weight:800;color:var(--v)" id="c-ord-interlomas">—</div>
                   <div style="font-size:.68rem;color:var(--g2)">Órdenes</div>
                 </div>
                 <div style="text-align:center;background:var(--vl);border-radius:10px;padding:.75rem">
-                  <div style="font-size:1.8rem;font-weight:800;color:var(--v)" id="c-rec-intelomas">—</div>
+                  <div style="font-size:1.8rem;font-weight:800;color:var(--v)" id="c-rec-interlomas">—</div>
                   <div style="font-size:.68rem;color:var(--g2)">Recaudado</div>
                 </div>
               </div>
-              <div id="c-lista-intelomas" style="font-size:.78rem;color:var(--g2);text-align:center">—</div>
+              <div id="c-lista-interlomas" style="font-size:.78rem;color:var(--g2);text-align:center">—</div>
             </div>
           </div>
 
@@ -488,7 +490,7 @@ input[type=file]{display:none}
                   <select id="subs-unico-centro">
                     <option value="betel">Betel</option>
                     <option value="cuauhtemoc">Cuauhtémoc</option>
-                    <option value="intelomas">Intelomas</option>
+                    <option value="interlomas">Interlomas</option>
                   </select>
                 </div>
                 <button class="btn btn-v btn-sm" id="btn-subs-unico-guardar" onclick="agregarSubsidiadoUnico()">Guardar</button>
@@ -608,7 +610,7 @@ input[type=file]{display:none}
               <select id="ing-unico-centro">
                 <option value="betel">Betel</option>
                 <option value="cuauhtemoc">Cuauhtémoc</option>
-                <option value="intelomas">Intelomas</option>
+                <option value="interlomas">Interlomas</option>
               </select>
             </div>
             <button class="btn btn-v btn-sm" id="btn-ing-unico-guardar" onclick="agregarIngresoUnico()">Dar de alta</button>
@@ -634,13 +636,22 @@ input[type=file]{display:none}
                 <select id="ing-editar-centro">
                   <option value="betel">Betel</option>
                   <option value="cuauhtemoc">Cuauhtémoc</option>
-                  <option value="intelomas">Intelomas</option>
+                  <option value="interlomas">Interlomas</option>
                 </select>
               </div>
               <button class="btn btn-v btn-sm" id="btn-ing-editar-guardar" onclick="guardarEdicionEmpleado()">Guardar cambios</button>
               <button class="btn btn-outline btn-sm" onclick="cancelarEdicionEmpleado()">Cancelar</button>
               <div class="msg" id="ing-editar-msg"></div>
             </div>
+          </div>
+        </div>
+
+        <div class="card" style="margin-top:1.25rem">
+          <div class="card-head"><span class="card-titulo">Corregir "intelomas" → "interlomas" en la base de datos</span></div>
+          <div class="card-body">
+            <p style="font-size:.82rem;color:var(--g2);margin-bottom:1rem">El comedor Interlomas se guardaba internamente con el nombre mal escrito "intelomas" (sin la r). Ya se corrigió en todo el sistema para las cuentas y órdenes nuevas — pero los registros que ya existían en la base de datos (empleados, órdenes y movimientos de Head Count) pueden seguir teniendo el valor viejo hasta que corras esto una vez. El sistema sigue funcionando bien mientras tanto; esto solo termina de limpiar lo ya guardado. Se puede correr más de una vez sin problema.</p>
+            <button class="btn btn-v btn-sm" id="btn-migrar-interlomas" onclick="migrarIntelomasAInterlomas()">🔧 Corregir en la base de datos</button>
+            <div class="msg" id="migrar-interlomas-msg"></div>
           </div>
         </div>
       </div>
@@ -702,7 +713,7 @@ input[type=file]{display:none}
           <button class="btn btn-outline btn-sm rep-comedor-btn active" onclick="setRepComedor('todos',this)">Todos</button>
           <button class="btn btn-outline btn-sm rep-comedor-btn" onclick="setRepComedor('betel',this)">Betel</button>
           <button class="btn btn-outline btn-sm rep-comedor-btn" onclick="setRepComedor('cuauhtemoc',this)">Cuauhtémoc</button>
-          <button class="btn btn-outline btn-sm rep-comedor-btn" onclick="setRepComedor('intelomas',this)">Intelomas</button>
+          <button class="btn btn-outline btn-sm rep-comedor-btn" onclick="setRepComedor('interlomas',this)">Interlomas</button>
         </div>
 
         <!-- Selector de período -->
@@ -750,6 +761,9 @@ input[type=file]{display:none}
               <button class="btn btn-outline btn-sm" id="btn-plantilla-asistencia" onclick="descargarPlantillaAsistencia()" title="Formato de referencia del reporte de asistencia, sin depender de datos reales">
                 📥 Plantilla de asistencia
               </button>
+              <button class="btn btn-outline btn-sm" id="btn-excel-resumen-ordenes" onclick="descargarReporteResumenOrdenes()" title="Solo la cantidad de órdenes del período (visitas, subsidiados, normales), el valor total ($90 por buffet + extras, de todos) y el 5% que corresponde al sistema">
+                🧾 Resumen de órdenes
+              </button>
             </div>
           </div>
           <div id="reporte-alerta" style="display:none"></div>
@@ -774,7 +788,7 @@ input[type=file]{display:none}
           <button class="btn btn-outline btn-sm pend-comedor-btn active" onclick="setPendComedor('todos',this)">Todos</button>
           <button class="btn btn-outline btn-sm pend-comedor-btn" onclick="setPendComedor('betel',this)">Betel</button>
           <button class="btn btn-outline btn-sm pend-comedor-btn" onclick="setPendComedor('cuauhtemoc',this)">Cuauhtémoc</button>
-          <button class="btn btn-outline btn-sm pend-comedor-btn" onclick="setPendComedor('intelomas',this)">Intelomas</button>
+          <button class="btn btn-outline btn-sm pend-comedor-btn" onclick="setPendComedor('interlomas',this)">Interlomas</button>
         </div>
         <div class="card">
           <div class="card-head">
@@ -803,7 +817,7 @@ input[type=file]{display:none}
       <select id="emp-comedor">
         <option value="betel">Betel</option>
         <option value="cuauhtemoc">Cuauhtémoc</option>
-        <option value="intelomas">Intelomas</option>
+        <option value="interlomas">Interlomas</option>
       </select>
     </div>
     <div class="campo"><label>Rol</label>
@@ -1160,12 +1174,29 @@ async function cargarDashboard(){
   const q=db.collection('ordenes').where('fecha','==',hoy());
   unsubOrdenes=q.onSnapshot(snap=>{
     const ordenes=[];
-    snap.forEach(d=>{ if(d.data().estado!=='cancelado') ordenes.push({id:d.id,...d.data()}); });
+    snap.forEach(d=>{ const o=d.data(); if(o.estado!=='cancelado') ordenes.push({id:d.id,...o, comedor: canonicalizarComedor(o.comedor)}); });
     const preordenes=ordenes.filter(o=>o.hora_preorden);
+    // "Pagos empleados": literal, lo que se le cobra a cada empleado (campo
+    // cargo) — para subsidiados es solo extras, para visitas siempre 0.
     const total=ordenes.reduce((s,o)=>s+(o.cargo||0),0);
+    // "Pagos empleados + Subsidio": valor completo de lo consumido hoy —
+    // $90 por cada orden que trajo buffet (sea empleado normal, subsidiado
+    // o visita, todos cuentan el mismo $90) más el costo de los extras de
+    // cada orden. Se calcula de platillos/extras y NO del campo cargo,
+    // porque a las visitas el cargo siempre se guarda en 0 aunque sí hayan
+    // pedido buffet o extras.
+    const valorTotal=ordenes.reduce((s,o)=>{
+      const tuvoBuffet=(o.platillos||[]).length>0;
+      const costoExtras=(o.extras||[]).reduce((se,e)=>se+(Number(e&&e.precio)||0),0);
+      return s+(tuvoBuffet?90:0)+costoExtras;
+    },0);
     document.getElementById('m-ordenes').textContent=ordenes.length;
     document.getElementById('m-preordenes').textContent=preordenes.length;
     document.getElementById('m-recaudado').textContent='$'+total;
+    document.getElementById('m-valor-total').textContent='$'+valorTotal;
+    // "Corresponde a Sistema": 5% de la Pagos empleados + Subsidio (el valor
+    // completo de lo consumido hoy, no solo lo cobrado a los empleados).
+    document.getElementById('m-sistema').textContent='$'+Math.round(valorTotal*0.05);
     document.getElementById('m-subsidiados').textContent=ordenes.filter(o=>o.subsidiado).length;
     document.getElementById('m-visitas').textContent=ordenes.filter(o=>o.tipo==='visita').length;
     document.getElementById('loading-dashboard').style.display='none';
@@ -1174,7 +1205,7 @@ async function cargarDashboard(){
     document.getElementById('dashboard-hora').textContent='Actualizado '+horaStr;
 
     // Tarjetas por centro
-    ['betel','cuauhtemoc','intelomas'].forEach(c=>{
+    ['betel','cuauhtemoc','interlomas'].forEach(c=>{
       const del_c=ordenes.filter(o=>o.comedor===c);
       const tot_c=del_c.reduce((s,o)=>s+(o.cargo||0),0);
       var el=document.getElementById('c-ord-'+c); if(el) el.textContent=del_c.length;
@@ -1195,7 +1226,7 @@ async function cargarDashboard(){
     });
 
     // Tabla global
-    const labels={betel:'Betel',cuauhtemoc:'Cuauhtémoc',intelomas:'Intelomas'};
+    const labels={betel:'Betel',cuauhtemoc:'Cuauhtémoc',interlomas:'Interlomas'};
     const tbody=document.getElementById('tabla-dashboard');
     if(!ordenes.length){ tbody.innerHTML='<tr><td colspan="8" style="text-align:center;padding:2rem;color:var(--g3)">Sin órdenes por el momento</td></tr>'; return; }
     tbody.innerHTML=ordenes.map(o=>`
@@ -1342,11 +1373,70 @@ function normalizarNombreHC(nombre){
 
 function normalizarCentroHC(centro){
   const s = quitarAcentos(centro||'').trim().toLowerCase();
-  if(s.indexOf('interlomas')>=0 || s.indexOf('intelomas')>=0) return 'intelomas';
+  if(s.indexOf('interlomas')>=0 || s.indexOf('intelomas')>=0) return 'interlomas';
   if(s.indexOf('cuauhtemoc')>=0) return 'cuauhtemoc';
   if(s.indexOf('betel')>=0) return 'betel';
   return 'betel';
 }
+
+// Compatibilidad: el comedor "Interlomas" se guardaba internamente como
+// "intelomas" (mal escrito, sin la r) desde antes de este cambio. Ya se
+// corrigió en todo el código para adelante, pero los registros que ya
+// existían en la base de datos (empleados, órdenes, movimientos de Head
+// Count) pueden seguir diciendo el valor viejo hasta que se corran una vez
+// "Corregir 'intelomas' → 'interlomas' en la base de datos" (ver Ingeniería).
+// Esta función normaliza CUALQUIER valor de comedor que venga de un
+// documento ya guardado, para que nada se rompa ni se vea mal mientras esa
+// migración no se haya corrido — se usa justo al leer cada documento de
+// Firestore, antes de compararlo o mostrarlo.
+function canonicalizarComedor(v){
+  return v === 'intelomas' ? 'interlomas' : v;
+}
+
+// Corre UNA VEZ (botón en Ingeniería) para arreglar de raíz los registros
+// que ya existían en la base de datos con el comedor mal escrito
+// "intelomas" — los pasa a "interlomas", el nombre correcto que ya usa el
+// resto del código. Revisa empleados, órdenes y movimientos de Head Count.
+// Se puede correr más de una vez sin problema: si ya no encuentra nada que
+// corregir, simplemente no hace nada.
+window.migrarIntelomasAInterlomas = async function(){
+  const btn = document.getElementById('btn-migrar-interlomas');
+  const msg = document.getElementById('migrar-interlomas-msg');
+  if (!confirm('Esto va a corregir en la base de datos todos los registros (empleados, órdenes y movimientos) que todavía digan "intelomas" para que digan "interlomas". No borra ni cambia nada más. ¿Continuar?')) return;
+  if (btn) { btn.disabled = true; btn.textContent = 'Corrigiendo…'; }
+  if (msg) { msg.style.display = 'none'; }
+  try {
+    const colecciones = ['empleados', 'ordenes', 'movimientos_headcount'];
+    let total = 0;
+    const resumen = [];
+    for (const col of colecciones) {
+      const snap = await db.collection(col).where('comedor', '==', 'intelomas').get();
+      const docs = snap.docs;
+      // Firestore permite máximo 500 escrituras por batch — se parte en
+      // lotes de 400 por seguridad.
+      for (let i = 0; i < docs.length; i += 400) {
+        const lote = docs.slice(i, i + 400);
+        const batch = db.batch();
+        lote.forEach(function(d){ batch.update(d.ref, { comedor: 'interlomas' }); });
+        await batch.commit();
+      }
+      total += docs.length;
+      resumen.push(docs.length + ' en ' + col);
+    }
+    if (msg) {
+      msg.textContent = total ? ('✅ Corregidos ' + total + ' registros (' + resumen.join(', ') + ').') : '✅ No había nada que corregir — todo ya estaba bien.';
+      msg.className = 'msg ok';
+      msg.style.display = 'block';
+    }
+    // Refresca la tabla de empleados (si está abierta) para que se vea el cambio de inmediato.
+    if (typeof cargarEmpleados === 'function') cargarEmpleados();
+  } catch (err) {
+    console.error('Error al corregir intelomas → interlomas:', err);
+    if (msg) { msg.textContent = 'No se pudo completar: ' + err.message; msg.className = 'msg err'; msg.style.display = 'block'; }
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = '🔧 Corregir en la base de datos'; }
+  }
+};
 
 function emailSinteticoHC(loginBase){
   const limpio = quitarAcentos(loginBase||'').toLowerCase().replace(/[^a-z0-9._-]/g,'');
@@ -1802,7 +1892,7 @@ async function emparejarConDirectorioHC(registros){
     const e = d.data();
     if(e.rol==='admin' || e.rol==='chef') return;
     if(!e.hc_id) return;
-    actuales[normalizarHcId(e.hc_id)] = { uid:d.id, nombre:e.nombre, puesto:e.puesto, comedor:e.comedor, hc_id:e.hc_id, origen:e.origen, semanas_ausente_hc:e.semanas_ausente_hc||0 };
+    actuales[normalizarHcId(e.hc_id)] = { uid:d.id, nombre:e.nombre, puesto:e.puesto, comedor:canonicalizarComedor(e.comedor), hc_id:e.hc_id, origen:e.origen, semanas_ausente_hc:e.semanas_ausente_hc||0 };
   });
   const restantes = Object.assign({}, actuales);
 
@@ -2005,7 +2095,7 @@ async function calcularDiffIngresos(){
 function renderPreviewIngresos(){
   const preview = document.getElementById('ing-preview');
   const altas = ingDiff.altas, actualizados = ingDiff.actualizados, sinCambios = ingDiff.sinCambios, corregidos = ingDiff.corregidos, ambiguos = ingDiff.ambiguos;
-  const comedorLabels = { betel:'Betel', cuauhtemoc:'Cuauhtémoc', intelomas:'Intelomas' };
+  const comedorLabels = { betel:'Betel', cuauhtemoc:'Cuauhtémoc', interlomas:'Interlomas' };
 
   function statTile(label,val,color){
     return '<div style="background:var(--crema);border-radius:12px;padding:.85rem 1rem;text-align:center">'+
@@ -2500,7 +2590,7 @@ async function aplicarCambiosHeadCount(){
 }
 
 window.imprimirGafetesLote = function(lista){
-  const comedorLabels = { betel:'Betel', cuauhtemoc:'Cuauhtémoc', intelomas:'Intelomas' };
+  const comedorLabels = { betel:'Betel', cuauhtemoc:'Cuauhtémoc', interlomas:'Interlomas' };
   const win = window.open('','_blank','width=500,height=650');
   const gafetesHtml = lista.map(function(e, i){
     const comedorNombre = comedorLabels[e.comedor] || e.comedor || 'Betel';
@@ -2566,7 +2656,7 @@ window.imprimirGafetesLote = function(lista){
 // Gafetes en tamaño real de credencial (ISO/IEC 7810 ID-1: 8.6 x 5.4 cm),
 // en vertical, varios por hoja para imprimir y recortar.
 async function generarGafetesPDF(lista, nombreArchivo){
-  const comedorLabels = { betel:'Betel', cuauhtemoc:'Cuauhtémoc', intelomas:'Intelomas' };
+  const comedorLabels = { betel:'Betel', cuauhtemoc:'Cuauhtémoc', interlomas:'Interlomas' };
   const { jsPDF } = window.jspdf;
   const doc = new jsPDF({ unit:'mm', format:'a4' });
   const pageW = doc.internal.pageSize.getWidth();
@@ -2676,10 +2766,10 @@ window.descargarExcelEmpleados = async function(){
   const btn = document.getElementById('btn-excel-emp');
   if (btn) { btn.disabled = true; btn.textContent = 'Generando…'; }
   try {
-    const comedorLabels = { betel:'Betel', cuauhtemoc:'Cuauhtémoc', intelomas:'Intelomas' };
+    const comedorLabels = { betel:'Betel', cuauhtemoc:'Cuauhtémoc', interlomas:'Interlomas' };
     // Orden fijo de centros (no alfabético del label, por si algún día el
     // texto cambia) — el que no tenga comedor reconocido se va al final.
-    const ordenComedores = ['betel','cuauhtemoc','intelomas'];
+    const ordenComedores = ['betel','cuauhtemoc','interlomas'];
     const snap = await db.collection('empleados').get();
     const todos = [];
     snap.forEach(function(d){
@@ -2701,7 +2791,7 @@ window.descargarExcelEmpleados = async function(){
       });
     });
     if (!todos.length) { alert('No hay empleados registrados.'); return; }
-    // Primero agrupado por centro (Betel, Cuauhtémoc, Intelomas, en ese
+    // Primero agrupado por centro (Betel, Cuauhtémoc, Interlomas, en ese
     // orden) y dentro de cada centro, alfabético por nombre.
     todos.sort(function(a, b){
       const oa = a.ordenComedor === -1 ? 99 : a.ordenComedor;
@@ -2991,7 +3081,7 @@ function renderResumenEmpleados(lista){
   const total = lista.length;
   const activos = lista.filter(e=>e.activo!==false).length;
   const inactivos = total - activos;
-  const porComedor = { betel:0, cuauhtemoc:0, intelomas:0 };
+  const porComedor = { betel:0, cuauhtemoc:0, interlomas:0 };
   lista.forEach(e=>{ if(porComedor.hasOwnProperty(e.comedor)) porComedor[e.comedor]++; });
   const headCount = lista.filter(e=>e.origen==='head_count').length;
   const manual = lista.filter(e=>e.origen==='manual').length;
@@ -3011,7 +3101,7 @@ function renderResumenEmpleados(lista){
     tile('Inactivos', inactivos, 'var(--rojo)') +
     tile('Betel', porComedor.betel, 'var(--g2)') +
     tile('Cuauhtémoc', porComedor.cuauhtemoc, 'var(--g2)') +
-    tile('Intelomas', porComedor.intelomas, 'var(--g2)') +
+    tile('Interlomas', porComedor.interlomas, 'var(--g2)') +
     tile('Del Head Count', headCount, 'var(--naranja)') +
     tile('Agregados a mano', manual, 'var(--g2)') +
     tile('Subsidiados', subsidiados, 'var(--v)') +
@@ -3028,7 +3118,7 @@ async function cargarEmpleados(){
     document.getElementById('loading-emp').style.display='none';
     const tbody=document.getElementById('tabla-empleados');
     const lista=[];
-    snap.forEach(d=>lista.push(Object.assign({id:d.id}, d.data())));
+    snap.forEach(d=>{ const e=d.data(); lista.push(Object.assign({id:d.id}, e, {comedor: canonicalizarComedor(e.comedor)})); });
     _empleadosListaCache = lista;
     renderResumenEmpleados(lista);
     renderRiesgo(lista);
@@ -3036,6 +3126,7 @@ async function cargarEmpleados(){
     tbody.innerHTML='';
     snap.forEach(d=>{
       const e=d.data();
+      e.comedor = canonicalizarComedor(e.comedor);
       const tr=document.createElement('tr');
       tr.setAttribute('data-emp-id', d.id);
       tr.setAttribute('data-nombre', normalizarTexto(e.nombre||''));
@@ -3169,7 +3260,7 @@ function renderListaSubsidiados(lista){
     cont.innerHTML = '<div style="font-size:.8rem;color:var(--g3);padding:.4rem 0">Ningún empleado subsidiado por ahora.</div>';
     return;
   }
-  const comedorLabels = { betel:'Betel', cuauhtemoc:'Cuauhtémoc', intelomas:'Intelomas' };
+  const comedorLabels = { betel:'Betel', cuauhtemoc:'Cuauhtémoc', interlomas:'Interlomas' };
   cont.innerHTML = subsidiados.map(function(e){
     return '<div style="display:flex;align-items:center;justify-content:space-between;gap:.75rem;padding:.6rem 0;border-bottom:1px solid var(--borde2)">'+
       '<div>'+
@@ -3185,7 +3276,7 @@ function renderListaSubsidiados(lista){
 // Solo aplica a empleados de origen 'head_count' (los que trae el Head
 // Count): a los agregados a mano, admins y chefs nunca se les cuentan
 // faltas porque nunca se espera verlos en ese archivo.
-const COMEDOR_LABELS_RIESGO = { betel:'Betel', cuauhtemoc:'Cuauhtémoc', intelomas:'Intelomas' };
+const COMEDOR_LABELS_RIESGO = { betel:'Betel', cuauhtemoc:'Cuauhtémoc', interlomas:'Interlomas' };
 
 function renderRiesgo(lista){
   const contPend = document.getElementById('riesgo-pendientes-lista');
@@ -3357,7 +3448,7 @@ async function guardarNuevoEmpleado(){
 }
 
 window.imprimirGafete=function(uid, nombre, codigo, puesto, comedor){
-  var comedorLabels = { betel:'Betel', cuauhtemoc:'Cuauhtémoc', intelomas:'Intelomas' };
+  var comedorLabels = { betel:'Betel', cuauhtemoc:'Cuauhtémoc', interlomas:'Interlomas' };
   var comedorNombre = comedorLabels[comedor] || comedor || 'Betel';
   var win = window.open('','_blank','width=500,height=650');
   var html = '<!DOCTYPE html><html><head><meta charset="UTF-8">'
@@ -4190,7 +4281,7 @@ function cargarReporte(esReintento){
       _reporteReintentos = 0;
       _reporteEsRespaldoActual = false;
       _repOrdenesDocs = [];
-      snap.forEach(d => _repOrdenesDocs.push(Object.assign({id:d.id}, d.data())));
+      snap.forEach(d => { const o=d.data(); _repOrdenesDocs.push(Object.assign({id:d.id}, o, {comedor: canonicalizarComedor(o.comedor)})); });
       _reporteDesdeCache = !!(snap.metadata && snap.metadata.fromCache);
       renderizarReporte();
     }, e => _reporteFallo(miToken, e, 'ordenes'));
@@ -4354,9 +4445,29 @@ function renderizarReporte(){
   }
 
   const gtEmp     = _reporteRaw.reduce((s,e)=>s+e.dias.reduce((ss,d)=>ss+d.pago_empleado,0),0);
-  const gtEmpresa = _reporteRaw.reduce((s,e)=>s+e.dias.reduce((ss,d)=>ss+d.subsidio_empresa,0),0);
+  const gtEmpresaEmp = _reporteRaw.reduce((s,e)=>s+e.dias.reduce((ss,d)=>ss+d.subsidio_empresa,0),0);
   const gtComidas = _reporteRaw.reduce((s,e)=>s+e.dias.length,0);
   const ahora = new Date();
+
+  // Visitas del período (personas sin cuenta que pidieron por el link de
+  // visita) — no tienen nómina de la que descontarles nada (su cargo
+  // siempre es $0), pero sí consumieron: la empresa cubre el 100% de lo que
+  // pidieron, igual que a un subsidiado ($90 si trajo buffet + el costo de
+  // sus extras). Se calcula aquí, antes del Total general, para que ese
+  // total y el 5% de Sistema ya las incluyan.
+  const visitasPeriodo = (_repOrdenesDocs||[]).filter(o=>
+    o.tipo === 'visita' && o.estado !== 'cancelado' && o.escaneado &&
+    (_repComedor === 'todos' || o.comedor === _repComedor)
+  ).map(o=>{
+    const tuvoBuffet = (o.platillos||[]).length > 0;
+    const costoExtras = (o.extras||[]).reduce((s,e)=>s+(Number(e&&e.precio)||0),0);
+    return Object.assign({}, o, { costo_extras: costoExtras, valor_empresa: (tuvoBuffet?90:0)+costoExtras });
+  });
+  const gtEmpresaVisitas = visitasPeriodo.reduce((s,v)=>s+v.valor_empresa,0);
+  const gtEmpresa = gtEmpresaEmp + gtEmpresaVisitas;
+  // 5% que corresponde al sistema, sobre el gran total (empleados + empresa,
+  // ya incluyendo subsidiados y visitas).
+  const gtSistema = Math.round((gtEmp+gtEmpresa)*0.05);
 
   const COLORS = ['#1a5c96','#6b3fa0','#0f6e56','#993c1d','#854f0b'];
   let html = '';
@@ -4454,11 +4565,15 @@ function renderizarReporte(){
     </div>`;
   });
 
-  // Total general
+  // Total general — "Total empresa" ahora incluye tanto el subsidio de
+  // empleados subsidiados (gtEmpresaEmp) como el valor completo de las
+  // visitas (gtEmpresaVisitas), porque la empresa las cubre al 100% aunque
+  // no se les cobre nada. El 5% de Sistema se calcula sobre ese gran total
+  // ya con subsidiados y visitas incluidos.
   html += `
-  <div style="border-top:1.5px solid var(--borde);padding-top:1rem;display:flex;justify-content:space-between;align-items:center">
-    <div style="font-size:.8rem;color:var(--g2)">${_reporteRaw.length} empleado${_reporteRaw.length!==1?'s':''} &nbsp;·&nbsp; ${gtComidas} comidas totales</div>
-    <div style="display:flex;gap:2rem;text-align:right">
+  <div style="border-top:1.5px solid var(--borde);padding-top:1rem;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:1rem">
+    <div style="font-size:.8rem;color:var(--g2)">${_reporteRaw.length} empleado${_reporteRaw.length!==1?'s':''} &nbsp;·&nbsp; ${gtComidas} comidas totales${visitasPeriodo.length?(' &nbsp;·&nbsp; '+visitasPeriodo.length+' visita'+(visitasPeriodo.length!==1?'s':'')):''}</div>
+    <div style="display:flex;gap:2rem;text-align:right;flex-wrap:wrap">
       <div>
         <div style="font-size:.68rem;color:var(--g3);margin-bottom:.2rem">Total empleados</div>
         <div style="font-size:1rem;font-weight:800;color:var(--c)">$${gtEmp}.00</div>
@@ -4471,21 +4586,22 @@ function renderizarReporte(){
         <div style="font-size:.68rem;color:var(--g3);margin-bottom:.2rem">Gran total</div>
         <div style="font-size:1.1rem;font-weight:800;color:var(--negro)">$${gtEmp+gtEmpresa}.00</div>
       </div>
+      <div>
+        <div style="font-size:.68rem;color:var(--g3);margin-bottom:.2rem">Corresponde a Sistema (5%)</div>
+        <div style="font-size:1.1rem;font-weight:800;color:#B8860B">$${gtSistema}.00</div>
+      </div>
     </div>
   </div>`;
 
-  // Visitas del período (personas sin cuenta que pidieron por el link de
-  // visita) — no tienen nómina de la que descontarles nada, así que se
-  // muestran aparte, solo para llevar control de quién vino y qué pidió.
-  const visitasPeriodo = (_repOrdenesDocs||[]).filter(o=>
-    o.tipo === 'visita' && o.estado !== 'cancelado' && o.escaneado &&
-    (_repComedor === 'todos' || o.comedor === _repComedor)
-  );
+  // Visitas del período — ya calculadas arriba (con costo_extras y
+  // valor_empresa) junto con el Total general. Se muestran aparte, sin
+  // nómina que descontarles (no tienen empleado_uid), pero ahora sí con su
+  // valor: la empresa las cubre al 100%.
   if (visitasPeriodo.length) {
-    const labelsVis={betel:'Betel',cuauhtemoc:'Cuauhtémoc',intelomas:'Intelomas'};
+    const labelsVis={betel:'Betel',cuauhtemoc:'Cuauhtémoc',interlomas:'Interlomas'};
     html += `
     <div style="margin-top:2rem;padding-top:1.5rem;border-top:1.5px solid var(--borde)">
-      <div style="font-size:.9rem;font-weight:700;color:var(--negro);margin-bottom:.75rem">🎟 Visitas (${visitasPeriodo.length})</div>
+      <div style="font-size:.9rem;font-weight:700;color:var(--negro);margin-bottom:.75rem">🎟 Visitas (${visitasPeriodo.length}) — cubiertas 100% por la empresa</div>
       <table style="width:100%;border-collapse:collapse;font-size:.8rem">
         <thead><tr style="border-bottom:1.5px solid var(--borde)">
           <th style="text-align:left;padding:.45rem .75rem;font-size:.65rem;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--g3);background:var(--crema)">Fecha</th>
@@ -4493,6 +4609,7 @@ function renderizarReporte(){
           <th style="text-align:left;padding:.45rem .75rem;font-size:.65rem;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--g3);background:var(--crema)">Comedor</th>
           <th style="text-align:left;padding:.45rem .75rem;font-size:.65rem;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--g3);background:var(--crema)">Platillos</th>
           <th style="text-align:left;padding:.45rem .75rem;font-size:.65rem;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--g3);background:var(--crema)">Extras</th>
+          <th style="text-align:right;padding:.45rem .75rem;font-size:.65rem;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--g3);background:var(--crema)">Empresa</th>
         </tr></thead>
         <tbody>${visitasPeriodo.map(o=>`
           <tr style="border-bottom:1px solid var(--borde2)">
@@ -4501,8 +4618,15 @@ function renderizarReporte(){
             <td style="padding:.45rem .75rem">${labelsVis[o.comedor]||o.comedor||'—'}</td>
             <td style="padding:.45rem .75rem;font-size:.78rem">${(o.platillos||[]).join(', ')||'—'}</td>
             <td style="padding:.45rem .75rem;font-size:.78rem">${(o.extras||[]).map(e=>e.nombre||e).join(', ')||'—'}</td>
+            <td style="padding:.45rem .75rem;text-align:right;font-weight:600;color:var(--v)">$${o.valor_empresa}.00</td>
           </tr>`).join('')}
         </tbody>
+        <tfoot>
+          <tr style="background:var(--crema)">
+            <td colspan="5" style="padding:.55rem .75rem;font-weight:700;font-size:.78rem;color:var(--g2)">Subtotal Visitas</td>
+            <td style="padding:.55rem .75rem;text-align:right;font-weight:800;color:var(--v)">$${gtEmpresaVisitas}.00</td>
+          </tr>
+        </tfoot>
       </table>
     </div>`;
   }
@@ -4786,17 +4910,132 @@ async function construirWorkbookNomina(datosPorEmpleado, opts){
   return wb;
 }
 
+// Reporte "Resumen de órdenes": solo la CANTIDAD de órdenes del período por
+// tipo (Visitas, Subsidiados, Normales) sumando el total, más el valor en
+// dinero de todo eso ($90 por cada orden que trajo buffet, sea del tipo que
+// sea, más el costo de los extras — igual que la tarjeta "Pagos empleados +
+// Subsidio" del Dashboard) y el 5% que corresponde al sistema sobre ese
+// valor total. No lleva nombres ni empleados, solo los conteos y montos.
+async function construirWorkbookResumenOrdenes(docsCrudos, opts){
+  const etiquetaTipo = opts.etiquetaTipo, tituloRango = opts.tituloRango;
+  const VERDE = 'FF5C6B4A', DORADO = 'FFE8C84A', CREMA = 'FFF5F0E8', BLANCO = 'FFFFFFFF';
+
+  const wb = new ExcelJS.Workbook();
+  wb.creator = 'Buen Fruto';
+  wb.created = new Date();
+  const ws = wb.addWorksheet('Resumen de órdenes', { views: [{ state:'frozen', ySplit: 4 }] });
+
+  ws.mergeCells('A1:C1');
+  const titulo = ws.getCell('A1');
+  titulo.value = 'Buen Fruto — Resumen de órdenes '+etiquetaTipo;
+  titulo.font = { name:'Arial', size:15, bold:true, color:{argb:BLANCO} };
+  titulo.alignment = { vertical:'middle' };
+  titulo.fill = { type:'pattern', pattern:'solid', fgColor:{argb:VERDE} };
+  ws.getRow(1).height = 26;
+
+  ws.mergeCells('A2:C2');
+  const subtitulo = ws.getCell('A2');
+  subtitulo.value = tituloRango + '   ·   Generado: ' + new Date().toLocaleString('es-MX');
+  subtitulo.font = { name:'Arial', size:10, italic:true, color:{argb:'FF666666'} };
+  ws.getRow(2).height = 18;
+  ws.getRow(3).height = 6;
+
+  const encabezados = ['Tipo de orden','Cantidad de órdenes','Valor total'];
+  const filaEnc = ws.getRow(4);
+  encabezados.forEach(function(h, i){
+    const cell = filaEnc.getCell(i+1);
+    cell.value = h;
+    cell.font = { name:'Arial', size:10, bold:true, color:{argb:BLANCO} };
+    cell.fill = { type:'pattern', pattern:'solid', fgColor:{argb:VERDE} };
+    cell.alignment = { vertical:'middle', horizontal: i>=1 ? 'right' : 'left', wrapText: true };
+  });
+  filaEnc.height = 28;
+
+  // Valor de una orden: $90 si trajo buffet (aplica igual a visitas,
+  // subsidiados y normales) más el costo de los extras — calculado de
+  // platillos/extras y NO del campo cargo, porque a las visitas el cargo
+  // siempre se guarda en 0 aunque sí hayan pedido buffet o extras.
+  function valorOrden(o){
+    const tuvoBuffet = (o.platillos||[]).length > 0;
+    const costoExtras = (o.extras||[]).reduce(function(se,e){ return se+(Number(e&&e.precio)||0); }, 0);
+    return (tuvoBuffet?90:0) + costoExtras;
+  }
+
+  const docs = docsCrudos || [];
+  const visitas = docs.filter(function(o){ return o.tipo==='visita'; });
+  const subsidiados = docs.filter(function(o){ return o.tipo!=='visita' && o.subsidiado; });
+  const normales = docs.filter(function(o){ return o.tipo!=='visita' && !o.subsidiado; });
+
+  const grupos = [
+    { nombre:'Visitas', lista:visitas },
+    { nombre:'Subsidiados', lista:subsidiados },
+    { nombre:'Normales', lista:normales }
+  ].map(function(g){
+    return { nombre:g.nombre, cantidad:g.lista.length, valor:g.lista.reduce(function(s,o){ return s+valorOrden(o); },0) };
+  });
+
+  let fila = 5;
+  grupos.forEach(function(g){
+    const r = ws.getRow(fila);
+    r.getCell(1).value = g.nombre;
+    r.getCell(2).value = g.cantidad;
+    r.getCell(3).value = g.valor;
+    const bg = fila % 2 === 0 ? CREMA : BLANCO;
+    for (let c=1;c<=3;c++){
+      const cell = r.getCell(c);
+      cell.font = { name:'Arial', size:10 };
+      cell.fill = { type:'pattern', pattern:'solid', fgColor:{argb:bg} };
+      if (c>=2) cell.alignment = { horizontal:'right' };
+      if (c===3) cell.numFmt = '$#,##0';
+    }
+    fila++;
+  });
+
+  const totalCantidad = grupos.reduce(function(s,g){ return s+g.cantidad; }, 0);
+  const totalValor = grupos.reduce(function(s,g){ return s+g.valor; }, 0);
+
+  const rTotal = ws.getRow(fila);
+  rTotal.getCell(1).value = 'TOTAL';
+  rTotal.getCell(2).value = totalCantidad;
+  rTotal.getCell(3).value = totalValor;
+  for (let c=1;c<=3;c++){
+    const cell = rTotal.getCell(c);
+    cell.font = { name:'Arial', size:11, bold:true, color:{argb:BLANCO} };
+    cell.fill = { type:'pattern', pattern:'solid', fgColor:{argb:VERDE} };
+    if (c>=2) cell.alignment = { horizontal:'right' };
+    if (c===3) cell.numFmt = '$#,##0';
+  }
+  rTotal.height = 22;
+  fila++;
+
+  const rSistema = ws.getRow(fila);
+  rSistema.getCell(1).value = 'Corresponde a Sistema (5%)';
+  rSistema.getCell(3).value = Math.round(totalValor*0.05);
+  for (let c=1;c<=3;c++){
+    const cell = rSistema.getCell(c);
+    cell.font = { name:'Arial', size:11, bold:true, color:{argb:'FF3A3A3A'} };
+    cell.fill = { type:'pattern', pattern:'solid', fgColor:{argb:DORADO} };
+    if (c>=2) cell.alignment = { horizontal:'right' };
+    if (c===3) cell.numFmt = '$#,##0';
+  }
+  rSistema.height = 22;
+
+  ws.columns = [ { width: 28 }, { width: 20 }, { width: 18 } ];
+
+  return wb;
+}
+
 // Reporte simple de asistencia: ID, Nombre, Sede, Fecha, Hora — nada de
 // platillos ni montos. "docs" son órdenes crudas de Firestore (idealmente ya
 // filtradas por quien llama, pero aquí se vuelve a filtrar por si acaso —
 // una orden cancelada o sin escanear nunca debe aparecer como "asistencia").
-// Se agrupan en secciones por comedor (Betel, Cuauhtémoc, Intelomas, en ese
+// Se agrupan en secciones por comedor (Betel, Cuauhtémoc, Interlomas, en ese
 // orden fijo) y dentro de cada una se ordenan por fecha y hora.
 async function construirWorkbookAsistencia(docsCrudos, opts){
   const etiquetaTipo = opts.etiquetaTipo, tituloRango = opts.tituloRango;
   const VERDE = 'FF5C6B4A', CREMA = 'FFF5F0E8', BLANCO = 'FFFFFFFF';
-  const comedorLabels = { betel:'Betel', cuauhtemoc:'Cuauhtémoc', intelomas:'Intelomas' };
-  const ordenComedores = ['betel','cuauhtemoc','intelomas'];
+  const comedorLabels = { betel:'Betel', cuauhtemoc:'Cuauhtémoc', interlomas:'Interlomas' };
+  const ordenComedores = ['betel','cuauhtemoc','interlomas'];
   const docs = (docsCrudos||[]).filter(function(o){ return o.estado !== 'cancelado' && !!o.escaneado; });
 
   const wb = new ExcelJS.Workbook();
@@ -4901,7 +5140,7 @@ function cargarPendientes(){
     snap.forEach(function(d){
       const o = d.data();
       if (o.estado === 'cancelado') return;
-      docs.push(Object.assign({ id: d.id }, o));
+      docs.push(Object.assign({ id: d.id }, o, {comedor: canonicalizarComedor(o.comedor)}));
     });
     _pendDocs = docs;
     renderizarPendientes();
@@ -4914,7 +5153,7 @@ function cargarPendientes(){
 function renderizarPendientes(){
   if (_pendDocs === null) return; // aún cargando
 
-  const comedorLabels = { betel:'Betel', cuauhtemoc:'Cuauhtémoc', intelomas:'Intelomas' };
+  const comedorLabels = { betel:'Betel', cuauhtemoc:'Cuauhtémoc', interlomas:'Interlomas' };
   const DS3 = ['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'];
   const MS3 = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
 
@@ -5010,6 +5249,34 @@ window.descargarReporteNomina = async function(){
   }
 };
 
+// Reporte "Resumen de órdenes" — solo la cantidad de órdenes del período
+// (visitas, subsidiados, normales, y el total de esas tres), el valor total
+// en dinero ($90 por buffet + extras, de todos) y el 5% que corresponde al
+// sistema sobre ese valor total. Usa el mismo período y comedor
+// seleccionados arriba en Reportes, y a diferencia del reporte para nómina
+// SÍ incluye visitas (que no tienen empleado_uid y por eso no aparecen en
+// _reporteRaw), por eso usa _repOrdenesDocs (las órdenes crudas) en vez de
+// los datos ya agrupados por empleado.
+window.descargarReporteResumenOrdenes = async function(){
+  if(!_repOrdenesDocs || !_repOrdenesDocs.length){ alert('No hay datos en este período para exportar.'); return; }
+  const btn = document.getElementById('btn-excel-resumen-ordenes');
+  if (btn) { btn.disabled = true; btn.textContent = 'Generando…'; }
+  try {
+    const desde = _reporteRangoDesde, hasta = _reporteRangoHasta, tipo = _reporteRangoTipo;
+    const etiquetaTipo = tipo==='dia' ? 'Diario' : 'Semanal';
+    const tituloRango = tipo==='dia' ? ('Hoy, '+desde) : ('Del '+desde+' al '+hasta);
+    const filas = filasOrdenesActuales();
+    if (!filas.length) { alert('No hay órdenes registradas en este período.'); return; }
+    const wb = await construirWorkbookResumenOrdenes(filas, { etiquetaTipo, tituloRango });
+    await descargarWorkbook(wb, 'ResumenOrdenes_Buen_Fruto_'+desde+'_al_'+hasta+'.xlsx');
+  } catch(err) {
+    console.error('Error al generar el Excel de resumen de órdenes:', err);
+    alert('No se pudo generar el Excel: ' + err.message);
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = '🧾 Resumen de órdenes'; }
+  }
+};
+
 // Reporte de asistencia — solo empleado, sede, fecha y hora (la hora en que
 // escaneó su gafete), organizado por comedor. Es un reporte aparte del de
 // consumo: no lleva platillos ni montos, para compartirlo con quien solo
@@ -5020,6 +5287,20 @@ window.descargarReporteNomina = async function(){
 // canceladas) dentro del período y comedor actualmente seleccionados en
 // Reportes. La usan tanto la vista previa en pantalla como la descarga del
 // Excel, para que ambas muestren siempre exactamente lo mismo.
+// Devuelve las órdenes que cuentan para el "Resumen de órdenes" (visitas,
+// subsidiados y normales, sumando el total): todas las órdenes no canceladas
+// del período y comedor seleccionados en Reportes, sin exigir que ya se haya
+// escaneado el gafete — a diferencia de filasAsistenciaActuales(), aquí se
+// cuenta la orden completa (incluyendo las de días que aún no llegan), no
+// solo lo ya recogido.
+function filasOrdenesActuales(){
+  return (_repOrdenesDocs||[]).filter(function(o){
+    if (o.estado === 'cancelado') return false;
+    if (_repComedor !== 'todos' && o.comedor !== _repComedor) return false;
+    return true;
+  });
+}
+
 function filasAsistenciaActuales(){
   return (_repOrdenesDocs||[]).filter(function(o){
     if (o.estado === 'cancelado') return false;
@@ -5063,8 +5344,8 @@ window.mostrarVistaAsistencia = function(){
   const tituloRango = tipo==='dia' ? ('Hoy, '+desde) : ('Del '+desde+' al '+hasta);
   subtitulo.textContent = tituloRango + (_repComedor !== 'todos' ? ' · '+_repComedor : '');
 
-  const comedorLabels = { betel:'Betel', cuauhtemoc:'Cuauhtémoc', intelomas:'Intelomas' };
-  const ordenComedores = ['betel','cuauhtemoc','intelomas'];
+  const comedorLabels = { betel:'Betel', cuauhtemoc:'Cuauhtémoc', interlomas:'Interlomas' };
+  const ordenComedores = ['betel','cuauhtemoc','interlomas'];
   const DS2 = ['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'];
   const MS2 = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
   function formatearHoraPreview(ts){
@@ -5137,7 +5418,7 @@ window.descargarReporteMes = async function(offsetMeses, btnEl){
       db.collection('movimientos_headcount').where('fecha','>=',desde).where('fecha','<=',hasta).get()
     ]);
     const docs = [];
-    snapOrdenes.forEach(d => docs.push(d.data()));
+    snapOrdenes.forEach(d => { const o=d.data(); docs.push(Object.assign({}, o, {comedor: canonicalizarComedor(o.comedor)})); });
     const movDocs = [];
     snapMov.forEach(d => movDocs.push(d.data()));
     const datos = agregarOrdenesPorEmpleado(docs, _repComedor);
@@ -5275,7 +5556,7 @@ window.descargarPlantillaAsistencia = async function(){
     const ejemplos = [
       { comedor:'Betel', filas: [['12345','Ejemplo: Juan Pérez','Betel','Lun 18 ago','13:05'], ['12346','Ejemplo: María López','Betel','Lun 18 ago','13:12']] },
       { comedor:'Cuauhtémoc', filas: [['12347','Ejemplo: Luis Ramírez','Cuauhtémoc','Lun 18 ago','13:20']] },
-      { comedor:'Intelomas', filas: [['12348','Ejemplo: Sofía Torres','Intelomas','Lun 18 ago','14:00']] },
+      { comedor:'Interlomas', filas: [['12348','Ejemplo: Sofía Torres','Interlomas','Lun 18 ago','14:00']] },
     ];
 
     let fila = 5;
