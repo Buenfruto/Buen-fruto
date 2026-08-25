@@ -15,7 +15,7 @@
 // fuerza una recarga limpia. sessionStorage evita que se quede en bucle si
 // version.txt no está disponible por algún motivo.
 (function(){
-  var V='20260824-2';
+  var V='20260825-1';
   try{
     fetch('version.txt?_='+Date.now(),{cache:'no-store'}).then(function(r){return r.ok?r.text():null;}).then(function(t){
       if(!t) return;
@@ -1352,8 +1352,18 @@ function emailSinteticoHC(loginBase){
   const limpio = quitarAcentos(loginBase||'').toLowerCase().replace(/[^a-z0-9._-]/g,'');
   return (limpio || ('hc'+Date.now())) + '@' + HC_EMAIL_DOMINIO;
 }
+// Un ID B360/Nmna real siempre trae al menos un dígito. Un empleado nuevo
+// que todavía no tiene ID asignado aparece en el archivo con la celda
+// vacía, o con un texto tipo "ID/Plata", "Plata" o "Pendiente" (como sea
+// que lo escriba quien llena el Excel) — nunca con números. Se usa esto,
+// en vez de intentar adivinar el texto exacto, para reconocer cualquier
+// variante de "todavía no tiene ID" de forma robusta.
+function idParecerReal(s){
+  return /\d/.test(String(s||''));
+}
+
 function parseHeadCountFilas(filas){
-  if(!filas || !filas.length) return { registros:[], duplicadosArchivo:[] };
+  if(!filas || !filas.length) return { registros:[], duplicadosArchivo:[], sinId:[] };
   const headers = filas[0];
   const iId = buscarColId(headers);
   const iNombre = buscarCol(headers, ['nombre','nombre completo']);
@@ -1362,13 +1372,21 @@ function parseHeadCountFilas(filas){
   function val(fila, idx){ return idx>=0 && fila[idx]!==undefined && fila[idx]!==null ? String(fila[idx]).trim() : ''; }
 
   const registrosBrutos = [];
+  const sinId = [];
   for(let r=1;r<filas.length;r++){
     const fila = filas[r];
     if(!fila || !fila.length) continue;
     const nombre = val(fila,iNombre);
     if(!nombre) continue;
     const hcId = val(fila,iId);
-    if(!hcId) continue; // sin ID — no se puede procesar con seguridad
+    // Sin ID todavía (celda vacía o sin ningún dígito, ej. "ID/Plata"): ya
+    // no se descarta la fila en silencio como antes — se junta aparte para
+    // que asignarIdsTemporales() le dé un ID temporal más abajo, y así esa
+    // persona ya pueda usar la app mientras le asignan su ID de verdad.
+    if(!hcId || !idParecerReal(hcId)){
+      sinId.push({ nombre: normalizarNombreHC(nombre), comedor: normalizarCentroHC(val(fila,iCentro)) });
+      continue;
+    }
     registrosBrutos.push({
       hc_id: hcId,
       nombre: normalizarNombreHC(nombre),
@@ -1392,7 +1410,33 @@ function parseHeadCountFilas(filas){
     if(grupo.length > 1) duplicadosArchivo.push(grupo);
     else registros.push(grupo[0]);
   });
-  return { registros: registros, duplicadosArchivo: duplicadosArchivo };
+  return { registros: registros, duplicadosArchivo: duplicadosArchivo, sinId: sinId };
+}
+
+// A quien todavía no tiene ID real se le asigna un ID temporal único y
+// consecutivo ("TEMPORAL1", "TEMPORAL2", ...) — se guarda y se usa exacto
+// igual que un ID real (como hc_id y como usuario de acceso), así puede
+// entrar a la app desde ya con el usuario "temporal3" (por ejemplo) mientras
+// le llega su ID de verdad. Revisa el directorio actual para no repetir un
+// número ya usado. Cuando más adelante llegue su ID real en un Head Count o
+// Ingresos posterior, el emparejamiento por NOMBRE (emparejarConDirectorioHC)
+// lo reconoce solo como "ID corregido" y migra el acceso del temporal al
+// real — no hace falta nada especial de este lado para ese segundo paso.
+async function asignarIdsTemporales(sinId){
+  if(!sinId || !sinId.length) return [];
+  const snap = await db.collection('empleados').get();
+  let maxN = 0;
+  snap.forEach(function(d){
+    const id = d.data().hc_id;
+    if(!id) return;
+    const m = /^TEMPORAL(\d+)$/i.exec(String(id).trim());
+    if(m) maxN = Math.max(maxN, parseInt(m[1],10));
+  });
+  return sinId.map(function(r){
+    maxN++;
+    const idTemp = 'TEMPORAL'+maxN;
+    return { hc_id: idTemp, nombre: r.nombre, puesto: null, comedor: r.comedor, login_base: idTemp, id_temporal: true };
+  });
 }
 
 function procesarArchivoHeadCount(file){
@@ -1412,7 +1456,8 @@ function procesarArchivoHeadCount(file){
         filas = parseCSVTexto(String(e.target.result));
       }
       const resultado = parseHeadCountFilas(filas);
-      hcRegistros = resultado.registros;
+      const temporales = await asignarIdsTemporales(resultado.sinId);
+      hcRegistros = resultado.registros.concat(temporales);
       hcDuplicados = resultado.duplicadosArchivo;
       if(!hcRegistros.length && !hcDuplicados.length){
         msg.textContent = 'No se encontraron filas válidas. Verifica que el archivo tenga las columnas ID Nmna/BF (o ID), Nombre, Centro.';
@@ -1453,7 +1498,8 @@ function procesarArchivoSubsidiados(file){
         filas = parseCSVTexto(String(e.target.result));
       }
       const resultado = parseHeadCountFilas(filas);
-      subsRegistros = resultado.registros;
+      const temporales = await asignarIdsTemporales(resultado.sinId);
+      subsRegistros = resultado.registros.concat(temporales);
       subsDuplicados = resultado.duplicadosArchivo;
       if(!subsRegistros.length && !subsDuplicados.length){
         msg.textContent = 'No se encontraron filas válidas. Verifica que el archivo tenga las columnas ID Nmna/BF (o ID), Nombre, Centro.';
@@ -1474,12 +1520,14 @@ function procesarArchivoSubsidiados(file){
 function renderPreviewSubsidiados(){
   const preview = document.getElementById('subs-preview');
   preview.style.display='block';
+  const idsTemporalesNuevos = subsRegistros.filter(function(r){ return r.id_temporal; }).length;
   preview.innerHTML =
     '<div style="font-size:.85rem;color:var(--g2);margin-bottom:.75rem">' + subsRegistros.length + ' persona(s) leída(s) del archivo' +
     (subsDuplicados.length ? (' — ' + subsDuplicados.length + ' con identificador repetido dentro del mismo archivo, se van a omitir (revísalos a mano).') : '.') +
     '</div>' +
+    (idsTemporalesNuevos ? '<div style="font-size:.78rem;color:var(--g2);background:var(--crema);border-radius:10px;padding:.7rem .9rem;margin-bottom:1rem">⚠️ '+idsTemporalesNuevos+' persona(s) sin ID todavía en el archivo — se les asignó un ID temporal (TEMPORALn) para que ya puedan entrar a la app.</div>' : '') +
     '<div style="max-height:220px;overflow-y:auto;margin-bottom:1rem">' +
-    subsRegistros.slice(0,50).map(function(r){ return '<div style="font-size:.8rem;padding:.25rem 0;border-bottom:1px solid var(--borde2)">'+escHtml(r.nombre)+' · '+escHtml(r.comedor)+'</div>'; }).join('') +
+    subsRegistros.slice(0,50).map(function(r){ return '<div style="font-size:.8rem;padding:.25rem 0;border-bottom:1px solid var(--borde2)">'+escHtml(r.nombre)+' · '+escHtml(r.comedor)+(r.id_temporal?' · ⚠️ usuario temporal: '+escHtml(r.hc_id.toLowerCase()):'')+'</div>'; }).join('') +
     (subsRegistros.length>50 ? '<div style="font-size:.75rem;color:var(--g3);padding:.3rem 0">+'+(subsRegistros.length-50)+' más</div>' : '') +
     '</div>' +
     '<button class="btn btn-v" id="btn-aplicar-subs">Marcar/crear como subsidiados</button> ' +
@@ -1926,7 +1974,8 @@ function procesarArchivoIngresos(file){
         filas = parseCSVTexto(String(e.target.result));
       }
       const resultado = parseHeadCountFilas(filas);
-      ingRegistros = resultado.registros;
+      const temporales = await asignarIdsTemporales(resultado.sinId);
+      ingRegistros = resultado.registros.concat(temporales);
       ingDuplicados = resultado.duplicadosArchivo;
       if(!ingRegistros.length && !ingDuplicados.length){
         msg.textContent = 'No se encontraron filas válidas. Verifica que el archivo tenga las columnas ID (o ID Nmna/BF), Nombre, Centro.';
@@ -1974,6 +2023,8 @@ function renderPreviewIngresos(){
     return '<details style="margin-bottom:.85rem"><summary style="cursor:pointer;font-size:.82rem;font-weight:700;color:var(--negro);padding:.3rem 0">'+titulo+' ('+items.length+')</summary><div style="max-height:220px;overflow-y:auto;padding:.4rem .2rem">'+listaHtml(items, getTexto)+'</div></details>';
   }
 
+  const idsTemporalesNuevos = altas.filter(function(r){ return r.id_temporal; }).length;
+
   preview.innerHTML =
     '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:.75rem;margin-bottom:1.25rem">' +
       statTile('Altas', altas.length, 'var(--v)') +
@@ -1982,7 +2033,8 @@ function renderPreviewIngresos(){
       statTile('Sin cambios', sinCambios.length, 'var(--g2)') +
       statTile('Duplicados en archivo', ingDuplicados.length, 'var(--rojo)') +
     '</div>' +
-    detalle('Altas — nuevo ingreso', altas, function(r){ return r.nombre+' · '+(comedorLabels[r.comedor]||r.comedor); }) +
+    (idsTemporalesNuevos ? '<div style="font-size:.78rem;color:var(--g2);background:var(--crema);border-radius:10px;padding:.7rem .9rem;margin-bottom:1rem">⚠️ '+idsTemporalesNuevos+' persona(s) sin ID todavía en el archivo — se les asignó un ID temporal (TEMPORALn) para que ya puedan entrar a la app. Cuando llegue su ID de verdad en un archivo posterior, el sistema lo va a reconocer solo por nombre y va a migrar su acceso — no hace falta hacer nada especial.</div>' : '') +
+    detalle('Altas — nuevo ingreso', altas, function(r){ return r.nombre+' · '+(comedorLabels[r.comedor]||r.comedor)+(r.id_temporal?' · ⚠️ sin ID todavía — usuario temporal: '+r.hc_id.toLowerCase():''); }) +
     detalle('ID corregido — mismo nombre, ID distinto', corregidos, function(c){
       return c.nombreDespues + (c.viaOrden?' · nombre en otro orden':'') + (c.viaMojibake?' · acentos/Ñ rotos en el Excel':'') + ' — ID ' + c.idViejo + ' → ' + c.idNuevo;
     }) +
@@ -2247,6 +2299,8 @@ function renderPreviewHeadCount(){
   const nuevasFaltas2 = bajas.filter(function(b){ return (b.semanas_ausente_hc||0)+1 === 2; }).length;
   const nuevosPendientesBaja = bajas.filter(function(b){ return (b.semanas_ausente_hc||0)+1 >= 3; }).length;
 
+  const idsTemporalesNuevos = altas.filter(function(r){ return r.id_temporal; }).length;
+
   preview.innerHTML =
     '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:.75rem;margin-bottom:1.25rem">' +
       statTile('Altas', altas.length, 'var(--v)') +
@@ -2256,7 +2310,8 @@ function renderPreviewHeadCount(){
       statTile('Sin cambios', sinCambios.length, 'var(--g2)') +
       statTile('Duplicados en archivo', hcDuplicados.length, 'var(--rojo)') +
     '</div>' +
-    detalle('Altas — nuevo ingreso', altas, function(r){ return r.nombre+' · '+r.comedor; }) +
+    (idsTemporalesNuevos ? '<div style="font-size:.78rem;color:var(--g2);background:var(--crema);border-radius:10px;padding:.7rem .9rem;margin-bottom:1rem">⚠️ '+idsTemporalesNuevos+' persona(s) sin ID todavía en el archivo — se les asignó un ID temporal (TEMPORALn) para que ya puedan entrar a la app. Cuando llegue su ID de verdad en un archivo posterior, el sistema lo va a reconocer solo por nombre y va a migrar su acceso — no hace falta hacer nada especial.</div>' : '') +
+    detalle('Altas — nuevo ingreso', altas, function(r){ return r.nombre+' · '+r.comedor+(r.id_temporal?' · ⚠️ sin ID todavía — usuario temporal: '+r.hc_id.toLowerCase():''); }) +
     detalle('No aparecieron esta semana — se les suma una falta (no se borran solos)', bajas, function(r){
       const n = (r.semanas_ausente_hc||0)+1;
       return r.nombre+' — '+r.puesto+' · '+r.comedor+' · '+(n>=3?'⚠️ ya lleva '+n+' faltas seguidas':'falta '+n+' de 3');
