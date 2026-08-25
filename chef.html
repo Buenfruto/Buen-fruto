@@ -11,7 +11,7 @@
 <meta http-equiv="Expires" content="0"/>
 <script>
 (function(){
-  var V='20260825-5';
+  var V='20260825-7';
   try{
     fetch('version.txt?_='+Date.now(),{cache:'no-store'}).then(function(r){return r.ok?r.text():null;}).then(function(t){
       if(!t) return;
@@ -309,13 +309,19 @@ function hoy(){ const d=new Date(); return d.getFullYear()+'-'+String(d.getMonth
 // en el enlace/marcador de este iPad de cocina — igual que en scanner.html.
 function normalizarComedorURL(s){
   const t = String(s||'').normalize('NFD').replace(/[̀-ͯ]/g,'').trim().toLowerCase();
-  if (t.indexOf('interlomas')>=0 || t.indexOf('intelomas')>=0) return 'intelomas';
+  if (t.indexOf('interlomas')>=0 || t.indexOf('intelomas')>=0) return 'interlomas';
   if (t.indexOf('cuauhtemoc')>=0) return 'cuauhtemoc';
   if (t.indexOf('betel')>=0) return 'betel';
   return t || 'betel';
 }
+// Compatibilidad: registros guardados antes de la corrección de nombre
+// pueden traer el comedor de una orden como "intelomas" (mal escrito) — se
+// normaliza igual que el de la URL para que siempre hagan match aquí.
+function canonicalizarComedor(v){
+  return v === 'intelomas' ? 'interlomas' : v;
+}
 const _comedor = normalizarComedorURL(new URLSearchParams(window.location.search).get('comedor'));
-const _comedorLabels = { betel:'Betel', cuauhtemoc:'Cuauhtémoc', intelomas:'Intelomas' };
+const _comedorLabels = { betel:'Betel', cuauhtemoc:'Cuauhtémoc', interlomas:'Interlomas' };
 document.title = 'Buen Fruto — Cocina ' + (_comedorLabels[_comedor] || _comedor);
 document.getElementById('topbar-seccion').textContent = 'Cocina · ' + (_comedorLabels[_comedor] || _comedor);
 
@@ -342,7 +348,7 @@ function suscribirOrdenes() {
     snap.forEach(d => {
       const data = d.data();
       // Filtrar por comedor en cliente
-      if (data.comedor === _comedor) todasHoy.push({ id: d.id, ...data });
+      if (canonicalizarComedor(data.comedor) === _comedor) todasHoy.push({ id: d.id, ...data, comedor: canonicalizarComedor(data.comedor) });
     });
     // FIFO por hora de escaneo — sea pre-orden o no, ninguna orden entra a cocina
     // hasta que el empleado escanea su gafete. La pre-orden solo sirve para elegir
