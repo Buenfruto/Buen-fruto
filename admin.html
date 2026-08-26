@@ -15,7 +15,7 @@
 // fuerza una recarga limpia. sessionStorage evita que se quede en bucle si
 // version.txt no está disponible por algún motivo.
 (function(){
-  var V='20260825-7';
+  var V='20260826-1';
   try{
     fetch('version.txt?_='+Date.now(),{cache:'no-store'}).then(function(r){return r.ok?r.text():null;}).then(function(t){
       if(!t) return;
@@ -354,7 +354,7 @@ input[type=file]{display:none}
           <div class="metrica"><div class="metrica-label">Empleados activos</div><div class="metrica-val" id="m-empleados">—</div><div class="metrica-sub">Registrados</div></div>
           <div class="metrica ciruela"><div class="metrica-label">Pre-órdenes hoy</div><div class="metrica-val" id="m-preordenes">—</div><div class="metrica-sub">Con hora agendada</div></div>
           <div class="metrica"><div class="metrica-label">Pagos empleados</div><div class="metrica-val" id="m-recaudado">—</div><div class="metrica-sub">Solo lo que se les cobra a ellos</div></div>
-          <div class="metrica"><div class="metrica-label">Pagos empleados + Subsidio</div><div class="metrica-val" id="m-valor-total">—</div><div class="metrica-sub">$90 por buffet + extras, de todos</div></div>
+          <div class="metrica"><div class="metrica-label">Pagos empleados + Subsidio</div><div class="metrica-val" id="m-valor-total">—</div><div class="metrica-sub">$110 por buffet + extras, de todos</div></div>
           <div class="metrica"><div class="metrica-label">Corresponde a Sistema</div><div class="metrica-val" id="m-sistema">—</div><div class="metrica-sub">5% de Pagos empleados + Subsidio</div></div>
           <div class="metrica verde"><div class="metrica-label">Subsidiados hoy</div><div class="metrica-val" id="m-subsidiados">—</div><div class="metrica-sub">Comida 100% empresa</div></div>
           <div class="metrica ciruela"><div class="metrica-label">Visitas hoy</div><div class="metrica-val" id="m-visitas">—</div><div class="metrica-sub">Sin cuenta, por link</div></div>
@@ -761,7 +761,7 @@ input[type=file]{display:none}
               <button class="btn btn-outline btn-sm" id="btn-plantilla-asistencia" onclick="descargarPlantillaAsistencia()" title="Formato de referencia del reporte de asistencia, sin depender de datos reales">
                 📥 Plantilla de asistencia
               </button>
-              <button class="btn btn-outline btn-sm" id="btn-excel-resumen-ordenes" onclick="descargarReporteResumenOrdenes()" title="Solo la cantidad de órdenes del período (visitas, subsidiados, normales), el valor total ($90 por buffet + extras, de todos) y el 5% que corresponde al sistema">
+              <button class="btn btn-outline btn-sm" id="btn-excel-resumen-ordenes" onclick="descargarReporteResumenOrdenes()" title="Solo la cantidad de órdenes del período (visitas, subsidiados, normales), el valor total ($110 por buffet + extras, de todos) y el 5% que corresponde al sistema">
                 🧾 Resumen de órdenes
               </button>
             </div>
@@ -783,17 +783,27 @@ input[type=file]{display:none}
 
       <div class="seccion" id="sec-pendientes">
         <div class="sec-titulo">Órdenes pendientes</div>
-        <div class="sec-sub">Pedidos que todavía no se han escaneado — ni cuentan como asistencia ni entran al reporte de consumo hasta que se validen con el gafete.</div>
-        <div style="display:flex;gap:.5rem;flex-wrap:wrap;margin-bottom:1rem">
+        <div class="sec-sub">Pedidos que todavía no se han escaneado — ni cuentan como asistencia ni entran al reporte de consumo hasta que se validen con el gafete. También puedes buscar las de hoy ya terminadas (escaneadas).</div>
+        <div style="display:flex;gap:.5rem;flex-wrap:wrap;margin-bottom:.6rem">
           <button class="btn btn-outline btn-sm pend-comedor-btn active" onclick="setPendComedor('todos',this)">Todos</button>
           <button class="btn btn-outline btn-sm pend-comedor-btn" onclick="setPendComedor('betel',this)">Betel</button>
           <button class="btn btn-outline btn-sm pend-comedor-btn" onclick="setPendComedor('cuauhtemoc',this)">Cuauhtémoc</button>
           <button class="btn btn-outline btn-sm pend-comedor-btn" onclick="setPendComedor('interlomas',this)">Interlomas</button>
         </div>
+        <div style="display:flex;gap:.5rem;flex-wrap:wrap;margin-bottom:1rem;align-items:center">
+          <button class="btn btn-outline btn-sm pend-estado-btn active" onclick="setPendEstado('pendientes',this)">⏳ Pendientes</button>
+          <button class="btn btn-outline btn-sm pend-estado-btn" onclick="setPendEstado('terminadas',this)">✅ Terminadas de hoy</button>
+          <button class="btn btn-outline btn-sm pend-estado-btn" onclick="setPendEstado('todas',this)">Todas</button>
+          <input type="text" id="pend-buscar" placeholder="🔎 Buscar por nombre..." oninput="filtrarPendientesBusqueda(this.value)"
+            style="flex:1;min-width:180px;padding:.5rem .8rem;border:1px solid var(--borde2);border-radius:8px;font-size:.82rem;font-family:inherit"/>
+        </div>
         <div class="card">
           <div class="card-head">
-            <span class="card-titulo">⏳ Pendientes de escanear</span>
-            <span id="pendientes-conteo" style="font-size:.7rem;font-weight:700;padding:.2rem .6rem;border-radius:20px;background:var(--crema);color:var(--g2)">—</span>
+            <span style="display:flex;align-items:center;gap:.6rem">
+              <span class="card-titulo" id="pendientes-titulo">⏳ Pendientes de escanear</span>
+              <span id="pendientes-conteo" style="font-size:.7rem;font-weight:700;padding:.2rem .6rem;border-radius:20px;background:var(--crema);color:var(--g2)">—</span>
+            </span>
+            <button class="btn btn-danger btn-sm" id="btn-eliminar-todas-pendientes" onclick="eliminarTodasPendientes()">🗑 Eliminar todas las pendientes</button>
           </div>
           <div class="card-body" id="pendientes-body" style="padding:1.5rem">
             <div class="loading" id="loading-pendientes" style="display:flex"><div class="spinner"></div>&nbsp;Cargando pendientes...</div>
@@ -1062,6 +1072,7 @@ document.addEventListener('DOMContentLoaded', function(){
     if(_unsubReporteOrdenes)_unsubReporteOrdenes();
     if(_unsubReporteMov)_unsubReporteMov();
     if(_unsubPendientes)_unsubPendientes();
+    if(_unsubTerminadas)_unsubTerminadas();
     _reporteLoadToken++; // invalida cualquier reintento pendiente del reporte
     await signOut(auth);
     window.location.href='index.html';
@@ -1180,15 +1191,15 @@ async function cargarDashboard(){
     // cargo) — para subsidiados es solo extras, para visitas siempre 0.
     const total=ordenes.reduce((s,o)=>s+(o.cargo||0),0);
     // "Pagos empleados + Subsidio": valor completo de lo consumido hoy —
-    // $90 por cada orden que trajo buffet (sea empleado normal, subsidiado
-    // o visita, todos cuentan el mismo $90) más el costo de los extras de
+    // $110 por cada orden que trajo buffet (sea empleado normal, subsidiado
+    // o visita, todos cuentan el mismo $110) más el costo de los extras de
     // cada orden. Se calcula de platillos/extras y NO del campo cargo,
     // porque a las visitas el cargo siempre se guarda en 0 aunque sí hayan
     // pedido buffet o extras.
     const valorTotal=ordenes.reduce((s,o)=>{
       const tuvoBuffet=(o.platillos||[]).length>0;
       const costoExtras=(o.extras||[]).reduce((se,e)=>se+(Number(e&&e.precio)||0),0);
-      return s+(tuvoBuffet?90:0)+costoExtras;
+      return s+(tuvoBuffet?110:0)+costoExtras;
     },0);
     document.getElementById('m-ordenes').textContent=ordenes.length;
     document.getElementById('m-preordenes').textContent=preordenes.length;
@@ -4009,15 +4020,44 @@ window.setRepComedor = function(comedor, btn) {
   cargarReporte();
 };
 
-// ── ÓRDENES PENDIENTES (aún no escaneadas) ──
+// ── ÓRDENES PENDIENTES (aún no escaneadas) Y TERMINADAS DE HOY ──
 let _pendComedor = 'todos';
-let _pendDocs = null;
+let _pendEstado = 'pendientes'; // 'pendientes' | 'terminadas' | 'todas'
+let _pendBusqueda = '';
+let _pendDocs = null;             // pendientes (escaneado:false) — sin límite de fecha, incluye pre-órdenes futuras
+let _pendDocsTerminadas = null;   // terminadas de HOY (escaneado:true, fecha==hoy) — para buscarlas rápido sin ir a Reportes
 let _unsubPendientes = null;
+let _unsubTerminadas = null;
 
 window.setPendComedor = function(comedor, btn) {
   _pendComedor = comedor;
   document.querySelectorAll('.pend-comedor-btn').forEach(b => b.classList.remove('active'));
   btn.classList.add('active');
+  renderizarPendientes();
+};
+
+window.setPendEstado = function(estado, btn) {
+  _pendEstado = estado;
+  document.querySelectorAll('.pend-estado-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  const titulo = document.getElementById('pendientes-titulo');
+  const btnEliminarTodas = document.getElementById('btn-eliminar-todas-pendientes');
+  if (titulo) {
+    titulo.textContent = estado === 'pendientes' ? '⏳ Pendientes de escanear' : estado === 'terminadas' ? '✅ Terminadas de hoy' : '📋 Todas (pendientes + terminadas de hoy)';
+  }
+  // "Eliminar todas las pendientes" solo tiene sentido viendo pendientes —
+  // en "terminadas" ya se sirvieron, no se van a borrar desde aquí.
+  if (btnEliminarTodas) btnEliminarTodas.style.display = (estado === 'terminadas') ? 'none' : '';
+  // Las terminadas se cargan hasta que se piden, para no abrir un listener
+  // de más si nadie los usa.
+  if ((estado === 'terminadas' || estado === 'todas') && _pendDocsTerminadas === null && !_unsubTerminadas) {
+    cargarTerminadasHoy();
+  }
+  renderizarPendientes();
+};
+
+window.filtrarPendientesBusqueda = function(texto) {
+  _pendBusqueda = normalizarTexto(texto || '');
   renderizarPendientes();
 };
 
@@ -4122,13 +4162,13 @@ function agregarOrdenesPorEmpleado(docs, comedorFiltro){
     const extrasTexto = (o.extras||[]).map(e=>typeof e==='string'?e:e.nombre).join(', ');
     const costoExtras = (o.extras||[]).reduce((s,e)=>s+(typeof e==='string'?0:(Number(e.precio)||0)), 0);
     // Un empleado subsidiado al 100% no paga el buffet — la empresa cubre
-    // el buffet completo ($90, no solo los $45 de siempre) — pero SÍ se le
+    // el buffet completo ($110, no solo los $55 de siempre) — pero SÍ se le
     // cobran los extras igual que a cualquiera, y eso sí se descuenta de
     // nómina (pagoEmp), no lo cubre la empresa. Si ese día no hubo buffet
-    // (solo extras), no hay nada que subsidiar — antes esto marcaba $45 de
+    // (solo extras), no hay nada que subsidiar — antes esto marcaba $55 de
     // subsidio aunque no hubiera buffet ese día; ya corregido.
     const tuvoBuffet = (o.platillos||[]).length > 0;
-    const subsidio = tuvoBuffet ? (o.subsidiado ? 90 : 45) : 0;
+    const subsidio = tuvoBuffet ? (o.subsidiado ? 110 : 55) : 0;
     const pagoEmp = o.subsidiado ? costoExtras : (Number(o.cargo) || 0); // blindaje: un dato mal formado nunca debe volverse "$NaN.00" en el total
     porEmp[o.empleado_uid].dias.push({
       id: o.id,
@@ -4177,18 +4217,32 @@ function indicativoMovimiento(nombreEmp, movDocs){
 // Dibuja la lista de los últimos 6 meses en la tarjeta de "Historial
 // mensual", cada uno con su propio botón de descarga independiente del
 // período seleccionado arriba en el reporte en vivo.
-function renderHistorialMensual(){
+// Solo muestra los últimos 2 meses (el actual y el anterior) — y de esos,
+// solo si de verdad tuvieron algún pedido; un mes sin movimiento no tiene
+// caso ofrecerlo para descargar, así que se omite de la lista.
+async function renderHistorialMensual(){
   const cont = document.getElementById('historial-mensual-lista');
   if (!cont) return;
+  cont.innerHTML = '<div class="loading" style="display:flex;padding:.4rem 0"><div class="spinner"></div>&nbsp;Revisando meses con movimiento...</div>';
   let html = '';
-  for (let i=0; i<=5; i++){
-    const { etiqueta } = rangoMes(i);
+  for (let i=0; i<=1; i++){
+    const { desde, hasta, etiqueta } = rangoMes(i);
+    let tuvoMovimiento = true;
+    try {
+      const snap = await db.collection('ordenes').where('fecha','>=',desde).where('fecha','<=',hasta).limit(1).get();
+      tuvoMovimiento = !snap.empty;
+    } catch (err) {
+      console.error('Error al revisar movimiento de '+etiqueta+':', err);
+      // Si la consulta falla (ej. sin conexión), se muestra igual — mejor
+      // mostrar de más que ocultar un mes real por un error pasajero.
+    }
+    if (!tuvoMovimiento) continue;
     html += '<div style="display:flex;align-items:center;justify-content:space-between;padding:.65rem 0;border-bottom:1px solid var(--borde2)">'
       + '<span style="font-size:.88rem;color:var(--negro)">'+etiqueta+(i===0?' <span style="color:var(--g3);font-size:.75rem">(mes actual)</span>':'')+'</span>'
       + '<button type="button" class="btn btn-outline btn-sm" onclick="descargarReporteMes('+i+', this)">📥 Descargar</button>'
       + '</div>';
   }
-  cont.innerHTML = html;
+  cont.innerHTML = html || '<div style="text-align:center;padding:1rem;color:var(--g3);font-size:.85rem">Sin movimiento en los últimos 2 meses.</div>';
 }
 
 window.exportarCSVCompleto = async function() {
@@ -4203,8 +4257,8 @@ window.exportarCSVCompleto = async function() {
       '"'+(o.platillos||[]).join(', ')+'"',
       '"'+extras+'"',
       o.cargo||0,
-      45,
-      (o.cargo||0)+45,
+      55,
+      (o.cargo||0)+55,
       o.estado||'',
       o.hora_preorden?'preorden':'momento',
       o.escaneado?'sí':'no'
@@ -4452,7 +4506,7 @@ function renderizarReporte(){
   // Visitas del período (personas sin cuenta que pidieron por el link de
   // visita) — no tienen nómina de la que descontarles nada (su cargo
   // siempre es $0), pero sí consumieron: la empresa cubre el 100% de lo que
-  // pidieron, igual que a un subsidiado ($90 si trajo buffet + el costo de
+  // pidieron, igual que a un subsidiado ($110 si trajo buffet + el costo de
   // sus extras). Se calcula aquí, antes del Total general, para que ese
   // total y el 5% de Sistema ya las incluyan.
   const visitasPeriodo = (_repOrdenesDocs||[]).filter(o=>
@@ -4461,7 +4515,7 @@ function renderizarReporte(){
   ).map(o=>{
     const tuvoBuffet = (o.platillos||[]).length > 0;
     const costoExtras = (o.extras||[]).reduce((s,e)=>s+(Number(e&&e.precio)||0),0);
-    return Object.assign({}, o, { costo_extras: costoExtras, valor_empresa: (tuvoBuffet?90:0)+costoExtras });
+    return Object.assign({}, o, { costo_extras: costoExtras, valor_empresa: (tuvoBuffet?110:0)+costoExtras });
   });
   const gtEmpresaVisitas = visitasPeriodo.reduce((s,v)=>s+v.valor_empresa,0);
   const gtEmpresa = gtEmpresaEmp + gtEmpresaVisitas;
@@ -4912,7 +4966,7 @@ async function construirWorkbookNomina(datosPorEmpleado, opts){
 
 // Reporte "Resumen de órdenes": solo la CANTIDAD de órdenes del período por
 // tipo (Visitas, Subsidiados, Normales) sumando el total, más el valor en
-// dinero de todo eso ($90 por cada orden que trajo buffet, sea del tipo que
+// dinero de todo eso ($110 por cada orden que trajo buffet, sea del tipo que
 // sea, más el costo de los extras — igual que la tarjeta "Pagos empleados +
 // Subsidio" del Dashboard) y el 5% que corresponde al sistema sobre ese
 // valor total. No lleva nombres ni empleados, solo los conteos y montos.
@@ -4951,14 +5005,14 @@ async function construirWorkbookResumenOrdenes(docsCrudos, opts){
   });
   filaEnc.height = 28;
 
-  // Valor de una orden: $90 si trajo buffet (aplica igual a visitas,
+  // Valor de una orden: $110 si trajo buffet (aplica igual a visitas,
   // subsidiados y normales) más el costo de los extras — calculado de
   // platillos/extras y NO del campo cargo, porque a las visitas el cargo
   // siempre se guarda en 0 aunque sí hayan pedido buffet o extras.
   function valorOrden(o){
     const tuvoBuffet = (o.platillos||[]).length > 0;
     const costoExtras = (o.extras||[]).reduce(function(se,e){ return se+(Number(e&&e.precio)||0); }, 0);
-    return (tuvoBuffet?90:0) + costoExtras;
+    return (tuvoBuffet?110:0) + costoExtras;
   }
 
   const docs = docsCrudos || [];
@@ -5150,28 +5204,62 @@ function cargarPendientes(){
   });
 }
 
+// Carga las órdenes ya escaneadas de HOY, solo cuando alguien realmente pide
+// ver "Terminadas" o "Todas" — para no abrir este listener de más si nadie
+// lo usa. A diferencia de pendientes, esta SÍ va acotada a hoy (si no, sería
+// una consulta sin límite sobre todo el historial).
+function cargarTerminadasHoy(){
+  if (_unsubTerminadas) { _unsubTerminadas(); _unsubTerminadas = null; }
+  _pendDocsTerminadas = null;
+  _unsubTerminadas = db.collection('ordenes').where('escaneado','==',true).where('fecha','==',hoy()).onSnapshot(function(snap){
+    const docs = [];
+    snap.forEach(function(d){
+      const o = d.data();
+      if (o.estado === 'cancelado') return;
+      docs.push(Object.assign({ id: d.id }, o, {comedor: canonicalizarComedor(o.comedor)}));
+    });
+    _pendDocsTerminadas = docs;
+    renderizarPendientes();
+  }, function(err){
+    console.error('Error al cargar órdenes terminadas:', err);
+  });
+}
+
 function renderizarPendientes(){
-  if (_pendDocs === null) return; // aún cargando
+  const necesitaTerminadas = (_pendEstado === 'terminadas' || _pendEstado === 'todas');
+  if (_pendDocs === null) return; // aún cargando pendientes
+  if (necesitaTerminadas && _pendDocsTerminadas === null) return; // aún cargando terminadas
 
   const comedorLabels = { betel:'Betel', cuauhtemoc:'Cuauhtémoc', interlomas:'Interlomas' };
   const DS3 = ['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'];
   const MS3 = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
 
-  const filas = _pendDocs
+  let base;
+  if (_pendEstado === 'pendientes') base = _pendDocs.map(function(o){ return Object.assign({}, o, {_terminada:false}); });
+  else if (_pendEstado === 'terminadas') base = _pendDocsTerminadas.map(function(o){ return Object.assign({}, o, {_terminada:true}); });
+  else base = _pendDocs.map(function(o){ return Object.assign({}, o, {_terminada:false}); })
+        .concat(_pendDocsTerminadas.map(function(o){ return Object.assign({}, o, {_terminada:true}); }));
+
+  const filas = base
     .filter(function(o){ return _pendComedor === 'todos' || o.comedor === _pendComedor; })
-    .slice()
+    .filter(function(o){ return !_pendBusqueda || normalizarTexto(o.empleado_nombre||'').indexOf(_pendBusqueda) !== -1; })
     .sort(function(a,b){ return (a.fecha||'') < (b.fecha||'') ? -1 : (a.fecha||'') > (b.fecha||'') ? 1 : 0; });
 
-  document.getElementById('pendientes-conteo').textContent = filas.length + ' pendiente' + (filas.length!==1?'s':'');
+  const etiquetaConteo = _pendEstado === 'pendientes' ? 'pendiente' : _pendEstado === 'terminadas' ? 'terminada' : 'orden';
+  document.getElementById('pendientes-conteo').textContent = filas.length + ' ' + etiquetaConteo + (filas.length!==1?'s':'');
 
   const body = document.getElementById('pendientes-body');
   if (!filas.length) {
-    body.innerHTML = '<div style="text-align:center;padding:3rem;color:var(--g3)">🎉 No hay pedidos pendientes de escanear'+(_pendComedor!=='todos'?' en '+comedorLabels[_pendComedor]:'')+'.</div>';
+    const mensajeVacio = _pendEstado === 'pendientes' ? '🎉 No hay pedidos pendientes de escanear'
+      : _pendEstado === 'terminadas' ? 'Todavía no hay órdenes terminadas hoy'
+      : 'No hay órdenes que mostrar';
+    body.innerHTML = '<div style="text-align:center;padding:3rem;color:var(--g3)">'+mensajeVacio+(_pendComedor!=='todos'?' en '+comedorLabels[_pendComedor]:'')+(_pendBusqueda?' que coincidan con la búsqueda':'')+'.</div>';
     return;
   }
 
   let html = '<table style="width:100%;border-collapse:collapse;font-size:.82rem">'
     + '<thead><tr style="border-bottom:1.5px solid var(--borde)">'
+    + '<th style="text-align:left;padding:.5rem .75rem;font-size:.65rem;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--g3);background:var(--crema)">Estado</th>'
     + '<th style="text-align:left;padding:.5rem .75rem;font-size:.65rem;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--g3);background:var(--crema)">Empleado</th>'
     + '<th style="text-align:left;padding:.5rem .75rem;font-size:.65rem;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--g3);background:var(--crema)">Comedor</th>'
     + '<th style="text-align:left;padding:.5rem .75rem;font-size:.65rem;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--g3);background:var(--crema)">Fecha</th>'
@@ -5184,7 +5272,11 @@ function renderizarPendientes(){
     const idEmp = buscarIdEmpleado(o.empleado_uid);
     const nombreCompleto = (idEmp && idEmp !== '—' ? idEmp+' — ' : '') + (o.empleado_nombre || '—');
     const bg = i % 2 === 0 ? 'transparent' : 'var(--crema)';
+    const badgeEstado = o._terminada
+      ? '<span class="badge badge-v" style="font-size:.62rem">✅ Terminada</span>'
+      : '<span class="badge badge-g" style="font-size:.62rem">⏳ Pendiente</span>';
     html += '<tr style="background:'+bg+'">'
+      + '<td style="padding:.5rem .75rem">'+badgeEstado+'</td>'
       + '<td style="padding:.5rem .75rem">'+nombreCompleto+'</td>'
       + '<td style="padding:.5rem .75rem">'+(comedorLabels[o.comedor]||o.comedor||'—')+'</td>'
       + '<td style="padding:.5rem .75rem;color:var(--g3)">'+DS3[dt.getDay()]+' '+dt.getDate()+' '+MS3[dt.getMonth()]+'</td>'
@@ -5196,6 +5288,35 @@ function renderizarPendientes(){
   html += '</tbody></table>';
   body.innerHTML = html;
 }
+
+// Cancela (borrado suave, igual que el botón individual 🗑 Borrar) TODAS las
+// órdenes pendientes que estén visibles ahora mismo — respeta el filtro de
+// comedor y de búsqueda activos, para poder limpiar solo un comedor si así
+// se quiere. Nunca toca las ya terminadas (esas ya se sirvieron).
+window.eliminarTodasPendientes = async function(){
+  if (!_pendDocs) { alert('Todavía se está cargando la lista de pendientes, espera un momento.'); return; }
+  const objetivo = _pendDocs
+    .filter(function(o){ return _pendComedor === 'todos' || o.comedor === _pendComedor; })
+    .filter(function(o){ return !_pendBusqueda || normalizarTexto(o.empleado_nombre||'').indexOf(_pendBusqueda) !== -1; });
+  if (!objetivo.length) { alert('No hay ninguna orden pendiente que borrar con el filtro actual.'); return; }
+  const comedorTxt = _pendComedor === 'todos' ? 'de todos los comedores' : 'de '+({betel:'Betel',cuauhtemoc:'Cuauhtémoc',interlomas:'Interlomas'}[_pendComedor]||_pendComedor);
+  if (!confirm('¿Eliminar las '+objetivo.length+' órdenes pendientes '+comedorTxt+(_pendBusqueda?' que coinciden con la búsqueda':'')+'? No se les cobrará ni se van a contar en los totales del comedor. Esta acción no borra las ya terminadas.')) return;
+  const btn = document.getElementById('btn-eliminar-todas-pendientes');
+  if (btn) { btn.disabled = true; btn.textContent = 'Eliminando…'; }
+  try {
+    for (let i=0; i<objetivo.length; i+=400){
+      const lote = objetivo.slice(i, i+400);
+      const batch = db.batch();
+      lote.forEach(function(o){ batch.update(db.collection('ordenes').doc(o.id), { estado:'cancelado', cancelado_en:new Date() }); });
+      await batch.commit();
+    }
+  } catch (err) {
+    console.error('Error al eliminar todas las pendientes:', err);
+    alert('No se pudo completar: ' + err.message);
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = '🗑 Eliminar todas las pendientes'; }
+  }
+};
 
 // Convierte un Workbook de ExcelJS ya armado en una descarga real (.xlsx).
 async function descargarWorkbook(wb, nombreArchivo){
@@ -5251,7 +5372,7 @@ window.descargarReporteNomina = async function(){
 
 // Reporte "Resumen de órdenes" — solo la cantidad de órdenes del período
 // (visitas, subsidiados, normales, y el total de esas tres), el valor total
-// en dinero ($90 por buffet + extras, de todos) y el 5% que corresponde al
+// en dinero ($110 por buffet + extras, de todos) y el 5% que corresponde al
 // sistema sobre ese valor total. Usa el mismo período y comedor
 // seleccionados arriba en Reportes, y a diferencia del reporte para nómina
 // SÍ incluye visitas (que no tienen empleado_uid y por eso no aparecen en
@@ -5479,9 +5600,9 @@ window.descargarPlantillaReporte = async function(){
     rEj.getCell(4).value = 'Pollo asado, Arroz';
     rEj.getCell(5).value = 'Postre';
     rEj.getCell(6).value = 15;
-    rEj.getCell(7).value = 45;
-    rEj.getCell(8).value = 45;
-    rEj.getCell(9).value = 90;
+    rEj.getCell(7).value = 55;
+    rEj.getCell(8).value = 55;
+    rEj.getCell(9).value = 110;
     for (let c=1;c<=9;c++){
       const cell = rEj.getCell(c);
       cell.font = { name:'Arial', size:10, italic:true, color:{argb:'FF999999'} };
