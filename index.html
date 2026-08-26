@@ -460,8 +460,8 @@ function suscribirPrecios() {
 let perfil = null;
 let menuHoy = null;
 let ordenes = {};       // { fecha: ordenDoc }
-let buffetHoy = false, extrasHoy = [], platHoy = [];
-let buffetDet = false, extrasDet = [], platDet = [];
+let buffetHoy = false, extrasHoy = [], platHoy = [], grupoSelHoy = [];
+let buffetDet = false, extrasDet = [], platDet = [], grupoSelDet = [];
 let diaIdx = 0;
 let menusSemana = [];
 let unsubOrdenes = null;
@@ -760,6 +760,7 @@ function renderInicio() {
 
   // Renderizar menú
   buffetHoy = false; extrasHoy = []; platHoy = menuHoy.platillos?.slice() || [];
+  grupoSelHoy = (menuHoy.grupos_eleccion || []).map(g => g.opciones[0]);
   cont.innerHTML = `
     <div class="card" id="card-hoy">
       <div class="card-head"><span class="card-label">Menú de hoy</span><span class="badge badge-verde">Disponible</span></div>
@@ -819,6 +820,32 @@ function renderItems(cont, menu, modo) {
     });
     sub.appendChild(pd);
   });
+
+  // Grupos "elige 1 de 2" (ej. Sopa de fideo o Crema de brócoli) — a
+  // diferencia de los platillos de arriba, aquí solo una de las opciones
+  // puede estar seleccionada a la vez dentro del mismo grupo.
+  (menu.grupos_eleccion || []).forEach((g, gi) => {
+    const gRow = document.createElement('div');
+    gRow.className = 'item-grupo';
+    gRow.style.cssText = 'padding:.5rem 0 .3rem';
+    const tit = document.createElement('div');
+    tit.style.cssText = 'font-size:.78rem;color:var(--g3);margin-bottom:.25rem';
+    tit.textContent = 'Elige uno:';
+    gRow.appendChild(tit);
+    (g.opciones || []).forEach((op) => {
+      const selArr = modo === 'H' ? grupoSelHoy : grupoSelDet;
+      const optLabel = document.createElement('label');
+      optLabel.style.cssText = 'display:flex;align-items:center;gap:.5rem;padding:.3rem 0;cursor:pointer';
+      optLabel.innerHTML = `<input type="radio" name="grp-${modo}-${gi}" ${selArr[gi] === op ? 'checked' : ''} style="accent-color:var(--v);width:16px;height:16px;flex-shrink:0"/><span class="item-nom">${op}</span>`;
+      optLabel.querySelector('input').addEventListener('change', () => {
+        const arr = modo === 'H' ? grupoSelHoy : grupoSelDet;
+        arr[gi] = op;
+      });
+      gRow.appendChild(optLabel);
+    });
+    sub.appendChild(gRow);
+  });
+
   bRow.appendChild(sub);
 
   bRow.addEventListener('click', e => {
@@ -926,7 +953,7 @@ async function pedirAhora() {
       empleado_uid: auth.currentUser.uid,
       empleado_nombre: perfil.nombre,
       fecha: hoy(),
-      platillos: buffetHoy ? platHoy : [],
+      platillos: buffetHoy ? [...platHoy, ...grupoSelHoy.filter(Boolean)] : [],
       extras: extrasHoy, cargo: cg,
       tipo: 'momento', hora_preorden: null,
       comedor: perfil.comedor || 'betel',
@@ -937,7 +964,7 @@ async function pedirAhora() {
     const ref = await addDoc(collection(db, 'ordenes'), data);
     ordenes[hoy()] = { id: ref.id, ...data };
     renderInicio(); renderDiasTabs();
-    mostrarConf(hoy(), null, cg, 'Llega al comedor y escanea tu gafete', buffetHoy, extrasHoy, platHoy);
+    mostrarConf(hoy(), null, cg, 'Llega al comedor y escanea tu gafete', buffetHoy, extrasHoy, [...platHoy, ...grupoSelHoy.filter(Boolean)]);
   } catch (err) {
     console.error('Error al pedir ahora:', err);
     alert('No se pudo enviar tu pedido, intenta de nuevo.');
@@ -963,7 +990,8 @@ async function crearOrden(fecha, horaPreorden) {
   const bc = newBarcode();
   const buf = fecha === hoy() ? buffetHoy : buffetDet;
   const ext = fecha === hoy() ? extrasHoy : extrasDet;
-  const pls = fecha === hoy() ? platHoy : platDet;
+  const grp = fecha === hoy() ? grupoSelHoy : grupoSelDet;
+  const pls = (fecha === hoy() ? platHoy : platDet).concat(grp.filter(Boolean));
   // Un empleado subsidiado al 100% no paga el buffet — pero sí los extras.
   const cg = calcCargo(buf, ext, perfil.subsidiado);
   const data = {
@@ -1040,6 +1068,7 @@ function selDia(i) {
   const tieneOrden = !!(ordenes[fecha] && ordenes[fecha].estado !== 'cancelado');
   buffetDet = false; extrasDet = [];
   if (menu) platDet = menu.platillos?.slice() || [];
+  grupoSelDet = (menu && menu.grupos_eleccion || []).map(g => g.opciones[0]);
 
   const cont = document.getElementById('menu-det-contenido');
   if (!menu || !menu.nombre) {
@@ -1089,7 +1118,7 @@ function selDia(i) {
         const data = {
           empleado_uid: auth.currentUser.uid,
           empleado_nombre: perfil.nombre,
-          fecha, platillos: buffetDet ? platDet : [],
+          fecha, platillos: buffetDet ? [...platDet, ...grupoSelDet.filter(Boolean)] : [],
           extras: extrasDet, cargo: cg,
           tipo: 'momento', hora_preorden: null,
           comedor: perfil.comedor || 'betel',
@@ -1100,7 +1129,7 @@ function selDia(i) {
         const ref = await addDoc(collection(db, 'ordenes'), data);
         ordenes[fecha] = { id: ref.id, ...data };
         renderInicio(); renderDiasTabs();
-        mostrarConf(fecha, null, cg, 'Llega al comedor y escanea tu gafete', buffetDet, extrasDet, platDet);
+        mostrarConf(fecha, null, cg, 'Llega al comedor y escanea tu gafete', buffetDet, extrasDet, [...platDet, ...grupoSelDet.filter(Boolean)]);
       } catch (err) {
         console.error('Error al ordenar para este día:', err);
         alert('No se pudo enviar tu pedido, intenta de nuevo.');
