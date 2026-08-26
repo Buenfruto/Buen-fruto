@@ -15,7 +15,7 @@
 // fuerza una recarga limpia. sessionStorage evita que se quede en bucle si
 // version.txt no está disponible por algún motivo.
 (function(){
-  var V='20260826-4';
+  var V='20260826-6';
   try{
     fetch('version.txt?_='+Date.now(),{cache:'no-store'}).then(function(r){return r.ok?r.text():null;}).then(function(t){
       if(!t) return;
@@ -1004,6 +1004,32 @@ async function eliminarEmpleadosNoAdminLote(){
   return (resp && resp.data && resp.data.resultados) || [];
 }
 
+// restablecerPasswordEmpleado: pone una contraseña nueva (o la misma que ya
+// se veía en "Contraseña") directo en la cuenta de acceso real del
+// empleado (Firebase Auth) — para cuando alguien no puede entrar. Cambiar
+// la contraseña de OTRA persona requiere permisos de administrador, por eso
+// es una Cloud Function.
+const _fnsRestablecerPassword = (function(){
+  try { return firebase.functions().httpsCallable('restablecerPasswordEmpleado', { timeout: 30000 }); }
+  catch(e){ return null; }
+})();
+window.restablecerAccesoEmpleado = async function(uid, nombre, passwordActual){
+  if(!_fnsRestablecerPassword){
+    alert('La función de servidor no está disponible. Verifica que restablecerPasswordEmpleado esté desplegada en Firebase.');
+    return;
+  }
+  const nueva = prompt('Contraseña de acceso para ' + nombre + ':\n\nDeja este mismo valor si solo quieres re-sincronizar su acceso (por si dejó de funcionar aunque aquí se vea bien), o bórralo y escribe una contraseña nueva.', passwordActual || '');
+  if (nueva === null) return; // canceló
+  if (!nueva || nueva.trim().length < 6) { alert('La contraseña debe tener al menos 6 caracteres.'); return; }
+  try {
+    await _fnsRestablecerPassword({ uid: uid, nuevaPassword: nueva.trim() });
+    alert('✅ Listo — la contraseña de acceso de ' + nombre + ' ya quedó en: ' + nueva.trim() + '\n\nAvísale para que vuelva a intentar entrar.');
+  } catch (err) {
+    console.error('Error al restablecer acceso:', err);
+    alert('No se pudo restablecer: ' + (err.message || err));
+  }
+};
+
 // Borra PARA SIEMPRE a todos los empleados y chefs (nunca a admin). Doble
 // confirmación a propósito — primero un conteo real de a quién le tocaría,
 // y luego pedir que escriban una frase exacta — porque esto no se puede
@@ -1286,7 +1312,10 @@ async function iniciarAdmin(){
   document.getElementById('admin-nombre').textContent=perfil.nombre||perfil.email;
   const ahora=new Date();
   document.getElementById('topbar-fecha').textContent=DS[ahora.getDay()]+' '+ahora.getDate()+' de '+MF[ahora.getMonth()];
-  await suscribirPrecios();
+  // Sin "await": esto nunca debe poder trabar la entrada al Dashboard — si
+  // tarda o falla, el precio se queda en el valor de respaldo hasta que
+  // cargue solo.
+  suscribirPrecios();
   limpiarOrdenesNoEscaneadas();
   cargarDashboard();
   cargarEmpleados();
@@ -3326,6 +3355,7 @@ async function cargarEmpleados(){
         <td style="display:flex;gap:.4rem;flex-wrap:wrap">
           <button class="btn btn-outline btn-sm" onclick="toggleActivo('${d.id}',${e.activo!==false})">${e.activo!==false?'Desactivar':'Activar'}</button>
           ${e.codigo_gafete?`<button class="btn btn-v btn-sm" onclick="imprimirGafete('${d.id}','${e.nombre}','${e.codigo_gafete}','${e.puesto||'Empleado'}','${e.comedor||'betel'}')">🖨 Gafete</button>`:''}
+          <button class="btn btn-outline btn-sm" onclick="restablecerAccesoEmpleado('${d.id}','${(e.nombre||'').replace(/'/g,"\\'")}','${(e.password_texto||'').replace(/'/g,"\\'")}')" title="Poner una contraseña nueva o re-sincronizar su acceso si dejó de poder entrar">🔑 Restablecer acceso</button>
           <button class="btn btn-danger btn-sm" onclick="eliminarEmpleado('${d.id}','${e.nombre}')">Eliminar</button>
         </td>`;
       tbody.appendChild(tr);
