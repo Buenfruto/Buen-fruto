@@ -15,7 +15,7 @@
 // fuerza una recarga limpia. sessionStorage evita que se quede en bucle si
 // version.txt no está disponible por algún motivo.
 (function(){
-  var V='20260826-7';
+  var V='20260826-8';
   try{
     fetch('version.txt?_='+Date.now(),{cache:'no-store'}).then(function(r){return r.ok?r.text():null;}).then(function(t){
       if(!t) return;
@@ -1055,11 +1055,36 @@ window.resincronizarAccesosTodos = async function(){
     if (msg) { msg.textContent = 'La función de servidor no está disponible. Verifica que resincronizarTodosLosAccesos esté desplegada en Firebase.'; msg.className = 'msg err'; msg.style.display = 'block'; }
     return;
   }
-  if (!confirm('Esto va a revisar a TODO el directorio y volver a aplicar, en la cuenta real de acceso de cada quien, la contraseña que ya está guardada en el sistema. Puede tardar unos minutos si hay muchos empleados. ¿Continuar?')) return;
-  if (btn) { btn.disabled = true; btn.textContent = 'Re-sincronizando… puede tardar varios minutos'; }
+  if (!confirm('Esto va a revisar a TODO el directorio y volver a aplicar, en la cuenta real de acceso de cada quien, la contraseña que ya está guardada en el sistema. Puede tardar varios minutos si hay muchos empleados. ¿Continuar?')) return;
+  if (btn) { btn.disabled = true; btn.textContent = 'Re-sincronizando…'; }
   try {
-    const resp = await _fnsResincronizarAccesos({});
-    const resultados = (resp && resp.data && resp.data.resultados) || [];
+    // La lista completa se arma AQUÍ (no dentro de la función de servidor) para
+    // poder mandarla en llamadas chicas — así ninguna llamada individual corre
+    // el riesgo de tardar tanto que Firebase la corte a la mitad (una función
+    // de servidor tiene un tope de 9 minutos por llamada), aunque haya
+    // cientos de empleados y se procesen despacio a propósito.
+    const snap = await db.collection('empleados').get();
+    const uids = [];
+    snap.forEach(function(d){
+      const e = d.data();
+      if (e.email && e.password_texto) uids.push(d.id);
+    });
+
+    if (!uids.length) {
+      if (msg) { msg.textContent = 'No hay empleados con correo y contraseña guardados.'; msg.className = 'msg'; msg.style.display = 'block'; }
+      return;
+    }
+
+    const TAMANO_TANDA = 40;
+    let resultados = [];
+    for (let i = 0; i < uids.length; i += TAMANO_TANDA) {
+      const tanda = uids.slice(i, i + TAMANO_TANDA);
+      if (btn) btn.textContent = 'Re-sincronizando… ' + Math.min(i + TAMANO_TANDA, uids.length) + ' de ' + uids.length;
+      const resp = await _fnsResincronizarAccesos({ uids: tanda });
+      const parcial = (resp && resp.data && resp.data.resultados) || [];
+      resultados = resultados.concat(parcial);
+    }
+
     const ok = resultados.filter(function(r){ return r.ok; });
     const sinCuenta = resultados.filter(function(r){ return !r.ok && r.sinCuenta; });
     const otrosErrores = resultados.filter(function(r){ return !r.ok && !r.sinCuenta; });
