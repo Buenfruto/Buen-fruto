@@ -15,7 +15,7 @@
 // fuerza una recarga limpia. sessionStorage evita que se quede en bucle si
 // version.txt no está disponible por algún motivo.
 (function(){
-  var V='20260826-6';
+  var V='20260826-7';
   try{
     fetch('version.txt?_='+Date.now(),{cache:'no-store'}).then(function(r){return r.ok?r.text():null;}).then(function(t){
       if(!t) return;
@@ -455,6 +455,16 @@ input[type=file]{display:none}
       <div class="seccion" id="sec-empleados">
         <div class="sec-titulo">Empleados</div>
         <div class="sec-sub">Gestiona el directorio de empleados. Sube el Head Count semanal o agrega uno por uno.</div>
+
+        <!-- RE-SINCRONIZAR ACCESOS (para cuando a VARIOS no les deja entrar) -->
+        <div class="card" style="border:1.5px solid var(--rojo)">
+          <div class="card-head"><span class="card-titulo">🔑 Si a varios no les está dejando entrar</span></div>
+          <div class="card-body">
+            <p style="font-size:.82rem;color:var(--g2);margin-bottom:1rem">Usa esto SOLO si es un problema de varios empleados a la vez (no uno solo — para uno solo usa el botón "🔑 Restablecer acceso" de su fila en la tabla de abajo). Revisa a TODO el directorio y, a quien tenga correo y contraseña guardados, le vuelve a aplicar esa misma contraseña (la que ya se ve en la columna "Contraseña") directo en su cuenta real de acceso — por si algo la desincronizó. Al final te dice cuántos quedaron bien y, si a alguien de plano nunca se le creó una cuenta de acceso, te dice quién es (a esos hay que darlos de alta, esto no lo resuelve).</p>
+            <button class="btn btn-danger btn-sm" id="btn-resincronizar-accesos" onclick="resincronizarAccesosTodos()">🔑 Re-sincronizar el acceso de TODOS</button>
+            <div class="msg" id="resincronizar-accesos-msg"></div>
+          </div>
+        </div>
 
         <!-- HEAD COUNT SEMANAL -->
         <div class="card">
@@ -1027,6 +1037,41 @@ window.restablecerAccesoEmpleado = async function(uid, nombre, passwordActual){
   } catch (err) {
     console.error('Error al restablecer acceso:', err);
     alert('No se pudo restablecer: ' + (err.message || err));
+  }
+};
+
+// resincronizarTodosLosAccesos: para cuando el problema de acceso afecta a
+// VARIOS empleados a la vez, no a uno solo — vuelve a aplicar en Firebase
+// Auth la contraseña que ya está guardada en Firestore para cada quien.
+const _fnsResincronizarAccesos = (function(){
+  try { return firebase.functions().httpsCallable('resincronizarTodosLosAccesos', { timeout: 540000 }); }
+  catch(e){ return null; }
+})();
+window.resincronizarAccesosTodos = async function(){
+  const msg = document.getElementById('resincronizar-accesos-msg');
+  const btn = document.getElementById('btn-resincronizar-accesos');
+  if (msg) msg.style.display = 'none';
+  if (!_fnsResincronizarAccesos) {
+    if (msg) { msg.textContent = 'La función de servidor no está disponible. Verifica que resincronizarTodosLosAccesos esté desplegada en Firebase.'; msg.className = 'msg err'; msg.style.display = 'block'; }
+    return;
+  }
+  if (!confirm('Esto va a revisar a TODO el directorio y volver a aplicar, en la cuenta real de acceso de cada quien, la contraseña que ya está guardada en el sistema. Puede tardar unos minutos si hay muchos empleados. ¿Continuar?')) return;
+  if (btn) { btn.disabled = true; btn.textContent = 'Re-sincronizando… puede tardar varios minutos'; }
+  try {
+    const resp = await _fnsResincronizarAccesos({});
+    const resultados = (resp && resp.data && resp.data.resultados) || [];
+    const ok = resultados.filter(function(r){ return r.ok; });
+    const sinCuenta = resultados.filter(function(r){ return !r.ok && r.sinCuenta; });
+    const otrosErrores = resultados.filter(function(r){ return !r.ok && !r.sinCuenta; });
+    let texto = '✅ Se re-sincronizó el acceso de ' + ok.length + ' empleado(s).';
+    if (sinCuenta.length) texto += '\n\n⚠️ ' + sinCuenta.length + ' NUNCA tuvieron cuenta de acceso creada (hay que darlos de alta, esto no lo resuelve): ' + sinCuenta.map(function(r){ return r.nombre || r.uid; }).join(', ');
+    if (otrosErrores.length) texto += '\n\n❌ ' + otrosErrores.length + ' con error: ' + otrosErrores.map(function(r){ return (r.nombre || r.uid) + ' (' + r.error + ')'; }).join(', ');
+    if (msg) { msg.textContent = texto; msg.className = sinCuenta.length || otrosErrores.length ? 'msg err' : 'msg ok'; msg.style.display = 'block'; msg.style.whiteSpace = 'pre-line'; }
+  } catch (err) {
+    console.error('Error al re-sincronizar accesos:', err);
+    if (msg) { msg.textContent = 'No se pudo completar: ' + (err.message || err); msg.className = 'msg err'; msg.style.display = 'block'; }
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = '🔑 Re-sincronizar el acceso de TODOS'; }
   }
 };
 
