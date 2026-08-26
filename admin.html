@@ -1171,7 +1171,7 @@ function getDias(){
 
 let perfil=null, unsubOrdenes=null, unsubEmpleados=null;
 let diaMenuSel=null;
-let platillosBuf=[], extrasList=[];
+let platillosBuf=[], extrasList=[], gruposEleccionBuf=[];
 
 // ── AUTH ──
 auth.onAuthStateChanged(async function(user){
@@ -3911,6 +3911,7 @@ function seleccionarDiaMenu(i){
   const data = menusSemanaAdmin[diaMenuSel];
   platillosBuf = (data && data.platillos) ? data.platillos.slice() : [];
   extrasList = (data && data.extras) ? data.extras.map(e=>({nombre:e.nombre, precio:e.precio})) : [];
+  gruposEleccionBuf = (data && data.grupos_eleccion) ? data.grupos_eleccion.map(g=>({opciones:[(g.opciones&&g.opciones[0])||'', (g.opciones&&g.opciones[1])||'']})) : [];
 
   const d = new Date(diaMenuSel+'T12:00:00');
   document.getElementById('menu-editor-titulo').textContent = DS[d.getDay()] + ' ' + d.getDate() + ' de ' + MF[d.getMonth()];
@@ -3935,6 +3936,9 @@ function renderMenuEditorForm(data){
     '<div class="campo"><label>Nombre del menú</label><input type="text" id="menu-nombre" placeholder="Ej. Buffet variado" value="'+escHtml(data&&data.nombre)+'"/></div>'+
     '<div class="campo"><label>Platillos del buffet</label><div id="lista-platillos"></div>'+
     '<button class="btn btn-outline btn-sm" id="btn-add-platillo" type="button" style="margin-top:.4rem">+ Agregar platillo</button></div>'+
+    '<div class="campo"><label>Grupos "elige 1 de 2" (opcional)</label><div id="lista-grupos"></div>'+
+    '<button class="btn btn-outline btn-sm" id="btn-add-grupo" type="button" style="margin-top:.4rem">+ Agregar grupo de elección</button>'+
+    '<div style="font-size:.75rem;color:var(--g3);margin-top:.35rem">Úsalo cuando hay 2 guisados y el empleado solo puede llevar uno, ej. "Sopa de fideo" o "Crema de brócoli". El resto de platillos de arriba se mantiene igual (incluidos, con opción de quitarlos).</div></div>'+
     '<div class="campo"><label>Extras con costo adicional</label><div id="lista-extras"></div>'+
     '<button class="btn btn-outline btn-sm" id="btn-add-extra" type="button" style="margin-top:.4rem">+ Agregar extra</button></div>'+
     '<div class="msg" id="menu-msg"></div>'+
@@ -3944,11 +3948,38 @@ function renderMenuEditorForm(data){
     '</div>';
 
   renderListaPlatillos();
+  renderListaGrupos();
   renderListaExtras();
   document.getElementById('btn-add-platillo').addEventListener('click', function(){ platillosBuf.push(''); renderListaPlatillos(); });
+  document.getElementById('btn-add-grupo').addEventListener('click', function(){ gruposEleccionBuf.push({opciones:['','']}); renderListaGrupos(); });
   document.getElementById('btn-add-extra').addEventListener('click', function(){ extrasList.push({nombre:'',precio:0}); renderListaExtras(); });
   document.getElementById('btn-guardar-menu').addEventListener('click', guardarMenuDia);
   document.getElementById('btn-borrar-menu').addEventListener('click', borrarMenuDia);
+}
+
+function renderListaGrupos(){
+  const cont = document.getElementById('lista-grupos');
+  if(!cont) return;
+  cont.innerHTML = gruposEleccionBuf.length ? gruposEleccionBuf.map(function(g,i){
+    const opA = (g.opciones && g.opciones[0]) || '';
+    const opB = (g.opciones && g.opciones[1]) || '';
+    return '<div style="display:flex;gap:.4rem;align-items:center;border:1px solid var(--borde);border-radius:8px;padding:.5rem;margin-bottom:.5rem">'+
+      '<input type="text" class="input-grupo-op" data-i="'+i+'" data-j="0" placeholder="Opción A, ej. Sopa de fideo" value="'+escHtml(opA)+'" style="flex:1"/>'+
+      '<span style="font-size:.75rem;color:var(--g3)">o</span>'+
+      '<input type="text" class="input-grupo-op" data-i="'+i+'" data-j="1" placeholder="Opción B, ej. Crema de brócoli" value="'+escHtml(opB)+'" style="flex:1"/>'+
+      '<button class="btn-quitar" data-i="'+i+'" type="button" title="Quitar grupo">✕</button>'+
+      '</div>';
+  }).join('') : '<div style="font-size:.8rem;color:var(--g3);padding:.4rem 0 .2rem">Sin grupos de elección (opcional)</div>';
+  cont.querySelectorAll('.input-grupo-op').forEach(function(inp){
+    inp.addEventListener('input', function(e){
+      const i = +e.target.dataset.i, j = +e.target.dataset.j;
+      if(!gruposEleccionBuf[i].opciones) gruposEleccionBuf[i].opciones = ['',''];
+      gruposEleccionBuf[i].opciones[j] = e.target.value;
+    });
+  });
+  cont.querySelectorAll('.btn-quitar').forEach(function(btn){
+    btn.addEventListener('click', function(e){ gruposEleccionBuf.splice(+e.target.dataset.i,1); renderListaGrupos(); });
+  });
 }
 
 function renderListaPlatillos(){
@@ -3991,20 +4022,29 @@ async function guardarMenuDia(){
   function mostrarMsg(t,ok){ msg.textContent=t; msg.className='msg '+(ok?'ok':'err'); msg.style.display='block'; }
 
   const platillosLimpios = platillosBuf.map(function(p){ return p.trim(); }).filter(Boolean);
+  const gruposLimpios = gruposEleccionBuf
+    .map(function(g){ return { opciones: (g.opciones||[]).map(function(o){ return (o||'').trim(); }).filter(Boolean) }; })
+    .filter(function(g){ return g.opciones.length === 2; });
   const extrasLimpios = extrasList
     .map(function(e){ return { nombre:(e.nombre||'').trim(), precio:Number(e.precio)||0 }; })
     .filter(function(e){ return e.nombre; });
 
   if(!nombre){ mostrarMsg('Ponle un nombre al menú de este día.', false); return; }
   if(!platillosLimpios.length){ mostrarMsg('Agrega al menos un platillo.', false); return; }
+  const gruposIncompletos = gruposEleccionBuf.some(function(g){
+    const a = (g.opciones && g.opciones[0] || '').trim(), b = (g.opciones && g.opciones[1] || '').trim();
+    return (a && !b) || (!a && b);
+  });
+  if(gruposIncompletos){ mostrarMsg('Cada grupo de elección necesita sus 2 opciones (o bórralo si no lo vas a usar).', false); return; }
 
   const btn = document.getElementById('btn-guardar-menu');
   btn.disabled = true; btn.textContent = 'Guardando...';
   try {
-    const menuData = { nombre: nombre, platillos: platillosLimpios, extras: extrasLimpios };
+    const menuData = { nombre: nombre, platillos: platillosLimpios, grupos_eleccion: gruposLimpios, extras: extrasLimpios };
     await db.collection('menus').doc(diaMenuSel).set(menuData);
     menusSemanaAdmin[diaMenuSel] = menuData;
     platillosBuf = platillosLimpios.slice();
+    gruposEleccionBuf = gruposLimpios.map(function(g){ return {opciones: g.opciones.slice()}; });
     extrasList = extrasLimpios.map(function(e){ return {nombre:e.nombre, precio:e.precio}; });
     mostrarMsg('Menú guardado correctamente.', true);
     renderDiaSelectorAdmin();
@@ -4023,7 +4063,7 @@ async function borrarMenuDia(){
   try {
     await db.collection('menus').doc(diaMenuSel).delete();
     menusSemanaAdmin[diaMenuSel] = null;
-    platillosBuf = []; extrasList = [];
+    platillosBuf = []; extrasList = []; gruposEleccionBuf = [];
     renderMenuEditorForm(null);
     renderDiaSelectorAdmin();
     const badge = document.getElementById('menu-editor-badge');
@@ -4248,6 +4288,7 @@ async function aplicarCambiosMenuSemana(){
       badge.textContent = tieneMenu ? 'Disponible' : 'Sin definir';
       badge.className = 'badge ' + (tieneMenu ? 'badge-v' : 'badge-g');
       platillosBuf = (data && data.platillos) ? data.platillos.slice() : [];
+      gruposEleccionBuf = (data && data.grupos_eleccion) ? data.grupos_eleccion.map(function(g){ return {opciones:[(g.opciones&&g.opciones[0])||'', (g.opciones&&g.opciones[1])||'']}; }) : [];
       extrasList = (data && data.extras) ? data.extras.map(function(e){ return {nombre:e.nombre, precio:e.precio}; }) : [];
       renderMenuEditorForm(data);
     }
