@@ -11,7 +11,7 @@
 <meta http-equiv="Expires" content="0"/>
 <script>
 (function(){
-  var V='20260825-7';
+  var V='20260826-1';
   try{
     fetch('version.txt?_='+Date.now(),{cache:'no-store'}).then(function(r){return r.ok?r.text():null;}).then(function(t){
       if(!t) return;
@@ -47,10 +47,16 @@
   --shadow:0 1px 3px rgba(92,107,74,.08),0 4px 16px rgba(92,107,74,.06);
 }
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
-html,body{height:100%;overflow:hidden;font-family:'Inter',system-ui,sans-serif;background:var(--crema);color:var(--negro);-webkit-font-smoothing:antialiased}
+html,body{min-height:100%;font-family:'Inter',system-ui,sans-serif;background:var(--crema);color:var(--negro);-webkit-font-smoothing:antialiased}
 
 /* ── LAYOUT PRINCIPAL ── */
-.layout{display:flex;flex-direction:column;height:100vh}
+/* Antes esto era height:100vh con overflow:hidden en html/body y solo el
+   grid interno hacía scroll. En iPads chicos, 100vh no coincide con el área
+   realmente visible (por la barra de Safari) y el botón "Listo" quedaba
+   cortado, sin forma de hacer scroll para verlo. Ahora dejamos que la
+   página completa haga scroll de forma nativa: así el botón SIEMPRE es
+   alcanzable, sin importar el tamaño de pantalla. */
+.layout{display:flex;flex-direction:column;min-height:100vh}
 
 /* ── TOPBAR ── */
 .topbar{
@@ -58,6 +64,7 @@ html,body{height:100%;overflow:hidden;font-family:'Inter',system-ui,sans-serif;b
   padding:0 2rem;
   display:flex;align-items:center;justify-content:space-between;
   flex-shrink:0;
+  position:sticky;top:0;z-index:20;
 }
 .topbar-left{display:flex;align-items:center;gap:.75rem}
 .topbar-logo{
@@ -103,6 +110,7 @@ html,body{height:100%;overflow:hidden;font-family:'Inter',system-ui,sans-serif;b
   padding:0 2rem;
   display:flex;align-items:center;justify-content:space-between;
   flex-shrink:0;
+  position:sticky;top:64px;z-index:19;
 }
 .status-left{display:flex;align-items:center;gap:1.5rem}
 .status-item{display:flex;align-items:center;gap:.4rem;font-size:.78rem}
@@ -121,8 +129,17 @@ html,body{height:100%;overflow:hidden;font-family:'Inter',system-ui,sans-serif;b
   gap:1.25rem;
   padding:1.25rem 2rem;
   flex:1;
-  overflow-y:auto;
   align-content:start;
+}
+
+/* En pantallas angostas (iPads chicos, orientación vertical) bajamos a
+   menos columnas para que cada tarjeta y su botón "Listo" se vean
+   completos y con buen tamaño, sin apretujarse. */
+@media (max-width:1100px){
+  .grid{grid-template-columns:1fr 1fr}
+}
+@media (max-width:680px){
+  .grid{grid-template-columns:1fr}
 }
 
 /* ── ORDEN CARD ── */
@@ -333,6 +350,21 @@ function actualizarReloj(){
 }
 actualizarReloj();
 setInterval(actualizarReloj,1000);
+
+// ── AUTO-RECARGA ──
+// Esta pantalla se queda abierta días enteros en el iPad de cocina, sin que
+// nadie la recargue a mano. El listener de Firestore de abajo usa la fecha
+// de HOY calculada una sola vez cuando arranca — si nadie recarga la
+// página, se queda pegada en el día en que se abrió (nunca vuelve a
+// avanzar), así que al cruzar la medianoche la cocina dejaría de ver
+// órdenes nuevas aunque sí las haya. Además la lista de "Completadas" solo
+// crece, nunca se limpia sola, y con los días se va acumulando. Para
+// evitar los dos problemas, la pantalla se recarga sola en cuanto cambia
+// el día, y de cualquier forma cada hora como respaldo — así nunca se
+// queda viendo un día viejo ni se le amontonan las completadas.
+const _fechaAlAbrirCocina = hoy();
+setInterval(function(){ if (hoy() !== _fechaAlAbrirCocina) location.reload(); }, 60*1000);
+setInterval(function(){ location.reload(); }, 60*60*1000);
 
 // ── ESTADO ──
 let cola = [];
