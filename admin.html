@@ -15,7 +15,7 @@
 // fuerza una recarga limpia. sessionStorage evita que se quede en bucle si
 // version.txt no está disponible por algún motivo.
 (function(){
-  var V='20260826-1';
+  var V='20260826-2';
   try{
     fetch('version.txt?_='+Date.now(),{cache:'no-store'}).then(function(r){return r.ok?r.text():null;}).then(function(t){
       if(!t) return;
@@ -654,6 +654,16 @@ input[type=file]{display:none}
             <div class="msg" id="migrar-interlomas-msg"></div>
           </div>
         </div>
+
+        <div class="card" style="margin-top:1.25rem">
+          <div class="card-head"><span class="card-titulo">Borrar todo el historial de órdenes (hasta hoy)</span></div>
+          <div class="card-body">
+            <p style="font-size:.82rem;color:var(--g2);margin-bottom:1rem">Cancela TODAS las órdenes de TODOS los empleados y comedores con fecha de hoy o antes — pendientes, terminadas y viejas por igual. Úsalo para dejar todo en cero antes de arrancar de verdad (por ejemplo, para borrar pedidos de prueba). Como es una sola base de datos compartida, esto se les borra a todos los empleados de su Historial al mismo tiempo, no solo en este dispositivo. No se pierden los datos de verdad: igual que el resto de los "borrados" en el sistema, las órdenes quedan marcadas como canceladas (no se destruyen), así que si algo sale mal se pueden recuperar.</p>
+            <div class="campo"><label>Hasta qué fecha (incluida)</label><input type="date" id="borrar-historial-hasta"/></div>
+            <button class="btn btn-danger btn-sm" id="btn-borrar-historial-todo" onclick="borrarHistorialCompleto()">🧹 Borrar todo el historial hasta esa fecha</button>
+            <div class="msg" id="borrar-historial-msg"></div>
+          </div>
+        </div>
       </div>
 
       <!-- MENÚS -->
@@ -1165,6 +1175,8 @@ function iniciarAdmin(){
   cargarEmpleados();
   initMenuEditor();
   renderHistorialMensual();
+  const inpBorrarHasta = document.getElementById('borrar-historial-hasta');
+  if (inpBorrarHasta && !inpBorrarHasta.value) inpBorrarHasta.value = hoy();
 }
 
 // ── NAVEGACIÓN ──
@@ -1446,6 +1458,51 @@ window.migrarIntelomasAInterlomas = async function(){
     if (msg) { msg.textContent = 'No se pudo completar: ' + err.message; msg.className = 'msg err'; msg.style.display = 'block'; }
   } finally {
     if (btn) { btn.disabled = false; btn.textContent = '🔧 Corregir en la base de datos'; }
+  }
+};
+
+// Borra (cancela) TODAS las órdenes de TODOS los empleados y comedores con
+// fecha igual o anterior a la indicada — pensado para dejar en cero antes
+// de arrancar de verdad, cuando quedaron pedidos de prueba mezclados con
+// los reales. Como "ordenes" es una sola colección compartida por todos,
+// esto se refleja al instante en el Historial de cada empleado y en las
+// pestañas de Órdenes pendientes / Reportes del admin — no es algo que se
+// pueda limitar a "solo en este dispositivo". Igual que el resto de los
+// borrados del sistema, NO se destruyen los documentos: se marcan
+// estado:'cancelado' (el mismo patrón que ya usa "Eliminar todas las
+// pendientes"), así que quedan recuperables si algo sale mal.
+window.borrarHistorialCompleto = async function(){
+  const btn = document.getElementById('btn-borrar-historial-todo');
+  const msg = document.getElementById('borrar-historial-msg');
+  const inp = document.getElementById('borrar-historial-hasta');
+  const hasta = (inp && inp.value) ? inp.value : hoy();
+  if (msg) { msg.style.display = 'none'; }
+  try {
+    const snap = await db.collection('ordenes').where('fecha', '<=', hasta).get();
+    const docs = snap.docs.filter(function(d){ return d.data().estado !== 'cancelado'; });
+    if (!docs.length) {
+      if (msg) { msg.textContent = 'No hay ninguna orden (hasta el ' + hasta + ') que borrar — ya está en cero.'; msg.className = 'msg ok'; msg.style.display = 'block'; }
+      return;
+    }
+    if (!confirm('Esto va a borrar ' + docs.length + ' orden(es) de TODOS los empleados y comedores, con fecha ' + hasta + ' o antes. Se les va a borrar del Historial a todos los empleados, no solo aquí. ¿Seguro que quieres continuar?')) return;
+    if (!confirm('Confirma una vez más: se van a cancelar ' + docs.length + ' órdenes para SIEMPRE (no aparecerán en ningún reporte ni historial). Esta acción no se deshace fácilmente. ¿Proceder?')) return;
+    if (btn) { btn.disabled = true; btn.textContent = 'Borrando…'; }
+    // Firestore permite máximo 500 escrituras por batch — se parte en lotes de 400 por seguridad.
+    for (let i = 0; i < docs.length; i += 400) {
+      const lote = docs.slice(i, i + 400);
+      const batch = db.batch();
+      lote.forEach(function(d){ batch.update(d.ref, { estado: 'cancelado', cancelado_en: new Date() }); });
+      await batch.commit();
+    }
+    if (msg) { msg.textContent = '✅ Se borraron ' + docs.length + ' órdenes (hasta el ' + hasta + ') para todos los empleados.'; msg.className = 'msg ok'; msg.style.display = 'block'; }
+    // Refresca las vistas que dependen de "ordenes" si están abiertas.
+    if (typeof cargarDashboard === 'function') cargarDashboard();
+    if (typeof cargarPendientes === 'function') cargarPendientes();
+  } catch (err) {
+    console.error('Error al borrar historial completo:', err);
+    if (msg) { msg.textContent = 'No se pudo completar: ' + err.message; msg.className = 'msg err'; msg.style.display = 'block'; }
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = '🧹 Borrar todo el historial hasta esa fecha'; }
   }
 };
 
