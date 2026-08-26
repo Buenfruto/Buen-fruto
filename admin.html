@@ -15,7 +15,7 @@
 // fuerza una recarga limpia. sessionStorage evita que se quede en bucle si
 // version.txt no está disponible por algún motivo.
 (function(){
-  var V='20260826-2';
+  var V='20260826-4';
   try{
     fetch('version.txt?_='+Date.now(),{cache:'no-store'}).then(function(r){return r.ok?r.text():null;}).then(function(t){
       if(!t) return;
@@ -347,6 +347,27 @@ input[type=file]{display:none}
           </div>
         </div>
 
+        <!-- PRECIO DEL BUFFET -->
+        <div class="card" style="margin-bottom:1.75rem">
+          <div class="card-head"><span class="card-titulo">💲 Precio del buffet</span></div>
+          <div class="card-body">
+            <p style="font-size:.82rem;color:var(--g2);margin-bottom:1rem">Cámbialo tú mismo aquí cuando haga falta, sin pedir que se toque el código. En cuanto guardes, aplica de inmediato en lo que ven los empleados al pedir y en el Dashboard/Reportes de aquí.</p>
+            <div style="display:flex;gap:1rem;flex-wrap:wrap;align-items:flex-end">
+              <div class="campo" style="margin-bottom:0;min-width:170px">
+                <label>Precio total del buffet</label>
+                <input type="number" id="precio-total" min="1" step="1"/>
+              </div>
+              <div class="campo" style="margin-bottom:0;min-width:220px">
+                <label>Lo que paga el empleado (no subsidiado)</label>
+                <input type="number" id="precio-empleado" min="0" step="1"/>
+              </div>
+              <button class="btn btn-v btn-sm" id="btn-guardar-precios" onclick="guardarPrecios()" style="height:38px">Guardar</button>
+            </div>
+            <p style="font-size:.75rem;color:var(--g3);margin-top:.65rem" id="precio-explicacion"></p>
+            <div class="msg" id="precios-msg"></div>
+          </div>
+        </div>
+
         <!-- MÉTRICAS GLOBALES -->
         <div style="font-size:.6rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--g3);margin-bottom:.6rem">Global — Hoy</div>
         <div class="metricas" id="metricas-wrap" style="margin-bottom:1.75rem">
@@ -354,7 +375,7 @@ input[type=file]{display:none}
           <div class="metrica"><div class="metrica-label">Empleados activos</div><div class="metrica-val" id="m-empleados">—</div><div class="metrica-sub">Registrados</div></div>
           <div class="metrica ciruela"><div class="metrica-label">Pre-órdenes hoy</div><div class="metrica-val" id="m-preordenes">—</div><div class="metrica-sub">Con hora agendada</div></div>
           <div class="metrica"><div class="metrica-label">Pagos empleados</div><div class="metrica-val" id="m-recaudado">—</div><div class="metrica-sub">Solo lo que se les cobra a ellos</div></div>
-          <div class="metrica"><div class="metrica-label">Pagos empleados + Subsidio</div><div class="metrica-val" id="m-valor-total">—</div><div class="metrica-sub">$110 por buffet + extras, de todos</div></div>
+          <div class="metrica"><div class="metrica-label">Pagos empleados + Subsidio</div><div class="metrica-val" id="m-valor-total">—</div><div class="metrica-sub" id="m-valor-total-sub">$110 por buffet + extras, de todos</div></div>
           <div class="metrica"><div class="metrica-label">Corresponde a Sistema</div><div class="metrica-val" id="m-sistema">—</div><div class="metrica-sub">5% de Pagos empleados + Subsidio</div></div>
           <div class="metrica verde"><div class="metrica-label">Subsidiados hoy</div><div class="metrica-val" id="m-subsidiados">—</div><div class="metrica-sub">Comida 100% empresa</div></div>
           <div class="metrica ciruela"><div class="metrica-label">Visitas hoy</div><div class="metrica-val" id="m-visitas">—</div><div class="metrica-sub">Sin cuenta, por link</div></div>
@@ -771,7 +792,7 @@ input[type=file]{display:none}
               <button class="btn btn-outline btn-sm" id="btn-plantilla-asistencia" onclick="descargarPlantillaAsistencia()" title="Formato de referencia del reporte de asistencia, sin depender de datos reales">
                 📥 Plantilla de asistencia
               </button>
-              <button class="btn btn-outline btn-sm" id="btn-excel-resumen-ordenes" onclick="descargarReporteResumenOrdenes()" title="Solo la cantidad de órdenes del período (visitas, subsidiados, normales), el valor total ($110 por buffet + extras, de todos) y el 5% que corresponde al sistema">
+              <button class="btn btn-outline btn-sm" id="btn-excel-resumen-ordenes" onclick="descargarReporteResumenOrdenes()" title="Solo la cantidad de órdenes del período (visitas, subsidiados, normales), el valor total (precio del buffet + extras, de todos) y el 5% que corresponde al sistema">
                 🧾 Resumen de órdenes
               </button>
             </div>
@@ -1165,11 +1186,107 @@ document.addEventListener('DOMContentLoaded', function(){
   });
 });
 
+// ── PRECIO DEL BUFFET (configurable, sin tocar código) ──
+// Antes el precio ($110 total / $55 lo que paga el empleado) estaba escrito
+// directo en el código de esta página y en la app de los empleados — cada
+// vez que cambiaba había que editar y volver a subir los archivos. Ahora
+// vive en un solo documento de Firestore (config/precios) que el admin edita
+// aquí mismo, y tanto esta página como la app de los empleados lo leen en
+// tiempo real. PRECIO_TOTAL/PRECIO_EMPLEADO abajo son solo el valor de
+// respaldo por si ese documento todavía no existe (antes del primer guardado).
+let PRECIO_TOTAL = 110, PRECIO_EMPLEADO = 55;
+let _preciosListo = false;
+function actualizarUIPrecios(){
+  const it = document.getElementById('precio-total');
+  const ie = document.getElementById('precio-empleado');
+  if (it && document.activeElement !== it) it.value = PRECIO_TOTAL;
+  if (ie && document.activeElement !== ie) ie.value = PRECIO_EMPLEADO;
+  const exp = document.getElementById('precio-explicacion');
+  if (exp) exp.textContent = 'La empresa subsidia $' + (PRECIO_TOTAL - PRECIO_EMPLEADO) + ' por cada buffet de un empleado no subsidiado (paga los $' + PRECIO_EMPLEADO + ' restantes). Un empleado subsidiado no paga nada del buffet — la empresa cubre los $' + PRECIO_TOTAL + ' completos. Los extras siempre los paga quien los pide, sin importar si es subsidiado.';
+  const sub = document.getElementById('m-valor-total-sub');
+  if (sub) sub.textContent = '$' + PRECIO_TOTAL + ' por buffet + extras, de todos';
+}
+function suscribirPrecios(){
+  return new Promise(function(resolve){
+    let resuelto = false;
+    db.collection('config').doc('precios').onSnapshot(function(snap){
+      if (snap.exists) {
+        const d = snap.data();
+        if (typeof d.total === 'number' && d.total > 0) PRECIO_TOTAL = d.total;
+        if (typeof d.empleado === 'number' && d.empleado >= 0) PRECIO_EMPLEADO = d.empleado;
+      }
+      _preciosListo = true;
+      actualizarUIPrecios();
+      if (!resuelto) { resuelto = true; resolve(); }
+      else if (typeof cargarDashboard === 'function') { cargarDashboard(); } // precio cambió con la página abierta: refresca lo que depende de él
+    }, function(err){
+      console.error('Error al cargar precios:', err);
+      if (!resuelto) { resuelto = true; resolve(); }
+    });
+  });
+}
+window.guardarPrecios = async function(){
+  const it = document.getElementById('precio-total');
+  const ie = document.getElementById('precio-empleado');
+  const msg = document.getElementById('precios-msg');
+  const total = Number(it && it.value);
+  const empleado = Number(ie && ie.value);
+  if (msg) msg.style.display = 'none';
+  if (!total || total <= 0) { if(msg){msg.textContent='Pon un precio total válido, mayor a $0.';msg.className='msg err';msg.style.display='block';} return; }
+  if (empleado < 0 || empleado > total) { if(msg){msg.textContent='Lo que paga el empleado no puede ser negativo ni mayor que el precio total.';msg.className='msg err';msg.style.display='block';} return; }
+  const btn = document.getElementById('btn-guardar-precios');
+  if (btn) { btn.disabled = true; btn.textContent = 'Revisando pendientes…'; }
+  try {
+    // Las órdenes ya CREADAS guardan su cobro (cargo) congelado desde que se
+    // hicieron, así que cambiar el precio aquí no las tocaba solo. El admin
+    // pidió que sí se actualicen las de HOY que siguen pendientes (nadie las
+    // ha escaneado todavía) — las que ya se escanearon/sirvieron NO se
+    // tocan, porque ese cobro ya es historia y no se debe alterar. Las
+    // visitas tampoco se tocan aquí: siempre las cubre la empresa al 100%,
+    // no tienen "cargo" de nómina que recalcular.
+    const snapPend = await db.collection('ordenes').where('fecha','==',hoy()).where('escaneado','==',false).get();
+    const pendientes = snapPend.docs.filter(function(d){ const o=d.data(); return o.estado !== 'cancelado' && o.tipo !== 'visita'; });
+
+    if (pendientes.length && !confirm('Además de guardar el precio, esto va a recalcular el cobro de ' + pendientes.length + ' orden(es) pendiente(s) de hoy con el precio nuevo (las que ya se escanearon no se tocan). ¿Continuar?')) {
+      if (btn) { btn.disabled = false; btn.textContent = 'Guardar'; }
+      return;
+    }
+
+    if (btn) { btn.textContent = 'Guardando…'; }
+    const configRef = db.collection('config').doc('precios');
+    if (!pendientes.length) {
+      await configRef.set({ total, empleado, actualizado_en: new Date() }, { merge: true });
+    } else {
+      // Firestore permite máximo 500 escrituras por batch — se parte en lotes de 400 por seguridad.
+      for (let i = 0; i < pendientes.length; i += 400) {
+        const lote = pendientes.slice(i, i + 400);
+        const batch = db.batch();
+        if (i === 0) batch.set(configRef, { total, empleado, actualizado_en: new Date() }, { merge: true });
+        lote.forEach(function(d){
+          const o = d.data();
+          const tuvoBuffet = (o.platillos||[]).length > 0;
+          const costoExtras = (o.extras||[]).reduce(function(s,e){ return s+(Number(e&&e.precio)||0); }, 0);
+          const nuevoCargo = (tuvoBuffet && !o.subsidiado ? empleado : 0) + costoExtras;
+          batch.update(d.ref, { cargo: nuevoCargo });
+        });
+        await batch.commit();
+      }
+    }
+    if (msg) { msg.textContent = '✅ Precio guardado' + (pendientes.length ? (' — se recalculó el cobro de ' + pendientes.length + ' orden(es) pendiente(s) de hoy') : '') + '. Ya aplica en la app de los empleados y en los reportes.'; msg.className = 'msg ok'; msg.style.display = 'block'; }
+  } catch (err) {
+    console.error('Error al guardar precios:', err);
+    if (msg) { msg.textContent = 'No se pudo guardar: ' + err.message; msg.className = 'msg err'; msg.style.display = 'block'; }
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = 'Guardar'; }
+  }
+};
+
 // ── INICIAR ──
-function iniciarAdmin(){
+async function iniciarAdmin(){
   document.getElementById('admin-nombre').textContent=perfil.nombre||perfil.email;
   const ahora=new Date();
   document.getElementById('topbar-fecha').textContent=DS[ahora.getDay()]+' '+ahora.getDate()+' de '+MF[ahora.getMonth()];
+  await suscribirPrecios();
   limpiarOrdenesNoEscaneadas();
   cargarDashboard();
   cargarEmpleados();
@@ -1211,7 +1328,7 @@ async function cargarDashboard(){
     const valorTotal=ordenes.reduce((s,o)=>{
       const tuvoBuffet=(o.platillos||[]).length>0;
       const costoExtras=(o.extras||[]).reduce((se,e)=>se+(Number(e&&e.precio)||0),0);
-      return s+(tuvoBuffet?110:0)+costoExtras;
+      return s+(tuvoBuffet?PRECIO_TOTAL:0)+costoExtras;
     },0);
     document.getElementById('m-ordenes').textContent=ordenes.length;
     document.getElementById('m-preordenes').textContent=preordenes.length;
@@ -4225,7 +4342,7 @@ function agregarOrdenesPorEmpleado(docs, comedorFiltro){
     // (solo extras), no hay nada que subsidiar — antes esto marcaba $55 de
     // subsidio aunque no hubiera buffet ese día; ya corregido.
     const tuvoBuffet = (o.platillos||[]).length > 0;
-    const subsidio = tuvoBuffet ? (o.subsidiado ? 110 : 55) : 0;
+    const subsidio = tuvoBuffet ? (o.subsidiado ? PRECIO_TOTAL : (PRECIO_TOTAL - PRECIO_EMPLEADO)) : 0;
     const pagoEmp = o.subsidiado ? costoExtras : (Number(o.cargo) || 0); // blindaje: un dato mal formado nunca debe volverse "$NaN.00" en el total
     porEmp[o.empleado_uid].dias.push({
       id: o.id,
@@ -4308,14 +4425,16 @@ window.exportarCSVCompleto = async function() {
   snap.forEach(d => {
     const o = d.data();
     const extras = (o.extras||[]).map(e=>typeof e==='string'?e:(e.nombre+' $'+e.precio)).join(' | ');
+    const tuvoBuffetCsv = (o.platillos||[]).length > 0;
+    const subsidioEmpresaCsv = tuvoBuffetCsv ? (o.subsidiado ? PRECIO_TOTAL : (PRECIO_TOTAL - PRECIO_EMPLEADO)) : 0;
     filas.push([
       '"'+(o.empleado_nombre||'')+'"',
       o.fecha||'',
       '"'+(o.platillos||[]).join(', ')+'"',
       '"'+extras+'"',
       o.cargo||0,
-      55,
-      (o.cargo||0)+55,
+      subsidioEmpresaCsv,
+      (o.cargo||0)+subsidioEmpresaCsv,
       o.estado||'',
       o.hora_preorden?'preorden':'momento',
       o.escaneado?'sí':'no'
@@ -4572,7 +4691,7 @@ function renderizarReporte(){
   ).map(o=>{
     const tuvoBuffet = (o.platillos||[]).length > 0;
     const costoExtras = (o.extras||[]).reduce((s,e)=>s+(Number(e&&e.precio)||0),0);
-    return Object.assign({}, o, { costo_extras: costoExtras, valor_empresa: (tuvoBuffet?110:0)+costoExtras });
+    return Object.assign({}, o, { costo_extras: costoExtras, valor_empresa: (tuvoBuffet?PRECIO_TOTAL:0)+costoExtras });
   });
   const gtEmpresaVisitas = visitasPeriodo.reduce((s,v)=>s+v.valor_empresa,0);
   const gtEmpresa = gtEmpresaEmp + gtEmpresaVisitas;
@@ -5069,7 +5188,7 @@ async function construirWorkbookResumenOrdenes(docsCrudos, opts){
   function valorOrden(o){
     const tuvoBuffet = (o.platillos||[]).length > 0;
     const costoExtras = (o.extras||[]).reduce(function(se,e){ return se+(Number(e&&e.precio)||0); }, 0);
-    return (tuvoBuffet?110:0) + costoExtras;
+    return (tuvoBuffet?PRECIO_TOTAL:0) + costoExtras;
   }
 
   const docs = docsCrudos || [];
@@ -5657,9 +5776,9 @@ window.descargarPlantillaReporte = async function(){
     rEj.getCell(4).value = 'Pollo asado, Arroz';
     rEj.getCell(5).value = 'Postre';
     rEj.getCell(6).value = 15;
-    rEj.getCell(7).value = 55;
-    rEj.getCell(8).value = 55;
-    rEj.getCell(9).value = 110;
+    rEj.getCell(7).value = PRECIO_EMPLEADO;
+    rEj.getCell(8).value = PRECIO_TOTAL - PRECIO_EMPLEADO;
+    rEj.getCell(9).value = PRECIO_TOTAL;
     for (let c=1;c<=9;c++){
       const cell = rEj.getCell(c);
       cell.font = { name:'Arial', size:10, italic:true, color:{argb:'FF999999'} };
