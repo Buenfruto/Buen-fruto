@@ -12,7 +12,7 @@
 <meta http-equiv="Expires" content="0"/>
 <script>
 (function(){
-  var V='20260825-7';
+  var V='20260828-1';
   try{
     fetch('version.txt?_='+Date.now(),{cache:'no-store'}).then(function(r){return r.ok?r.text():null;}).then(function(t){
       if(!t) return;
@@ -287,12 +287,17 @@ window.escanear=async function(){
   const empSnap=await getDocs(qEmp);
 
   let nombrePersona;
+  // Cuenta "Completo": puede comer en cualquiera de los 3 comedores, no
+  // solo en el que tiene asignado — se salta la validación de comedor de
+  // más abajo para esta persona.
+  let completo=false;
   const ordenesHoy=[];
 
   if(!empSnap.empty){
     const empDoc=empSnap.docs[0];
     const emp=empDoc.data();
     nombrePersona=emp.nombre||'Empleado';
+    completo=!!emp.acceso_todos_comedores;
 
     // Buscar la orden de hoy para este empleado (que no esté cancelada)
     const qOrd=query(collection(db,'ordenes'),where('empleado_uid','==',empDoc.id),where('fecha','==',hoy()));
@@ -325,7 +330,9 @@ window.escanear=async function(){
   // ?comedor= en la URL). Si el empleado sí pidió hoy pero en OTRO comedor,
   // se lo decimos claro en vez de tratarlo como si no hubiera pedido nada —
   // así un gafete de Betel nunca activa una orden aquí en Cuauhtémoc, etc.
-  const ordenes=ordenesHoy.filter(o=>o.comedor===_comedor);
+  // Excepción: una cuenta "Completo" puede comer en cualquiera de los 3, así
+  // que para ella no se filtra por comedor.
+  const ordenes=completo ? ordenesHoy : ordenesHoy.filter(o=>o.comedor===_comedor);
 
   if(!ordenes.length){
     const otro=_comedorLabels[ordenesHoy[0].comedor]||ordenesHoy[0].comedor||'otro comedor';
@@ -348,7 +355,12 @@ window.escanear=async function(){
       const data=snap.data();
       if(data.estado==='cancelado') throw new Error('sin-orden');
       if(data.escaneado) return { yaEscaneado:true, data };
-      tx.update(ordenRef, { escaneado:true, escaneado_en:new Date() });
+      // Para una cuenta "Completo" que comió en un comedor distinto al que
+      // tenía guardado en su orden, se corrige aquí — así los reportes por
+      // comedor cuentan el consumo en el comedor donde de verdad comió.
+      const cambios={ escaneado:true, escaneado_en:new Date() };
+      if(completo && data.comedor!==_comedor) cambios.comedor=_comedor;
+      tx.update(ordenRef, cambios);
       return { yaEscaneado:false, data };
     });
   } catch(e){
