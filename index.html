@@ -12,7 +12,7 @@
 <meta http-equiv="Expires" content="0"/>
 <script>
 (function(){
-  var V='20260826-6';
+  var V='20260828-1';
   try{
     fetch('version.txt?_='+Date.now(),{cache:'no-store'}).then(function(r){return r.ok?r.text():null;}).then(function(t){
       if(!t) return;
@@ -918,6 +918,29 @@ function actuTick(modo, menu) {
   }
 }
 
+// Antes de CADA pedido se vuelve a consultar el comedor real del empleado en
+// Firestore, en vez de confiar nada más en lo que se cargó al abrir la app.
+// La app se puede quedar abierta horas o días en el celular (es un PWA) — si
+// un admin cambia a alguien de comedor a media sesión, el pedido nuevo debe
+// usar el comedor ACTUAL, no el viejo que quedó en memoria desde que se
+// abrió la app. Antes esto usaba siempre perfil.comedor (cargado una sola
+// vez al iniciar sesión), y por eso a empleados recién movidos de comedor
+// les seguía guardando el comedor viejo en sus pedidos nuevos — y luego el
+// escáner los rechazaba con "Comedor incorrecto" aunque ya estuvieran bien
+// en el directorio. Si esta consulta falla (sin internet, etc.) se usa lo
+// que ya había en memoria como respaldo, para no trabar el pedido.
+async function comedorVigente() {
+  try {
+    const snap = await db.collection('empleados').doc(auth.currentUser.uid).get();
+    if (snap.exists) {
+      let c = snap.data().comedor;
+      if (c === 'intelomas') c = 'interlomas';
+      if (c) { perfil.comedor = c; return c; }
+    }
+  } catch (e) { console.error('Error al revisar el comedor vigente:', e); }
+  return perfil.comedor || 'betel';
+}
+
 // ── PEDIR AHORA ──
 // Cancelar órdenes previas del mismo día para evitar duplicados
 async function cancelarOrdenesDelDia(fecha) {
@@ -956,7 +979,7 @@ async function pedirAhora() {
       platillos: buffetHoy ? [...platHoy, ...grupoSelHoy.filter(Boolean)] : [],
       extras: extrasHoy, cargo: cg,
       tipo: 'momento', hora_preorden: null,
-      comedor: perfil.comedor || 'betel',
+      comedor: await comedorVigente(),
       estado: 'pagado', escaneado: false,
       subsidiado: !!perfil.subsidiado,
       creado_en: serverTimestamp()
@@ -1004,7 +1027,7 @@ async function crearOrden(fecha, horaPreorden) {
     cargo: cg,
     tipo: horaPreorden ? 'preorden' : 'momento',
     hora_preorden: horaPreorden || null,
-    comedor: perfil.comedor || 'betel',
+    comedor: await comedorVigente(),
     estado: 'pagado',
     escaneado: false,
     subsidiado: !!perfil.subsidiado,
@@ -1121,7 +1144,7 @@ function selDia(i) {
           fecha, platillos: buffetDet ? [...platDet, ...grupoSelDet.filter(Boolean)] : [],
           extras: extrasDet, cargo: cg,
           tipo: 'momento', hora_preorden: null,
-          comedor: perfil.comedor || 'betel',
+          comedor: await comedorVigente(),
           estado: 'pagado', escaneado: false,
           subsidiado: !!perfil.subsidiado,
           creado_en: serverTimestamp()
