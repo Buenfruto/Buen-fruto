@@ -15,7 +15,7 @@
 // fuerza una recarga limpia. sessionStorage evita que se quede en bucle si
 // version.txt no está disponible por algún motivo.
 (function(){
-  var V='20260826-8';
+  var V='20260828-1';
   try{
     fetch('version.txt?_='+Date.now(),{cache:'no-store'}).then(function(r){return r.ok?r.text():null;}).then(function(t){
       if(!t) return;
@@ -678,6 +678,15 @@ input[type=file]{display:none}
         </div>
 
         <div class="card" style="margin-top:1.25rem">
+          <div class="card-head"><span class="card-titulo">Corregir comedor de pendientes de hoy</span></div>
+          <div class="card-body">
+            <p style="font-size:.82rem;color:var(--g2);margin-bottom:1rem">Si moviste a alguien de comedor (a mano o subiendo el Head Count) y ya tenía un pedido pendiente de hoy sin escanear, ese pedido se quedó con el comedor VIEJO guardado — y el escáner lo rechaza como "Comedor incorrecto" aunque ya esté bien en el directorio. Esto revisa las órdenes pendientes de hoy y corrige el comedor de las que no coincidan con el comedor actual del empleado. No toca las que ya se escanearon.</p>
+            <button class="btn btn-v btn-sm" id="btn-corregir-comedor-pend" onclick="corregirComedorPendientesHoy()">🔧 Corregir comedor de pendientes de hoy</button>
+            <div class="msg" id="corregir-comedor-pend-msg"></div>
+          </div>
+        </div>
+
+        <div class="card" style="margin-top:1.25rem">
           <div class="card-head"><span class="card-titulo">Corregir "intelomas" → "interlomas" en la base de datos</span></div>
           <div class="card-body">
             <p style="font-size:.82rem;color:var(--g2);margin-bottom:1rem">El comedor Interlomas se guardaba internamente con el nombre mal escrito "intelomas" (sin la r). Ya se corrigió en todo el sistema para las cuentas y órdenes nuevas — pero los registros que ya existían en la base de datos (empleados, órdenes y movimientos de Head Count) pueden seguir teniendo el valor viejo hasta que corras esto una vez. El sistema sigue funcionando bien mientras tanto; esto solo termina de limpiar lo ya guardado. Se puede correr más de una vez sin problema.</p>
@@ -881,6 +890,10 @@ input[type=file]{display:none}
     <div class="campo" style="display:flex;align-items:center;gap:.5rem">
       <input type="checkbox" id="emp-subsidiado" style="width:auto"/>
       <label for="emp-subsidiado" style="margin:0;cursor:pointer">💚 Subsidiado 100% (la empresa paga toda su comida)</label>
+    </div>
+    <div class="campo" style="display:flex;align-items:center;gap:.5rem">
+      <input type="checkbox" id="emp-completo" style="width:auto"/>
+      <label for="emp-completo" style="margin:0;cursor:pointer">🌐 Completo (puede comer en cualquiera de los 3 comedores)</label>
     </div>
     <div class="msg" id="emp-msg"></div>
     <div style="display:flex;gap:.75rem;margin-top:1.25rem">
@@ -1631,6 +1644,70 @@ function normalizarCentroHC(centro){
 function canonicalizarComedor(v){
   return v === 'intelomas' ? 'interlomas' : v;
 }
+
+// Corrige el comedor de las órdenes PENDIENTES de hoy (sin escanear todavía)
+// cuyo comedor guardado ya no coincide con el comedor actual del empleado en
+// el directorio — por ejemplo, si se movió a alguien de Betel a Interlomas
+// después de que ya había pedido, ese pedido se quedó apuntando a Betel y el
+// escáner lo rechazaba en Interlomas con "Comedor incorrecto". A partir de
+// ahora los pedidos NUEVOS ya usan siempre el comedor vigente del empleado
+// (ver comedorVigente() en index.html), así que esto solo hace falta para
+// limpiar lo que ya estaba pendiente antes de ese arreglo.
+window.corregirComedorPendientesHoy = async function(){
+  const btn = document.getElementById('btn-corregir-comedor-pend');
+  const msg = document.getElementById('corregir-comedor-pend-msg');
+  if (msg) msg.style.display = 'none';
+  if (btn) { btn.disabled = true; btn.textContent = 'Revisando…'; }
+  try {
+    const snapOrd = await db.collection('ordenes').where('fecha', '==', hoy()).where('escaneado', '==', false).get();
+    const pendientes = [];
+    snapOrd.forEach(function(d){
+      const o = d.data();
+      if (o.estado !== 'cancelado' && o.tipo !== 'visita' && o.empleado_uid) pendientes.push({ id: d.id, data: o });
+    });
+    if (!pendientes.length) {
+      if (msg) { msg.textContent = 'No hay órdenes pendientes de hoy que revisar.'; msg.className = 'msg'; msg.style.display = 'block'; }
+      return;
+    }
+
+    // Trae el comedor ACTUAL de cada empleado involucrado (Firestore permite
+    // máximo 10 valores por consulta "in", así que se hace en grupos de 10).
+    const uids = Array.from(new Set(pendientes.map(function(p){ return p.data.empleado_uid; })));
+    const comedorPorUid = {};
+    for (let i = 0; i < uids.length; i += 10) {
+      const grupo = uids.slice(i, i + 10);
+      const snapEmp = await db.collection('empleados').where(firebase.firestore.FieldPath.documentId(), 'in', grupo).get();
+      snapEmp.forEach(function(d){ comedorPorUid[d.id] = canonicalizarComedor(d.data().comedor); });
+    }
+
+    const aCorregir = pendientes.filter(function(p){
+      const actual = comedorPorUid[p.data.empleado_uid];
+      return actual && actual !== canonicalizarComedor(p.data.comedor);
+    });
+
+    if (!aCorregir.length) {
+      if (msg) { msg.textContent = '✅ Revisado — ninguna orden pendiente tiene el comedor desactualizado.'; msg.className = 'msg ok'; msg.style.display = 'block'; }
+      return;
+    }
+
+    if (!confirm('Se encontraron ' + aCorregir.length + ' orden(es) pendiente(s) de hoy con el comedor desactualizado respecto al directorio. ¿Corregirlas para que coincidan con el comedor actual de cada empleado?')) return;
+
+    for (let i = 0; i < aCorregir.length; i += 400) {
+      const lote = aCorregir.slice(i, i + 400);
+      const batch = db.batch();
+      lote.forEach(function(p){ batch.update(db.collection('ordenes').doc(p.id), { comedor: comedorPorUid[p.data.empleado_uid] }); });
+      await batch.commit();
+    }
+
+    if (msg) { msg.textContent = '✅ Se corrigió el comedor de ' + aCorregir.length + ' orden(es) pendiente(s).'; msg.className = 'msg ok'; msg.style.display = 'block'; }
+    if (typeof cargarPendientes === 'function') cargarPendientes();
+  } catch (err) {
+    console.error('Error al corregir comedor de pendientes:', err);
+    if (msg) { msg.textContent = 'No se pudo completar: ' + err.message; msg.className = 'msg err'; msg.style.display = 'block'; }
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = '🔧 Corregir comedor de pendientes de hoy'; }
+  }
+};
 
 // Corre UNA VEZ (botón en Ingeniería) para arreglar de raíz los registros
 // que ya existían en la base de datos con el comedor mal escrito
@@ -3420,10 +3497,11 @@ async function cargarEmpleados(){
         <td><span class="badge ${e.rol==='admin'?'badge-c':e.rol==='chef'?'badge-r':'badge-g'}">${e.rol||'empleado'}</span></td>
         <td><span class="badge ${e.activo!==false?'badge-v':'badge-r'}">${e.activo!==false?'Activo':'Inactivo'}</span></td>
         <td style="font-family:monospace;font-size:.78rem;color:var(--v);font-weight:700">${e.codigo_gafete||'—'}</td>
-        <td><span class="badge badge-g">${e.comedor||'—'}</span></td>
+        <td><span class="badge badge-g">${e.comedor||'—'}</span>${e.acceso_todos_comedores?'<span class="badge badge-c" style="margin-left:.3rem;font-size:.62rem" title="Puede comer en cualquiera de los 3 comedores">🌐 Completo</span>':''}</td>
         <td style="font-family:monospace;font-size:.78rem;color:var(--g2)">${e.password_texto||'—'}</td>
         <td style="display:flex;gap:.4rem;flex-wrap:wrap">
           <button class="btn btn-outline btn-sm" onclick="toggleActivo('${d.id}',${e.activo!==false})">${e.activo!==false?'Desactivar':'Activar'}</button>
+          <button class="btn btn-outline btn-sm" onclick="toggleComedorCompleto('${d.id}',${!!e.acceso_todos_comedores},'${(e.nombre||'').replace(/'/g,"\\'")}')" title="Si está activo, puede comer en cualquiera de los 3 comedores, no solo el que tiene asignado">${e.acceso_todos_comedores?'🌐 Quitar Completo':'🌐 Hacer Completo'}</button>
           ${e.codigo_gafete?`<button class="btn btn-v btn-sm" onclick="imprimirGafete('${d.id}','${e.nombre}','${e.codigo_gafete}','${e.puesto||'Empleado'}','${e.comedor||'betel'}')">🖨 Gafete</button>`:''}
           <button class="btn btn-outline btn-sm" onclick="restablecerAccesoEmpleado('${d.id}','${(e.nombre||'').replace(/'/g,"\\'")}','${(e.password_texto||'').replace(/'/g,"\\'")}')" title="Poner una contraseña nueva o re-sincronizar su acceso si dejó de poder entrar">🔑 Restablecer acceso</button>
           <button class="btn btn-danger btn-sm" onclick="eliminarEmpleado('${d.id}','${e.nombre}')">Eliminar</button>
@@ -3511,6 +3589,18 @@ window.toggleActivo=async function(uid, activoActual){
   } catch(e) {
     console.error('Error al cambiar estado de empleado:', e);
     alert('No se pudo actualizar el estado del empleado.');
+  }
+};
+
+// Cuenta "Completo": puede comer en cualquiera de los 3 comedores, no solo
+// el que tiene asignado en "Comedor" — el escáner (scanner.html) revisa este
+// mismo campo para saltarse la validación de "Comedor incorrecto".
+window.toggleComedorCompleto=async function(uid, actual, nombre){
+  try {
+    await updateDoc(doc(db,'empleados',uid), { acceso_todos_comedores: !actual });
+  } catch(e) {
+    console.error('Error al cambiar Completo:', e);
+    alert('No se pudo actualizar a '+(nombre||'este empleado')+': '+e.message);
   }
 };
 
@@ -3681,6 +3771,7 @@ window.mostrarModalEmpleado=function(){
   document.getElementById('emp-comedor').value='betel';
   document.getElementById('emp-rol').value='empleado';
   document.getElementById('emp-subsidiado').checked=false;
+  document.getElementById('emp-completo').checked=false;
   const msg=document.getElementById('emp-msg');
   msg.style.display='none'; msg.className='msg'; msg.textContent='';
   const btn=document.getElementById('btn-guardar-emp');
@@ -3699,6 +3790,7 @@ async function guardarNuevoEmpleado(){
   const comedor = document.getElementById('emp-comedor').value;
   const rol = document.getElementById('emp-rol').value;
   const subsidiado = document.getElementById('emp-subsidiado').checked;
+  const completo = document.getElementById('emp-completo').checked;
   const msg = document.getElementById('emp-msg');
   function mostrarMsg(txt, ok){
     msg.textContent=txt; msg.className='msg '+(ok?'ok':'err'); msg.style.display='block';
@@ -3719,6 +3811,7 @@ async function guardarNuevoEmpleado(){
       puesto: puesto || 'Empleado',
       activo: true,
       subsidiado: subsidiado,
+      acceso_todos_comedores: completo,
       codigo_gafete: generarCodigoGafeteUnico(usados),
       origen: 'manual'
     });
