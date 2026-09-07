@@ -11,7 +11,7 @@
 <meta http-equiv="Expires" content="0"/>
 <script>
 (function(){
-  var V='20260826-1';
+  var V='20260907-1';
   try{
     fetch('version.txt?_='+Date.now(),{cache:'no-store'}).then(function(r){return r.ok?r.text():null;}).then(function(t){
       if(!t) return;
@@ -395,7 +395,7 @@ function suscribirOrdenes() {
     // Detectar órdenes nuevas para toast
     nuevasCola.forEach(o => {
       if (!cola.find(x => x.id === o.id) && !completadasLista.find(x => x.id === o.id)) {
-        toast((o.hora_preorden ? '⏰ Pre-orden' : '🔔 Nueva orden') + ' — ' + (o.empleado_nombre||'').split(' ')[0]);
+        toast((o.hora_preorden ? '⏰ Pre-orden' : o.categoria==='desayuno' ? '🍳 Nuevo desayuno' : '🔔 Nueva orden') + ' — ' + (o.empleado_nombre||'').split(' ')[0]);
       }
     });
 
@@ -473,6 +473,7 @@ function render(){
       ? '<span class="card-badge activa">Preparando</span>'
       : '<span class="card-badge espera">#'+(i+1)+' en cola</span>';
     const preordenTag = esPreorden ? '<span class="card-badge" style="background:rgba(255,255,255,.2);color:white;margin-left:.35rem">⏰ Pre-orden</span>' : '';
+    const desayunoTag = o.categoria==='desayuno' ? '<span class="card-badge" style="background:rgba(255,255,255,.2);color:white;margin-left:.35rem">🍳 Desayuno</span>' : '';
 
     const tiempoTxt = esActiva ? 'Preparando ahora' : 'En espera';
     const plHTML = (o.platillos||[]).map(p => '<div class="platillo"><div class="platillo-dot"></div>'+p+'</div>').join('');
@@ -494,11 +495,11 @@ function render(){
       '<div class="card-head" style="background:'+headBg+'">'
         +'<div class="card-num-wrap"><div class="card-num">'+(i+1)+'</div>'
         +'<div><div class="card-empleado">'+(o.empleado_nombre||'—').split(' ').slice(0,2).join(' ')+'</div>'
-        +'<div class="card-tiempo">'+tiempoTxt+'</div></div></div>'+badge+preordenTag
+        +'<div class="card-tiempo">'+tiempoTxt+'</div></div></div>'+badge+preordenTag+desayunoTag
       +'</div>'
       +'<div class="card-body">'
         +'<div style="background:var(--vl2);border-radius:8px;padding:.5rem .75rem;margin-bottom:.25rem">'
-        +'<div class="card-sec" style="color:var(--v);margin-bottom:.35rem">Buffet del día</div>'+plHTML
+        +'<div class="card-sec" style="color:var(--v);margin-bottom:.35rem">'+(o.categoria==='desayuno'?'Desayuno':'Buffet del día')+'</div>'+plHTML
         +'</div>'+exHTML
       +'</div>'+timerHTML+footHTML;
 
@@ -533,6 +534,7 @@ function render(){
           +'<span style="font-weight:700;color:var(--negro)">'+(o.empleado_nombre||'—').split(' ').slice(0,2).join(' ')+'</span>'
           +'<span style="color:var(--g3)">'+fmtHoraTs(o.tsLista)+'</span>'
           +(o.hora_preorden?'<span style="font-size:.65rem;background:var(--cl);color:var(--c);padding:.1rem .4rem;border-radius:5px;font-weight:700">Pre-orden</span>':'')
+          +(o.categoria==='desayuno'?'<span style="font-size:.65rem;background:var(--vl2);color:var(--v);padding:.1rem .4rem;border-radius:5px;font-weight:700">🍳 Desayuno</span>':'')
           +'<svg class="chip-arrow" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="var(--g3)" stroke-width="2" stroke-linecap="round" style="margin-left:auto;transition:transform .2s"><polyline points="6 9 12 15 18 9"/></svg>'
         +'</div>'
         +'<div class="chip-detalle" style="display:none;padding:.5rem .85rem .75rem;border-top:1px solid var(--borde2)">'
