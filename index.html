@@ -12,7 +12,7 @@
 <meta http-equiv="Expires" content="0"/>
 <script>
 (function(){
-  var V='20260828-1';
+  var V='20260907-1';
   try{
     fetch('version.txt?_='+Date.now(),{cache:'no-store'}).then(function(r){return r.ok?r.text():null;}).then(function(t){
       if(!t) return;
@@ -290,6 +290,7 @@ html,body{height:100%;font-family:'Inter',system-ui,sans-serif;background:var(--
         <div class="sub-seccion" id="sal-fecha">—</div>
       </div>
       <div id="inicio-contenido"><div class="loading"><div class="spinner"></div>Cargando menú...</div></div>
+      <div id="desayuno-contenido"></div>
     </div>
 
     <!-- MENÚS -->
@@ -465,6 +466,35 @@ let buffetDet = false, extrasDet = [], platDet = [], grupoSelDet = [];
 let diaIdx = 0;
 let menusSemana = [];
 let unsubOrdenes = null;
+
+// ── DESAYUNO ──
+// Menú de desayuno: FIJO, siempre igual, todos los días, 8:00am–1:00pm, sin
+// ningún subsidio de la empresa (el precio de la lista es el precio final
+// que paga el empleado). No cambia por día como el menú de comida, así que
+// no vive en Firestore — es una constante aquí mismo. Si algún día cambian
+// los precios o los productos, se edita esta lista.
+const MENU_DESAYUNO = [
+  { nombre: 'Café 12oz', precio: 15, grupo: null },
+  { nombre: 'Té', precio: 15, grupo: null },
+  { nombre: 'Hot Cakes', precio: 50, grupo: null },
+  { nombre: 'Molletes', precio: 45, grupo: null },
+  { nombre: 'Sincronizadas', precio: 45, grupo: null },
+  { nombre: 'Chilaquiles con huevo', precio: 50, grupo: null },
+  { nombre: 'Chilaquiles con pollo', precio: 50, grupo: null },
+  { nombre: 'Torta de Jamón', precio: 45, grupo: 'Tortas' },
+  { nombre: 'Torta de Salchicha', precio: 45, grupo: 'Tortas' },
+  { nombre: 'Torta de Milanesa de Res', precio: 50, grupo: 'Tortas' },
+  { nombre: 'Torta de Milanesa de Pollo', precio: 50, grupo: 'Tortas' },
+  { nombre: 'Torta de Pierna', precio: 45, grupo: 'Tortas' },
+];
+let ordenesDesayuno = {}; // { fecha: ordenDoc } — separado de "ordenes" (comida) a propósito, ver suscribirOrdenes()
+let desayunoSel = {};     // { nombre: {nombre, precio, cantidad} }
+let _pidiendoDesayuno = false;
+function dentroHorarioDesayuno() {
+  const d = new Date();
+  const mins = d.getHours() * 60 + d.getMinutes();
+  return mins >= 8 * 60 && mins < 13 * 60; // 8:00am a 12:59pm — a la 1:00pm en punto se cierra
+}
 
 const DS = ['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'];
 const MS = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
@@ -675,6 +705,7 @@ async function iniciarApp() {
     set('pf-rol', rolLabelsPf[perfil.rol] || perfil.rol || 'Empleado');
     pg('pg-emp');
     suscribirOrdenes();
+    renderDesayuno();
     await cargarMenuHoy();
   } catch(e) {
     console.error('iniciarApp error:', e);
@@ -688,15 +719,27 @@ function suscribirOrdenes() {
   const hoyStr = hoy();
   unsubOrdenes = db.collection('ordenes').where('empleado_uid', '==', uid).onSnapshot(function(snap) {
     ordenes = {};
+    ordenesDesayuno = {};
     snap.forEach(function(d) {
       const data = d.data();
       if (data.fecha < hoyStr) return;
       const fecha = data.fecha;
+      // Las órdenes de desayuno se guardan en su propio mapa (ordenesDesayuno),
+      // aparte del de comida (ordenes). Un empleado puede tener AMBAS el mismo
+      // día — si se mezclaran en el mismo mapa bajo la misma llave de fecha,
+      // una se pisaría con la otra según el orden de llegada del snapshot.
+      if (data.categoria === 'desayuno') {
+        const existenteD = ordenesDesayuno[fecha];
+        if (existenteD && existenteD.estado !== 'cancelado' && data.estado === 'cancelado') return;
+        ordenesDesayuno[fecha] = { id: d.id, ...data };
+        return;
+      }
       const existente = ordenes[fecha];
       if (existente && existente.estado !== 'cancelado' && data.estado === 'cancelado') return;
       ordenes[fecha] = { id: d.id, ...data };
     });
     renderInicio();
+    renderDesayuno();
     if (document.getElementById('t-pedidos').style.display === 'block') renderPedidos();
     renderDiasTabs();
   }, function(err) {
@@ -917,6 +960,179 @@ function actuTick(modo, menu) {
     }
   }
 }
+
+// ══════════════ DESAYUNO (8am–1pm, menú fijo, sin subsidio) ══════════════
+// Sección totalmente aparte del flujo de comida de arriba — no comparte
+// variables (buffetHoy/extrasHoy/platHoy/etc.) ni el mapa "ordenes" de
+// comida, justamente para no arriesgarse a romper nada de lo que ya
+// funciona. Vive en su propio contenedor #desayuno-contenido.
+function renderDesayuno() {
+  const cont = document.getElementById('desayuno-contenido');
+  if (!cont || !perfil) return;
+  const ordenHoyD = ordenesDesayuno[hoy()];
+  const ordenActiva = ordenHoyD && ordenHoyD.estado !== 'cancelado' ? ordenHoyD : null;
+
+  if (ordenActiva) {
+    const o = ordenActiva;
+    cont.innerHTML = `
+      <div class="card" style="margin-top:1.25rem">
+        <div class="card-head"><span class="card-label">🍳 Desayuno de hoy</span><span class="badge badge-verde">${o.escaneado ? 'Escaneado' : 'Pedido'}</span></div>
+        <div class="card-bod">
+          <div style="background:var(--crema);border-radius:var(--rs);padding:.75rem 1rem">
+            <div style="font-size:.65rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--g3);margin-bottom:.4rem">Tu pedido</div>
+            ${(o.platillos || []).map(p => `<div style="font-size:.82rem;color:var(--g1);padding:.15rem 0">• ${p}</div>`).join('')}
+            <div style="font-size:.82rem;font-weight:700;color:var(--v);margin-top:.4rem">Total: $${o.cargo}.00</div>
+          </div>
+          <div style="font-size:.75rem;color:var(--g3);margin-top:.6rem">🪪 Presenta tu gafete en el comedor antes de la 1:00pm — si no se escanea a tiempo, se cancela automático y no se cobra.</div>
+          ${!o.escaneado ? `<button class="btn-ghost" style="margin-top:.75rem;color:var(--rojo)" onclick="cancelarPedidoDesayuno('${o.id}')">Cancelar este pedido</button>` : ''}
+        </div>
+      </div>`;
+    return;
+  }
+
+  if (!dentroHorarioDesayuno()) {
+    cont.innerHTML = `
+      <div class="card" style="margin-top:1.25rem">
+        <div class="card-head"><span class="card-label">🍳 Desayuno</span><span class="badge badge-gris">Cerrado</span></div>
+        <div class="card-bod"><div class="empty-s">El desayuno se sirve todos los días de 8:00am a 1:00pm. Vuelve en ese horario para pedir.</div></div>
+      </div>`;
+    return;
+  }
+
+  cont.innerHTML = `
+    <div class="card" style="margin-top:1.25rem" id="card-desayuno">
+      <div class="card-head"><span class="card-label">🍳 Desayuno</span><span class="badge badge-verde">8am – 1pm</span></div>
+      <div class="card-bod">
+        <div id="items-desayuno"></div>
+        <div class="ticket" id="ticket-desayuno"><div id="ticket-desayuno-rows"></div></div>
+        <button class="btn-fill" id="btn-pedir-desayuno" style="margin-top:.9rem">Pedir desayuno</button>
+      </div>
+    </div>`;
+  renderItemsDesayuno(document.getElementById('items-desayuno'));
+  actuTicketDesayuno();
+  document.getElementById('btn-pedir-desayuno').addEventListener('click', pedirDesayuno);
+}
+
+function renderItemsDesayuno(cont) {
+  cont.innerHTML = '';
+  let grupoActual = undefined;
+  MENU_DESAYUNO.forEach(it => {
+    if (it.grupo !== grupoActual) {
+      grupoActual = it.grupo;
+      if (grupoActual) {
+        const st = document.createElement('div');
+        st.className = 'sec-tit';
+        st.textContent = grupoActual;
+        cont.appendChild(st);
+      }
+    }
+    const cant = (desayunoSel[it.nombre] && desayunoSel[it.nombre].cantidad) || 0;
+    const row = document.createElement('div');
+    row.className = 'item';
+    row.style.cssText = 'display:flex;align-items:center;justify-content:space-between;padding:.5rem 0;cursor:default';
+    row.innerHTML = `
+      <div class="item-left"><span class="item-nom">${it.nombre}</span></div>
+      <div style="display:flex;align-items:center;gap:.65rem">
+        <span class="item-precio">$${it.precio}</span>
+        <div style="display:flex;align-items:center;gap:.45rem">
+          <button type="button" class="btn-qty-menos" style="width:26px;height:26px;border-radius:50%;border:1px solid var(--borde);background:#fff;font-weight:700;color:var(--v);cursor:pointer;line-height:1">−</button>
+          <span class="qty-val" style="min-width:16px;text-align:center;font-weight:700;font-size:.85rem">${cant}</span>
+          <button type="button" class="btn-qty-mas" style="width:26px;height:26px;border-radius:50%;border:1px solid var(--borde);background:#fff;font-weight:700;color:var(--v);cursor:pointer;line-height:1">+</button>
+        </div>
+      </div>`;
+    const qtyVal = row.querySelector('.qty-val');
+    function cambiar(delta) {
+      let c = (desayunoSel[it.nombre] && desayunoSel[it.nombre].cantidad) || 0;
+      c = Math.max(0, c + delta);
+      if (c > 0) desayunoSel[it.nombre] = { nombre: it.nombre, precio: it.precio, cantidad: c };
+      else delete desayunoSel[it.nombre];
+      qtyVal.textContent = c;
+      actuTicketDesayuno();
+    }
+    row.querySelector('.btn-qty-menos').addEventListener('click', () => cambiar(-1));
+    row.querySelector('.btn-qty-mas').addEventListener('click', () => cambiar(1));
+    cont.appendChild(row);
+  });
+}
+
+function actuTicketDesayuno() {
+  const items = Object.values(desayunoSel);
+  const tk = document.getElementById('ticket-desayuno');
+  const rows = document.getElementById('ticket-desayuno-rows');
+  const total = items.reduce((s, i) => s + i.precio * i.cantidad, 0);
+  if (!items.length) { if (tk) tk.style.display = 'none'; }
+  else if (tk) {
+    tk.style.display = 'block';
+    rows.innerHTML = items.map(i => `<div class="t-row"><span class="l">${i.nombre}${i.cantidad > 1 ? ' x' + i.cantidad : ''}</span><span class="v">$${i.precio * i.cantidad}.00</span></div>`).join('')
+      + `<div class="t-div"></div><div class="t-row tot"><span class="l">Total a pagar</span><span class="v">$${total}.00</span></div>`;
+  }
+  const btn = document.getElementById('btn-pedir-desayuno');
+  if (btn) btn.textContent = total > 0 ? `Pedir desayuno — $${total}.00` : 'Pedir desayuno';
+}
+
+// Cancela cualquier orden de desayuno previa del empleado ese mismo día —
+// separado de cancelarOrdenesDelDia() (que es solo de comida) para no
+// cancelar por accidente el pedido de comida del empleado al pedir desayuno.
+async function cancelarOrdenesDesayunoDelDia(fecha) {
+  const q = query(collection(db, 'ordenes'), where('empleado_uid', '==', auth.currentUser.uid), where('categoria', '==', 'desayuno'));
+  const snap = await getDocs(q);
+  const promises = [];
+  snap.forEach(d => {
+    const data = d.data();
+    if (data.fecha === fecha && data.estado !== 'cancelado') {
+      promises.push(updateDoc(doc(db, 'ordenes', d.id), { estado: 'cancelado', cancelado_en: new Date() }));
+    }
+  });
+  await Promise.all(promises);
+}
+
+async function pedirDesayuno() {
+  const items = Object.values(desayunoSel);
+  if (!items.length) { alert('Selecciona al menos un producto de desayuno'); return; }
+  if (!dentroHorarioDesayuno()) { alert('El desayuno solo se puede pedir de 8:00am a 1:00pm.'); renderDesayuno(); return; }
+  if (_pidiendoDesayuno) return;
+  _pidiendoDesayuno = true;
+  const btn = document.getElementById('btn-pedir-desayuno');
+  const txtOriginal = btn ? btn.textContent : null;
+  if (btn) { btn.disabled = true; btn.textContent = 'Enviando...'; }
+  try {
+    await cancelarOrdenesDesayunoDelDia(hoy());
+    const total = items.reduce((s, i) => s + i.precio * i.cantidad, 0);
+    const platillos = [];
+    items.forEach(i => { for (let k = 0; k < i.cantidad; k++) platillos.push(i.nombre); });
+    const data = {
+      empleado_uid: auth.currentUser.uid,
+      empleado_nombre: perfil.nombre,
+      fecha: hoy(),
+      categoria: 'desayuno',
+      desayuno_items: items,
+      platillos,
+      extras: [],
+      cargo: total,
+      tipo: 'momento', hora_preorden: null,
+      comedor: await comedorVigente(),
+      estado: 'pagado', escaneado: false,
+      subsidiado: false,
+      creado_en: serverTimestamp()
+    };
+    const ref = await addDoc(collection(db, 'ordenes'), data);
+    ordenesDesayuno[hoy()] = { id: ref.id, ...data };
+    desayunoSel = {};
+    renderDesayuno();
+  } catch (err) {
+    console.error('Error al pedir desayuno:', err);
+    alert('No se pudo enviar tu pedido de desayuno, intenta de nuevo.');
+    if (btn) { btn.disabled = false; btn.textContent = txtOriginal; }
+  } finally {
+    _pidiendoDesayuno = false;
+  }
+}
+
+window.cancelarPedidoDesayuno = async function(ordenId) {
+  if (!confirm('¿Cancelar este pedido de desayuno? Podrás volver a pedir mientras siga dentro del horario (8am–1pm).')) return;
+  await updateDoc(doc(db, 'ordenes', ordenId), { estado: 'cancelado', cancelado_en: serverTimestamp() });
+};
+// ══════════════ FIN DESAYUNO ══════════════
 
 // Antes de CADA pedido se vuelve a consultar el comedor real del empleado en
 // Firestore, en vez de confiar nada más en lo que se cargó al abrir la app.
@@ -1182,28 +1398,33 @@ document.getElementById('btn-conf-ok').addEventListener('click', () => {
 // ── PEDIDOS ──
 function renderPedidos() {
   const lista = document.getElementById('pedidos-lista');
-  const keys = Object.keys(ordenes);
-  if (!keys.length) {
+  // Combina comida (ordenes) y desayuno (ordenesDesayuno) en una sola lista
+  // — son dos mapas separados a propósito (ver suscribirOrdenes), pero aquí
+  // sí se muestran juntos porque al empleado le sirve verlos en un mismo lugar.
+  const items = [];
+  Object.keys(ordenes).forEach(fecha => items.push({ fecha, o: ordenes[fecha], esDesayuno: false }));
+  Object.keys(ordenesDesayuno).forEach(fecha => items.push({ fecha, o: ordenesDesayuno[fecha], esDesayuno: true }));
+  if (!items.length) {
     lista.innerHTML = '<div class="empty"><svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg><div class="empty-t">Sin pedidos activos</div><div class="empty-s">Tus códigos aparecerán aquí</div></div>';
     return;
   }
   lista.innerHTML = '';
-  keys.sort().reverse().forEach(fecha => {
-    const o = ordenes[fecha];
+  items.sort((a, b) => b.fecha.localeCompare(a.fecha) || (a.esDesayuno === b.esDesayuno ? 0 : a.esDesayuno ? -1 : 1));
+  items.forEach(({ fecha, o, esDesayuno }) => {
     const cancelada = o.estado === 'cancelado';
     const card = document.createElement('div');
     card.className = 'pedido-card';
     card.style.cssText = cancelada ? 'opacity:.45;border-left-color:var(--g3)' : '';
     card.innerHTML = `
       <div class="pedido-head">
-        <span class="pedido-fecha">${fmtFecha(fecha)}</span>
+        <span class="pedido-fecha">${fmtFecha(fecha)}${esDesayuno ? ' · 🍳 Desayuno' : ''}</span>
         ${cancelada
           ? '<span class="badge badge-gris">Cancelada</span>'
-          : `<span class="badge ${o.hora_preorden ? 'badge-ciruela' : 'badge-verde'}">${o.hora_preorden ? 'Pre-orden' : 'Al llegar'}</span>`}
+          : esDesayuno ? '<span class="badge badge-verde">Desayuno</span>' : `<span class="badge ${o.hora_preorden ? 'badge-ciruela' : 'badge-verde'}">${o.hora_preorden ? 'Pre-orden' : 'Al llegar'}</span>`}
       </div>
       <div class="pedido-body">
         <div class="pedido-tipo" style="${cancelada?'color:var(--g3);text-decoration:line-through':''}">
-          ${cancelada ? 'Orden cancelada' : o.hora_preorden ? '⏰ Preordenado para las ' + o.hora_preorden + ' — escanea tu gafete para que se prepare' : '🪪 Presenta tu gafete al llegar al comedor'}
+          ${cancelada ? 'Orden cancelada' : esDesayuno ? '🪪 Presenta tu gafete antes de la 1:00pm en el comedor' : o.hora_preorden ? '⏰ Preordenado para las ' + o.hora_preorden + ' — escanea tu gafete para que se prepare' : '🪪 Presenta tu gafete al llegar al comedor'}
         </div>
         ${o.platillos?.length ? `<div style="margin-bottom:.6rem">${o.platillos.map(p=>`<div style="font-size:.82rem;color:var(--g${cancelada?'3':'1'});padding:.1rem 0">• ${p}</div>`).join('')}</div>` : ''}
         ${!cancelada ? `<div style="background:var(--vl);border-radius:var(--rs);padding:.65rem;text-align:center;margin-bottom:.5rem"><div style="font-size:.78rem;font-weight:600;color:var(--v)">Tu gafete es tu acceso al comedor</div></div>` : ''}
@@ -1213,7 +1434,7 @@ function renderPedidos() {
         <span class="pedido-total-val" style="${cancelada?'color:var(--g3);text-decoration:line-through':''}">$${o.cargo}.00</span>
       </div>`;
 
-    if (!cancelada && o.hora_preorden && o.fecha === hoy()) {
+    if (!esDesayuno && !cancelada && o.hora_preorden && o.fecha === hoy()) {
       const btnU = document.createElement('button');
       btnU.className = 'btn-fill';
       btnU.style.cssText = 'display:block;margin:.25rem 1.1rem 1.1rem;width:calc(100% - 2.2rem);font-size:.82rem;padding:.7rem';
@@ -1227,7 +1448,7 @@ function renderPedidos() {
       btnC.className = 'btn-ghost';
       btnC.style.cssText = 'display:block;margin:.25rem 1.1rem 1.1rem;width:calc(100% - 2.2rem);font-size:.82rem;padding:.7rem;color:var(--rojo)';
       btnC.textContent = 'Cancelar este pedido';
-      btnC.addEventListener('click', () => window.cancelarPedidoEmpleado(o.id));
+      btnC.addEventListener('click', () => esDesayuno ? window.cancelarPedidoDesayuno(o.id) : window.cancelarPedidoEmpleado(o.id));
       card.appendChild(btnC);
     }
     lista.appendChild(card);
