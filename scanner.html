@@ -12,7 +12,7 @@
 <meta http-equiv="Expires" content="0"/>
 <script>
 (function(){
-  var V='20260828-1';
+  var V='20260907-1';
   try{
     fetch('version.txt?_='+Date.now(),{cache:'no-store'}).then(function(r){return r.ok?r.text():null;}).then(function(t){
       if(!t) return;
@@ -341,7 +341,25 @@ window.escanear=async function(){
     return;
   }
 
-  const orden=ordenes[0];
+  // Un empleado puede tener AMBAS una orden de comida y una de desayuno el
+  // mismo día. Durante el horario de desayuno (8am–1pm) se prioriza la orden
+  // de desayuno pendiente si existe; fuera de ese horario (o si no pidió
+  // desayuno) se usa la de comida, igual que siempre. Así nunca se activa
+  // por accidente la orden equivocada.
+  const desayunoPend=ordenes.filter(o=>o.categoria==='desayuno');
+  const comidaPend=ordenes.filter(o=>o.categoria!=='desayuno');
+  const orden=(dentroHorarioDesayuno() && desayunoPend.length) ? desayunoPend[0] : (comidaPend.length ? comidaPend[0] : ordenes[0]);
+
+  // Si la orden elegida es de desayuno pero ya pasó la 1:00pm (no se
+  // escaneó a tiempo), se cancela ahí mismo sin costo en vez de dejarla
+  // pasar — el mismo criterio que aplica el barrido automático cada rato,
+  // pero de inmediato si alguien intenta escanearla justo en ese hueco.
+  if(orden.categoria==='desayuno' && !dentroHorarioDesayuno()){
+    try{ await updateDoc(doc(db,'ordenes',orden.id), { estado:'cancelado', cancelado_en:new Date() }); }catch(e){}
+    mostrarRes('error','Desayuno fuera de horario',nombrePersona,'El desayuno se sirve de 8:00am a 1:00pm — este pedido se canceló, no se cobra');
+    agregarHistorial((nombrePersona||'?')+' (desayuno fuera de horario)','error');
+    return;
+  }
 
   // Marcar como escaneado dentro de una transacción: lee y escribe de forma
   // atómica para que dos escaneos casi simultáneos del mismo gafete (dos
@@ -377,7 +395,7 @@ window.escanear=async function(){
 
   // Mostrar éxito
   const pls=(resultado.data.platillos||[]).concat((resultado.data.extras||[]).map(e=>typeof e==='string'?e:e.nombre+' (extra)'));
-  mostrarRes('ok','¡Bienvenido!',nombrePersona,'Pasando a cocina ahora');
+  mostrarRes('ok', resultado.data.categoria==='desayuno' ? '¡Bienvenido! · 🍳 Desayuno' : '¡Bienvenido!', nombrePersona,'Pasando a cocina ahora');
   document.getElementById('res-pedido').style.display='block';
   document.getElementById('res-platillos').innerHTML=pls.map(p=>`<div class="res-platillo">• ${p}</div>`).join('');
   agregarHistorial(nombrePersona,'ok');
@@ -413,6 +431,9 @@ function agregarHistorial(nombre,tipo){
 // en México eso adelanta la fecha un día, haciendo que el escáner busque las
 // órdenes de "mañana" en vez de las de hoy y rechace a empleados válidos.
 function hoy(){ const d=new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+
+// Horario de desayuno: 8:00am a 1:00pm todos los días, siempre igual.
+function dentroHorarioDesayuno(){ const d=new Date(); const m=d.getHours()*60+d.getMinutes(); return m>=8*60 && m<13*60; }
 </script>
 </body>
 </html>
