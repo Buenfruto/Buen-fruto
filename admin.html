@@ -15,7 +15,7 @@
 // fuerza una recarga limpia. sessionStorage evita que se quede en bucle si
 // version.txt no está disponible por algún motivo.
 (function(){
-  var V='20260828-1';
+  var V='20260907-1';
   try{
     fetch('version.txt?_='+Date.now(),{cache:'no-store'}).then(function(r){return r.ok?r.text():null;}).then(function(t){
       if(!t) return;
@@ -1438,7 +1438,10 @@ async function cargarDashboard(){
     // porque a las visitas el cargo siempre se guarda en 0 aunque sí hayan
     // pedido buffet o extras.
     const valorTotal=ordenes.reduce((s,o)=>{
-      const tuvoBuffet=(o.platillos||[]).length>0;
+      // El desayuno nunca lo subsidia la empresa — nunca cuenta como "tuvo
+      // buffet" aquí, o se le acreditaría de más un subsidio de $110/$55
+      // sobre algo que el empleado ya pagó completo.
+      const tuvoBuffet=o.categoria==='desayuno' ? false : (o.platillos||[]).length>0;
       const costoExtras=(o.extras||[]).reduce((se,e)=>se+(Number(e&&e.precio)||0),0);
       return s+(tuvoBuffet?PRECIO_TOTAL:0)+costoExtras;
     },0);
@@ -1487,7 +1490,7 @@ async function cargarDashboard(){
         <td style="font-weight:600">${o.empleado_nombre||'—'}</td>
         <td style="max-width:160px;font-size:.78rem">${(o.platillos||[]).join(', ')||'—'}</td>
         <td style="font-size:.78rem;color:var(--naranja)">${(o.extras||[]).map(e=>e.nombre||e).join(', ')||'—'}</td>
-        <td>${o.hora_preorden?'<span class="badge badge-c">⏰ '+o.hora_preorden+'</span>':'<span class="badge badge-v">Al llegar</span>'}</td>
+        <td>${o.categoria==='desayuno'?'<span class="badge badge-v">🍳 Desayuno</span>':o.hora_preorden?'<span class="badge badge-c">⏰ '+o.hora_preorden+'</span>':'<span class="badge badge-v">Al llegar</span>'}</td>
         <td style="font-weight:700">$${o.cargo}</td>
         <td>${o.escaneado?'<span class="badge badge-v">Escaneado</span>':'<span class="badge badge-g">Pendiente</span>'}</td>
         <td>${o.escaneado?'<span style="font-size:.72rem;color:var(--g3)">Ya en cocina</span>':'<button class="btn btn-outline btn-sm" onclick="cancelarOrdenAdmin(\''+o.id+'\')">Cancelar</button>'}</td>
@@ -4569,18 +4572,25 @@ function agregarOrdenesPorEmpleado(docs, comedorFiltro){
     // "Extras" y otra "Costo extras" por separado.
     const extrasTexto = (o.extras||[]).map(e=>typeof e==='string'?e:e.nombre).join(', ');
     const costoExtras = (o.extras||[]).reduce((s,e)=>s+(typeof e==='string'?0:(Number(e.precio)||0)), 0);
+    // El desayuno NUNCA lo subsidia la empresa (precio de lista = precio que
+    // paga el empleado, siempre) — a diferencia del buffet de comida. Por
+    // eso una orden de desayuno jamás debe contarse como "tuvo buffet" aquí:
+    // si se dejara pasar, se le acreditaría por error un subsidio de $55 a
+    // la empresa sobre algo que el empleado sí pagó completo.
+    const esDesayuno = o.categoria === 'desayuno';
     // Un empleado subsidiado al 100% no paga el buffet — la empresa cubre
     // el buffet completo ($110, no solo los $55 de siempre) — pero SÍ se le
     // cobran los extras igual que a cualquiera, y eso sí se descuenta de
     // nómina (pagoEmp), no lo cubre la empresa. Si ese día no hubo buffet
     // (solo extras), no hay nada que subsidiar — antes esto marcaba $55 de
     // subsidio aunque no hubiera buffet ese día; ya corregido.
-    const tuvoBuffet = (o.platillos||[]).length > 0;
+    const tuvoBuffet = esDesayuno ? false : (o.platillos||[]).length > 0;
     const subsidio = tuvoBuffet ? (o.subsidiado ? PRECIO_TOTAL : (PRECIO_TOTAL - PRECIO_EMPLEADO)) : 0;
     const pagoEmp = o.subsidiado ? costoExtras : (Number(o.cargo) || 0); // blindaje: un dato mal formado nunca debe volverse "$NaN.00" en el total
     porEmp[o.empleado_uid].dias.push({
       id: o.id,
       fecha: o.fecha,
+      categoria: esDesayuno ? 'desayuno' : 'comida',
       platillos: (o.platillos||[]).join(', ')||'—',
       tuvo_buffet: tuvoBuffet,
       extras: extrasTexto||'—',
@@ -4595,6 +4605,24 @@ function agregarOrdenesPorEmpleado(docs, comedorFiltro){
   // Count) — se busca en el padrón de empleados vivo, por uid.
   lista.forEach(function(emp){ emp.id_empleado = buscarIdEmpleado(emp.uid); });
   return lista;
+}
+
+// Visitas (personas sin cuenta que pidieron por el link de visita) del
+// período — se calculan APARTE de agregarOrdenesPorEmpleado porque no
+// tienen empleado_uid ni nómina de la que descontarles nada; la empresa
+// las cubre al 100%. Misma lógica exacta que usa renderizarReporte() para
+// pintarlas en pantalla — se sacó a una función aparte para que las
+// descargas (CSV y Excel) puedan incluirlas también y así SIEMPRE cuadren
+// con lo que se ve en pantalla.
+function calcularVisitasPeriodo(docsRaw, comedorFiltro){
+  return (docsRaw||[]).filter(function(o){
+    return o.tipo === 'visita' && o.estado !== 'cancelado' && o.escaneado &&
+      (comedorFiltro === 'todos' || o.comedor === comedorFiltro);
+  }).map(function(o){
+    const tuvoBuffet = (o.platillos||[]).length > 0;
+    const costoExtras = (o.extras||[]).reduce(function(s,e){ return s+(Number(e&&e.precio)||0); },0);
+    return Object.assign({}, o, { costo_extras: costoExtras, valor_empresa: (tuvoBuffet?PRECIO_TOTAL:0)+costoExtras });
+  });
 }
 
 // Busca el ID B360 (o ID Plata / login, lo que se haya guardado como hc_id
@@ -4960,6 +4988,11 @@ function renderizarReporte(){
     const tEmp     = emp.dias.reduce((s,d)=>s+d.pago_empleado,0);
     const tEmpresa = emp.dias.reduce((s,d)=>s+d.subsidio_empresa,0);
     const tTotal   = tEmp + tEmpresa;
+    // Desayuno se separa del total de comida (nunca lo subsidia la empresa,
+    // así que aquí "tEmp" y "tTotal" del desayuno son siempre lo mismo).
+    const diasComida = emp.dias.filter(d=>d.categoria!=='desayuno');
+    const diasDesayuno = emp.dias.filter(d=>d.categoria==='desayuno');
+    const tEmpDesayuno = diasDesayuno.reduce((s,d)=>s+d.pago_empleado,0);
     const bg = color+'18';
     const mov = indicativoMovimiento(emp.nombre, _repMovDocs);
     const movBadge = mov ? `<span style="display:inline-block;margin-left:.5rem;font-size:.65rem;font-weight:700;padding:.15rem .55rem;border-radius:20px;background:${mov.tipo==='alta'?'var(--vl)':'var(--rojol)'};color:${mov.tipo==='alta'?'var(--v)':'var(--rojo)'}">${mov.texto}</span>` : '';
@@ -4973,7 +5006,7 @@ function renderizarReporte(){
           <div style="width:32px;height:32px;border-radius:50%;background:${bg};display:flex;align-items:center;justify-content:center;font-size:.75rem;font-weight:700;color:${color};flex-shrink:0">${emp.iniciales}</div>
           <div>
             <div style="font-size:.88rem;font-weight:700;color:var(--negro)">${emp.nombre}${idBadge}${subsBadge}${movBadge}</div>
-            <div style="font-size:.72rem;color:var(--g3)">${emp.dias.length} comida${emp.dias.length!==1?'s':''} en este período</div>
+            <div style="font-size:.72rem;color:var(--g3)">${diasComida.length} comida${diasComida.length!==1?'s':''}${diasDesayuno.length?(' · '+diasDesayuno.length+' desayuno'+(diasDesayuno.length!==1?'s':'')):''} en este período</div>
           </div>
         </div>
         <div style="text-align:right">
@@ -4986,6 +5019,7 @@ function renderizarReporte(){
         <thead>
           <tr style="border-bottom:1.5px solid var(--borde)">
             <th style="text-align:left;padding:.45rem .75rem;font-size:.65rem;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--g3);background:var(--crema)">Fecha</th>
+            <th style="text-align:left;padding:.45rem .75rem;font-size:.65rem;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--g3);background:var(--crema)">Tipo</th>
             <th style="text-align:left;padding:.45rem .75rem;font-size:.65rem;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--g3);background:var(--crema)">Platillos</th>
             <th style="text-align:left;padding:.45rem .75rem;font-size:.65rem;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--g3);background:var(--crema)">Extras</th>
             <th style="text-align:right;padding:.45rem .75rem;font-size:.65rem;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--g3);background:var(--crema)">Costo extras</th>
@@ -5001,11 +5035,13 @@ function renderizarReporte(){
       const dt = new Date(d.fecha+'T12:00:00');
       const fmtDia = DS_R[dt.getDay()]+' '+dt.getDate()+' '+MS_R[dt.getMonth()];
       const bg = di%2===0 ? 'var(--w)' : '#FAFAF8';
+      const esD = d.categoria==='desayuno';
       html += `
           <tr style="border-bottom:1.5px solid var(--borde);background:${bg}">
             <td style="padding:.65rem .75rem;white-space:nowrap">
               <span style="display:inline-block;background:var(--vl);color:var(--v);font-size:.72rem;font-weight:700;padding:.2rem .65rem;border-radius:20px">${fmtDia}</span>
             </td>
+            <td style="padding:.65rem .75rem;white-space:nowrap">${esD ? '<span class="badge badge-v" style="font-size:.65rem">🍳 Desayuno</span>' : '<span class="badge badge-g" style="font-size:.65rem">Comida</span>'}</td>
             <td style="padding:.65rem .75rem;color:var(--negro)">${d.platillos}</td>
             <td style="padding:.65rem .75rem;color:${d.extras==='—'?'var(--g3)':'var(--naranja)'}">${d.extras}</td>
             <td style="padding:.65rem .75rem;text-align:right;color:${d.costo_extras?'var(--naranja)':'var(--g3)'}">${d.costo_extras?('$'+d.costo_extras+'.00'):'—'}</td>
@@ -5016,9 +5052,16 @@ function renderizarReporte(){
           </tr>`;
     });
 
-    html += `
+    html += `${diasDesayuno.length ? `
+          <tr style="background:#FFF7E6">
+            <td colspan="5" style="padding:.5rem .75rem;font-weight:700;font-size:.75rem;color:var(--g2)">Subtotal desayuno ${emp.nombre.split(' ')[0]}</td>
+            <td style="padding:.5rem .75rem;text-align:right;font-weight:700;color:var(--negro)">$${tEmpDesayuno}.00</td>
+            <td style="padding:.5rem .75rem;text-align:right;font-weight:700;color:var(--v)">$0.00</td>
+            <td style="padding:.5rem .75rem;text-align:right;font-weight:700;color:var(--negro)">$${tEmpDesayuno}.00</td>
+            <td style="padding:.5rem .75rem"></td>
+          </tr>` : ''}
           <tr style="background:var(--crema)">
-            <td colspan="4" style="padding:.55rem .75rem;font-weight:700;font-size:.78rem;color:var(--g2)">Subtotal ${emp.nombre.split(' ')[0]}</td>
+            <td colspan="5" style="padding:.55rem .75rem;font-weight:700;font-size:.78rem;color:var(--g2)">Subtotal ${emp.nombre.split(' ')[0]}</td>
             <td style="padding:.55rem .75rem;text-align:right;font-weight:800;color:var(--negro)">$${tEmp}.00</td>
             <td style="padding:.55rem .75rem;text-align:right;font-weight:700;color:var(--v)">$${tEmpresa}.00</td>
             <td style="padding:.55rem .75rem;text-align:right;font-weight:800;color:var(--negro)">$${tTotal}.00</td>
@@ -5124,15 +5167,17 @@ window.exportarCSV = function(){
     [(tipo==='dia'?'Día':tipo==='semana'?'Semana':'Período')+': '+desde+' al '+hasta],
     ['Generado: '+new Date().toLocaleString('es-MX')],
     [],
-    ['Empleado','Fecha','Platillos','Extras','Pago empleado','Subsidio empresa','Total día']
+    ['Empleado','Fecha','Tipo','Platillos','Extras','Pago empleado','Subsidio empresa','Total día']
   ];
 
   _reporteRaw.forEach(emp=>{
+    const diasDesayuno = emp.dias.filter(d=>d.categoria==='desayuno');
     emp.dias.forEach(d=>{
       const dt = new Date(d.fecha+'T12:00:00');
       rows.push([
         emp.nombre,
         DS2[dt.getDay()]+' '+dt.getDate()+'/'+('0'+(dt.getMonth()+1)).slice(-2),
+        d.categoria==='desayuno' ? 'Desayuno' : 'Comida',
         d.platillos,
         d.extras,
         '$'+d.pago_empleado,
@@ -5140,15 +5185,43 @@ window.exportarCSV = function(){
         '$'+d.total_dia
       ]);
     });
+    if (diasDesayuno.length) {
+      const tEmpD = diasDesayuno.reduce((s,d)=>s+d.pago_empleado,0);
+      rows.push(['SUBTOTAL DESAYUNO '+emp.nombre,'','',diasDesayuno.length+' desayunos','','$'+tEmpD,'$0','$'+tEmpD]);
+    }
     const tEmp = emp.dias.reduce((s,d)=>s+d.pago_empleado,0);
     const tEmp2 = emp.dias.reduce((s,d)=>s+d.subsidio_empresa,0);
-    rows.push(['SUBTOTAL '+emp.nombre,'','',emp.dias.length+' comidas','$'+tEmp,'$'+tEmp2,'$'+(tEmp+tEmp2)]);
+    rows.push(['SUBTOTAL '+emp.nombre,'','',emp.dias.length+' comidas','','$'+tEmp,'$'+tEmp2,'$'+(tEmp+tEmp2)]);
     rows.push([]);
   });
 
+  // Visitas del período — antes NO se incluían en el CSV, lo que hacía que
+  // el total del CSV no cuadrara con el de pantalla (que sí las cuenta).
+  const visitasPeriodo = calcularVisitasPeriodo(_repOrdenesDocs, _repComedor);
+  if (visitasPeriodo.length) {
+    rows.push([]);
+    rows.push(['VISITAS (cubiertas 100% por la empresa)']);
+    rows.push(['Nombre','Fecha','Comedor','Platillos','Extras','','Empresa','']);
+    visitasPeriodo.forEach(v=>{
+      rows.push([
+        v.empleado_nombre||'—', v.fecha||'', ({betel:'Betel',cuauhtemoc:'Cuauhtémoc',interlomas:'Interlomas'})[v.comedor]||v.comedor||'—',
+        (v.platillos||[]).join(', ')||'—', (v.extras||[]).map(e=>e.nombre||e).join(', ')||'—', '', '$'+v.valor_empresa, ''
+      ]);
+    });
+    rows.push(['SUBTOTAL VISITAS','','',visitasPeriodo.length+' visitas','','','$'+visitasPeriodo.reduce((s,v)=>s+v.valor_empresa,0),'']);
+    rows.push([]);
+  }
+
   const gtEmp     = _reporteRaw.reduce((s,e)=>s+e.dias.reduce((ss,d)=>ss+d.pago_empleado,0),0);
-  const gtEmpresa = _reporteRaw.reduce((s,e)=>s+e.dias.reduce((ss,d)=>ss+d.subsidio_empresa,0),0);
-  rows.push(['TOTAL GENERAL','','','','$'+gtEmp,'$'+gtEmpresa,'$'+(gtEmp+gtEmpresa)]);
+  const gtEmpresaEmp = _reporteRaw.reduce((s,e)=>s+e.dias.reduce((ss,d)=>ss+d.subsidio_empresa,0),0);
+  const gtEmpresaVisitas = visitasPeriodo.reduce((s,v)=>s+v.valor_empresa,0);
+  const gtEmpresa = gtEmpresaEmp + gtEmpresaVisitas;
+  const gtDesayuno = _reporteRaw.reduce((s,e)=>s+e.dias.filter(d=>d.categoria==='desayuno').reduce((ss,d)=>ss+d.pago_empleado,0),0);
+  rows.push(['TOTAL DESAYUNOS','','','','','$'+gtDesayuno,'$0','$'+gtDesayuno]);
+  // "TOTAL GENERAL" ahora sí incluye el valor de las visitas en "Subsidio
+  // empresa", igual que el "Total empresa" que se ve en pantalla — antes
+  // solo sumaba lo de empleados y por eso no cuadraba con la interfaz.
+  rows.push(['TOTAL GENERAL','','','','','$'+gtEmp,'$'+gtEmpresa,'$'+(gtEmp+gtEmpresa)]);
 
   const csv = rows.map(r=>r.map(c=>'"'+String(c).replace(/"/g,'""')+'"').join(',')).join('\n');
   const blob = new Blob(['\uFEFF'+csv],{type:'text/csv;charset=utf-8'});
@@ -5166,6 +5239,11 @@ window.exportarCSV = function(){
 // mes del Historial mensual, así el formato siempre es idéntico.
 async function construirWorkbookReporte(datosPorEmpleado, opts){
   const etiquetaTipo = opts.etiquetaTipo, tituloRango = opts.tituloRango, movDocs = opts.movDocs;
+  // Visitas del período (ya calculadas por el que llama, con
+  // calcularVisitasPeriodo) — antes este Excel no las incluía para nada,
+  // por lo que su total nunca cuadraba con el de pantalla (que sí las
+  // cuenta al 100% a cargo de la empresa).
+  const visitas = opts.visitas || [];
   const VERDE = 'FF5C6B4A', DORADO = 'FFE8C84A', CREMA = 'FFF5F0E8', BLANCO = 'FFFFFFFF';
 
   const wb = new ExcelJS.Workbook();
@@ -5173,7 +5251,7 @@ async function construirWorkbookReporte(datosPorEmpleado, opts){
   wb.created = new Date();
   const ws = wb.addWorksheet('Reporte', { views: [{ state:'frozen', ySplit: 4 }] });
 
-  ws.mergeCells('A1:I1');
+  ws.mergeCells('A1:J1');
   const titulo = ws.getCell('A1');
   titulo.value = 'Buen Fruto — Reporte '+etiquetaTipo+' de comedor';
   titulo.font = { name:'Arial', size:15, bold:true, color:{argb:BLANCO} };
@@ -5181,21 +5259,24 @@ async function construirWorkbookReporte(datosPorEmpleado, opts){
   titulo.fill = { type:'pattern', pattern:'solid', fgColor:{argb:VERDE} };
   ws.getRow(1).height = 26;
 
-  ws.mergeCells('A2:I2');
+  ws.mergeCells('A2:J2');
   const subtitulo = ws.getCell('A2');
   subtitulo.value = tituloRango + '   ·   Generado: ' + new Date().toLocaleString('es-MX');
   subtitulo.font = { name:'Arial', size:10, italic:true, color:{argb:'FF666666'} };
   ws.getRow(2).height = 18;
   ws.getRow(3).height = 6;
 
-  const encabezados = ['ID','Empleado','Fecha','Platillos','Extras','Costo extras','Pago empleado','Subsidio empresa','Total día'];
+  // Columnas: ID, Empleado, Fecha, Tipo, Platillos, Extras, Costo extras,
+  // Pago empleado, Subsidio empresa, Total día — "Tipo" (Comida/Desayuno)
+  // se agregó para poder distinguir y filtrar el desayuno del reporte.
+  const encabezados = ['ID','Empleado','Fecha','Tipo','Platillos','Extras','Costo extras','Pago empleado','Subsidio empresa','Total día'];
   const filaEnc = ws.getRow(4);
   encabezados.forEach(function(h, i){
     const cell = filaEnc.getCell(i+1);
     cell.value = h;
     cell.font = { name:'Arial', size:10, bold:true, color:{argb:BLANCO} };
     cell.fill = { type:'pattern', pattern:'solid', fgColor:{argb:VERDE} };
-    cell.alignment = { vertical:'middle', horizontal: i>=6 ? 'right' : 'left' };
+    cell.alignment = { vertical:'middle', horizontal: i>=7 ? 'right' : 'left' };
   });
   filaEnc.height = 20;
 
@@ -5210,21 +5291,40 @@ async function construirWorkbookReporte(datosPorEmpleado, opts){
       r.getCell(1).value = emp.id_empleado || '—';
       r.getCell(2).value = emp.nombre;
       r.getCell(3).value = DS2[dt.getDay()]+' '+dt.getDate()+' '+MS2[dt.getMonth()];
-      r.getCell(4).value = d.platillos;
-      r.getCell(5).value = d.extras;
-      r.getCell(6).value = d.costo_extras;
-      r.getCell(7).value = d.pago_empleado;
-      r.getCell(8).value = d.subsidio_empresa;
-      r.getCell(9).value = d.total_dia;
+      r.getCell(4).value = d.categoria==='desayuno' ? 'Desayuno' : 'Comida';
+      r.getCell(5).value = d.platillos;
+      r.getCell(6).value = d.extras;
+      r.getCell(7).value = d.costo_extras;
+      r.getCell(8).value = d.pago_empleado;
+      r.getCell(9).value = d.subsidio_empresa;
+      r.getCell(10).value = d.total_dia;
       const bg = fila % 2 === 0 ? CREMA : BLANCO;
-      for (let c=1;c<=9;c++){
+      for (let c=1;c<=10;c++){
         const cell = r.getCell(c);
         cell.font = { name:'Arial', size:10 };
         cell.fill = { type:'pattern', pattern:'solid', fgColor:{argb:bg} };
-        if (c>=6) { cell.numFmt = '$#,##0'; cell.alignment = { horizontal:'right' }; }
+        if (c>=7) { cell.numFmt = '$#,##0'; cell.alignment = { horizontal:'right' }; }
       }
       fila++;
     });
+
+    const diasDesayuno = emp.dias.filter(function(d){ return d.categoria==='desayuno'; });
+    if (diasDesayuno.length) {
+      const tEmpD = diasDesayuno.reduce(function(s,d){ return s+d.pago_empleado; }, 0);
+      const rSubD = ws.getRow(fila);
+      rSubD.getCell(2).value = 'Subtotal desayuno '+emp.nombre.split(' ')[0];
+      rSubD.getCell(5).value = diasDesayuno.length+' desayuno'+(diasDesayuno.length!==1?'s':'');
+      rSubD.getCell(8).value = tEmpD;
+      rSubD.getCell(9).value = 0;
+      rSubD.getCell(10).value = tEmpD;
+      for (let c=1;c<=10;c++){
+        const cell = rSubD.getCell(c);
+        cell.font = { name:'Arial', size:10, bold:true };
+        cell.fill = { type:'pattern', pattern:'solid', fgColor:{argb:'FFFFF2CC'} };
+        if (c>=7) { cell.numFmt = '$#,##0'; cell.alignment = { horizontal:'right' }; }
+      }
+      fila++;
+    }
 
     const tEmp = emp.dias.reduce(function(s,d){ return s+d.pago_empleado; }, 0);
     const tEmpresa = emp.dias.reduce(function(s,d){ return s+d.subsidio_empresa; }, 0);
@@ -5233,37 +5333,174 @@ async function construirWorkbookReporte(datosPorEmpleado, opts){
     const mov = indicativoMovimiento(emp.nombre, movDocs);
     rSub.getCell(2).value = 'Subtotal '+emp.nombre.split(' ')[0] + (mov ? ' — '+mov.texto : '');
     rSub.getCell(5).value = emp.dias.length+' comida'+(emp.dias.length!==1?'s':'');
-    rSub.getCell(6).value = tCostoExtras;
-    rSub.getCell(7).value = tEmp;
-    rSub.getCell(8).value = tEmpresa;
-    rSub.getCell(9).value = tEmp+tEmpresa;
-    for (let c=1;c<=9;c++){
+    rSub.getCell(7).value = tCostoExtras;
+    rSub.getCell(8).value = tEmp;
+    rSub.getCell(9).value = tEmpresa;
+    rSub.getCell(10).value = tEmp+tEmpresa;
+    for (let c=1;c<=10;c++){
       const cell = rSub.getCell(c);
       cell.font = { name:'Arial', size:10, bold:true };
       cell.fill = { type:'pattern', pattern:'solid', fgColor:{argb:DORADO} };
-      if (c>=6) { cell.numFmt = '$#,##0'; cell.alignment = { horizontal:'right' }; }
+      if (c>=7) { cell.numFmt = '$#,##0'; cell.alignment = { horizontal:'right' }; }
     }
     fila++;
   });
 
-  const gtEmp = datosPorEmpleado.reduce(function(s,e){ return s+e.dias.reduce(function(ss,d){ return ss+d.pago_empleado; },0); },0);
-  const gtEmpresa = datosPorEmpleado.reduce(function(s,e){ return s+e.dias.reduce(function(ss,d){ return ss+d.subsidio_empresa; },0); },0);
-  fila++;
-  const rTotal = ws.getRow(fila);
-  rTotal.getCell(2).value = 'TOTAL GENERAL';
-  rTotal.getCell(7).value = gtEmp;
-  rTotal.getCell(8).value = gtEmpresa;
-  rTotal.getCell(9).value = gtEmp + gtEmpresa;
-  for (let c=1;c<=9;c++){
-    const cell = rTotal.getCell(c);
-    cell.font = { name:'Arial', size:11, bold:true, color:{argb:BLANCO} };
-    cell.fill = { type:'pattern', pattern:'solid', fgColor:{argb:VERDE} };
-    if (c>=6) { cell.numFmt = '$#,##0'; cell.alignment = { horizontal:'right' }; }
+  // Visitas — sección aparte, igual que en pantalla: no tienen empleado_uid
+  // ni nómina de la que descontarles nada, la empresa las cubre al 100%.
+  if (visitas.length) {
+    const comedorLabelsVis = { betel:'Betel', cuauhtemoc:'Cuauhtémoc', interlomas:'Interlomas' };
+    fila++;
+    const rVisTit = ws.getRow(fila);
+    rVisTit.getCell(2).value = 'VISITAS — cubiertas 100% por la empresa';
+    rVisTit.getCell(2).font = { name:'Arial', size:11, bold:true, color:{argb:'FFB8860B'} };
+    fila++;
+    const rVisEnc = ws.getRow(fila);
+    ['', 'Nombre', 'Fecha', 'Comedor', 'Platillos', 'Extras', '', 'Empresa'].forEach(function(h, i){
+      if (!h) return;
+      const cell = rVisEnc.getCell(i+1);
+      cell.value = h;
+      cell.font = { name:'Arial', size:10, bold:true, color:{argb:BLANCO} };
+      cell.fill = { type:'pattern', pattern:'solid', fgColor:{argb:VERDE} };
+    });
+    fila++;
+    visitas.forEach(function(v){
+      const r = ws.getRow(fila);
+      r.getCell(2).value = v.empleado_nombre || '—';
+      r.getCell(3).value = v.fecha || '—';
+      r.getCell(4).value = comedorLabelsVis[v.comedor] || v.comedor || '—';
+      r.getCell(5).value = (v.platillos||[]).join(', ') || '—';
+      r.getCell(6).value = (v.extras||[]).map(function(e){ return e.nombre||e; }).join(', ') || '—';
+      r.getCell(8).value = v.valor_empresa;
+      const bg = fila % 2 === 0 ? CREMA : BLANCO;
+      for (let c=2;c<=8;c++){
+        const cell = r.getCell(c);
+        cell.font = { name:'Arial', size:10 };
+        cell.fill = { type:'pattern', pattern:'solid', fgColor:{argb:bg} };
+        if (c===8) { cell.numFmt = '$#,##0'; cell.alignment = { horizontal:'right' }; }
+      }
+      fila++;
+    });
+    const tVisitas = visitas.reduce(function(s,v){ return s+v.valor_empresa; },0);
+    const rVisSub = ws.getRow(fila);
+    rVisSub.getCell(2).value = 'Subtotal Visitas ('+visitas.length+')';
+    rVisSub.getCell(8).value = tVisitas;
+    for (let c=1;c<=10;c++){
+      const cell = rVisSub.getCell(c);
+      cell.font = { name:'Arial', size:10, bold:true };
+      cell.fill = { type:'pattern', pattern:'solid', fgColor:{argb:DORADO} };
+      if (c===8) { cell.numFmt = '$#,##0'; cell.alignment = { horizontal:'right' }; }
+    }
+    fila++;
   }
-  rTotal.height = 22;
+
+  // ── DESAYUNOS — cuadro aparte, con todos los pedidos de desayuno del
+  // período juntos en un solo lugar (antes solo aparecían mezclados dentro
+  // de la tabla de cada empleado, marcados con la columna "Tipo").
+  const desayunosFlat = [];
+  datosPorEmpleado.forEach(function(emp){
+    emp.dias.filter(function(d){ return d.categoria==='desayuno'; }).forEach(function(d){
+      desayunosFlat.push({ id: emp.id_empleado, nombre: emp.nombre, fecha: d.fecha, platillos: d.platillos, total: d.pago_empleado });
+    });
+  });
+  desayunosFlat.sort(function(a,b){ return (a.fecha||'').localeCompare(b.fecha||'') || (a.nombre||'').localeCompare(b.nombre||''); });
+
+  if (desayunosFlat.length) {
+    fila++;
+    const rDesTit = ws.getRow(fila);
+    rDesTit.getCell(2).value = '🍳 DESAYUNOS — todos los pedidos del período';
+    rDesTit.getCell(2).font = { name:'Arial', size:11, bold:true, color:{argb:'FFB8860B'} };
+    fila++;
+    const rDesEnc = ws.getRow(fila);
+    [[1,'ID'], [2,'Empleado'], [3,'Fecha'], [5,'Platillos'], [8,'Total']].forEach(function(pair){
+      const cell = rDesEnc.getCell(pair[0]);
+      cell.value = pair[1];
+      cell.font = { name:'Arial', size:10, bold:true, color:{argb:BLANCO} };
+      cell.fill = { type:'pattern', pattern:'solid', fgColor:{argb:VERDE} };
+      cell.alignment = { horizontal: pair[0]===8 ? 'right' : 'left' };
+    });
+    fila++;
+    desayunosFlat.forEach(function(d){
+      const r = ws.getRow(fila);
+      r.getCell(1).value = d.id || '—';
+      r.getCell(2).value = d.nombre;
+      r.getCell(3).value = d.fecha;
+      r.getCell(5).value = d.platillos;
+      r.getCell(8).value = d.total;
+      const bg = fila % 2 === 0 ? CREMA : BLANCO;
+      [1,2,3,5,8].forEach(function(c){
+        const cell = r.getCell(c);
+        cell.font = { name:'Arial', size:10 };
+        cell.fill = { type:'pattern', pattern:'solid', fgColor:{argb:bg} };
+        if (c===8) { cell.numFmt = '$#,##0'; cell.alignment = { horizontal:'right' }; }
+      });
+      fila++;
+    });
+    const tDesayunosFlat = desayunosFlat.reduce(function(s,d){ return s+d.total; },0);
+    const rDesSub = ws.getRow(fila);
+    rDesSub.getCell(2).value = 'Subtotal Desayunos ('+desayunosFlat.length+')';
+    rDesSub.getCell(8).value = tDesayunosFlat;
+    [1,2,3,5,8].forEach(function(c){
+      const cell = rDesSub.getCell(c);
+      cell.font = { name:'Arial', size:10, bold:true };
+      cell.fill = { type:'pattern', pattern:'solid', fgColor:{argb:'FFFFF2CC'} };
+      if (c===8) { cell.numFmt = '$#,##0'; cell.alignment = { horizontal:'right' }; }
+    });
+    fila++;
+  }
+
+  // ── RESUMEN DE TOTALES — cuadro aparte, solo con estos 6 renglones ──
+  const gtEmpComida = datosPorEmpleado.reduce(function(s,e){ return s+e.dias.filter(function(d){ return d.categoria!=='desayuno'; }).reduce(function(ss,d){ return ss+d.pago_empleado; },0); },0);
+  const gtEmpresaComida = datosPorEmpleado.reduce(function(s,e){ return s+e.dias.filter(function(d){ return d.categoria!=='desayuno'; }).reduce(function(ss,d){ return ss+d.subsidio_empresa; },0); },0);
+  const totalComidas = gtEmpComida + gtEmpresaComida;
+  const gtDesayuno = datosPorEmpleado.reduce(function(s,e){ return s+e.dias.filter(function(d){ return d.categoria==='desayuno'; }).reduce(function(ss,d){ return ss+d.pago_empleado; },0); },0);
+  const totalGeneral = totalComidas + gtDesayuno;
+  const sistema5 = Math.round(totalGeneral * 0.05);
+
+  fila += 2;
+  const rResTit = ws.getRow(fila);
+  ws.mergeCells('B'+fila+':J'+fila);
+  rResTit.getCell(2).value = 'RESUMEN DE TOTALES';
+  rResTit.getCell(2).font = { name:'Arial', size:12, bold:true, color:{argb:BLANCO} };
+  rResTit.getCell(2).fill = { type:'pattern', pattern:'solid', fgColor:{argb:VERDE} };
+  rResTit.getCell(2).alignment = { vertical:'middle' };
+  rResTit.height = 22;
+  fila++;
+
+  const renglones = [
+    { label: 'Total a pagar empleados (comidas)', valor: gtEmpComida, estilo: 'normal' },
+    { label: 'Total subsidio empresa (comidas)',   valor: gtEmpresaComida, estilo: 'normal' },
+    { label: 'Total comidas',                       valor: totalComidas, estilo: 'sub' },
+    { label: 'Total desayunos',                     valor: gtDesayuno, estilo: 'sub' },
+    { label: 'Total desayunos + total comidas',     valor: totalGeneral, estilo: 'total' },
+    { label: 'Corresponde a Sistema (5% de desayunos + comidas)', valor: sistema5, estilo: 'total' }
+  ];
+  renglones.forEach(function(r){
+    const row = ws.getRow(fila);
+    ws.mergeCells('B'+fila+':G'+fila);
+    const esTotal = r.estilo === 'total';
+    const esSub = r.estilo === 'sub';
+    const bgColor = esTotal ? VERDE : esSub ? DORADO : CREMA;
+    const fontLabel = esTotal
+      ? { name:'Arial', size:11, bold:true, color:{argb:BLANCO} }
+      : { name:'Arial', size:10, bold: esSub };
+    const fontValor = esTotal
+      ? { name:'Arial', size:11, bold:true, color:{argb:BLANCO} }
+      : { name:'Arial', size:10, bold:true, color:{argb:'FF5C6B4A'} };
+    row.getCell(2).value = r.label;
+    row.getCell(2).font = fontLabel;
+    row.getCell(2).fill = { type:'pattern', pattern:'solid', fgColor:{argb:bgColor} };
+    row.getCell(8).value = r.valor;
+    row.getCell(8).numFmt = '$#,##0';
+    row.getCell(8).alignment = { horizontal:'right' };
+    row.getCell(8).font = fontValor;
+    row.getCell(8).fill = { type:'pattern', pattern:'solid', fgColor:{argb:bgColor} };
+    if (esTotal) row.height = 22;
+    fila++;
+  });
 
   ws.columns = [
-    { width: 14 }, { width: 26 }, { width: 14 }, { width: 34 }, { width: 22 }, { width: 14 }, { width: 15 }, { width: 16 }, { width: 13 }
+    { width: 14 }, { width: 26 }, { width: 14 }, { width: 12 }, { width: 34 }, { width: 22 }, { width: 14 }, { width: 15 }, { width: 16 }, { width: 13 }
   ];
 
   return wb;
@@ -5680,7 +5917,7 @@ function renderizarPendientes(){
   filas.forEach(function(o, i){
     const dt = new Date((o.fecha||hoy())+'T12:00:00');
     const idEmp = buscarIdEmpleado(o.empleado_uid);
-    const nombreCompleto = (idEmp && idEmp !== '—' ? idEmp+' — ' : '') + (o.empleado_nombre || '—');
+    const nombreCompleto = (idEmp && idEmp !== '—' ? idEmp+' — ' : '') + (o.empleado_nombre || '—') + (o.categoria==='desayuno' ? ' <span style="font-size:.62rem;color:var(--g3)">🍳 Desayuno</span>' : '');
     const bg = i % 2 === 0 ? 'transparent' : 'var(--crema)';
     const badgeEstado = o._terminada
       ? '<span class="badge badge-v" style="font-size:.62rem">✅ Terminada</span>'
@@ -5749,7 +5986,8 @@ window.descargarReporteExcel = async function(){
     const desde = _reporteRangoDesde, hasta = _reporteRangoHasta, tipo = _reporteRangoTipo;
     const etiquetaTipo = tipo==='dia' ? 'Diario' : 'Semanal';
     const tituloRango = tipo==='dia' ? ('Hoy, '+desde) : ('Del '+desde+' al '+hasta);
-    const wb = await construirWorkbookReporte(_reporteRaw, { etiquetaTipo, tituloRango, movDocs: _repMovDocs });
+    const visitas = calcularVisitasPeriodo(_repOrdenesDocs, _repComedor);
+    const wb = await construirWorkbookReporte(_reporteRaw, { etiquetaTipo, tituloRango, movDocs: _repMovDocs, visitas });
     await descargarWorkbook(wb, 'Reporte_Buen_Fruto_'+desde+'_al_'+hasta+'.xlsx');
   } catch(err) {
     console.error('Error al generar el Excel del reporte:', err);
@@ -5953,8 +6191,9 @@ window.descargarReporteMes = async function(offsetMeses, btnEl){
     const movDocs = [];
     snapMov.forEach(d => movDocs.push(d.data()));
     const datos = agregarOrdenesPorEmpleado(docs, _repComedor);
-    if (!datos.length) { alert('No hay órdenes registradas en '+etiqueta+'.'); return; }
-    const wb = await construirWorkbookReporte(datos, { etiquetaTipo: 'Mensual', tituloRango: etiqueta, movDocs });
+    const visitas = calcularVisitasPeriodo(docs, _repComedor);
+    if (!datos.length && !visitas.length) { alert('No hay órdenes registradas en '+etiqueta+'.'); return; }
+    const wb = await construirWorkbookReporte(datos, { etiquetaTipo: 'Mensual', tituloRango: etiqueta, movDocs, visitas });
     await descargarWorkbook(wb, 'Reporte_Buen_Fruto_'+etiqueta.replace(' ','_')+'.xlsx');
   } catch(err) {
     console.error('Error al generar el Excel del historial:', err);
