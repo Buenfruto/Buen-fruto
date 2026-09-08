@@ -12,7 +12,7 @@
 <meta http-equiv="Expires" content="0"/>
 <script>
 (function(){
-  var V='20260907-1';
+  var V='20260907-2';
   try{
     fetch('version.txt?_='+Date.now(),{cache:'no-store'}).then(function(r){return r.ok?r.text():null;}).then(function(t){
       if(!t) return;
@@ -279,6 +279,7 @@ html,body{height:100%;font-family:'Inter',system-ui,sans-serif;background:var(--
     <div class="topbar-right">
       <span class="topbar-name" id="top-nombre">—</span>
       <span class="topbar-role">Empleado</span>
+      <span style="display:block;font-size:.55rem;color:#b7b09c;text-align:right;margin-top:2px">🍳 v20260907-2</span>
     </div>
   </div>
 
@@ -290,7 +291,7 @@ html,body{height:100%;font-family:'Inter',system-ui,sans-serif;background:var(--
         <div class="sub-seccion" id="sal-fecha">—</div>
       </div>
       <div id="inicio-contenido"><div class="loading"><div class="spinner"></div>Cargando menú...</div></div>
-      <div id="desayuno-contenido"></div>
+      <div id="desayuno-contenido" style="border:2px dashed #cc0000;min-height:40px">(desayuno debería salir aquí)</div>
     </div>
 
     <!-- MENÚS -->
