@@ -12,7 +12,7 @@
 <meta http-equiv="Expires" content="0"/>
 <script>
 (function(){
-  var V='20260907-2';
+  var V='20260907-4';
   try{
     fetch('version.txt?_='+Date.now(),{cache:'no-store'}).then(function(r){return r.ok?r.text():null;}).then(function(t){
       if(!t) return;
@@ -170,13 +170,13 @@ html,body{height:100%;font-family:'Inter',system-ui,sans-serif;background:var(--
 /* DIAS */
 .dias-wrap{display:flex;gap:.4rem;overflow-x:auto;padding-bottom:.3rem;margin-bottom:1.25rem;scrollbar-width:none}
 .dias-wrap::-webkit-scrollbar{display:none}
-.dia-tab{flex-shrink:0;display:flex;flex-direction:column;align-items:center;padding:.55rem .7rem .45rem;border-radius:10px;border:1.5px solid var(--borde);cursor:pointer;background:var(--w);transition:all .15s;min-width:50px}
-.dia-tab.on{border-color:var(--v);background:var(--v)}
-.dia-tab .dl{font-size:.6rem;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--g3)}
-.dia-tab .dn{font-size:1.05rem;font-weight:700;color:var(--negro);margin-top:1px}
-.dia-tab.on .dl{color:rgba(255,255,255,.65)}
-.dia-tab.on .dn{color:var(--w)}
-.dia-tab.pasado:not(.on){opacity:.45}
+.dia-tab,.dia-tab-d{flex-shrink:0;display:flex;flex-direction:column;align-items:center;padding:.55rem .7rem .45rem;border-radius:10px;border:1.5px solid var(--borde);cursor:pointer;background:var(--w);transition:all .15s;min-width:50px}
+.dia-tab.on,.dia-tab-d.on{border-color:var(--v);background:var(--v)}
+.dia-tab .dl,.dia-tab-d .dl{font-size:.6rem;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--g3)}
+.dia-tab .dn,.dia-tab-d .dn{font-size:1.05rem;font-weight:700;color:var(--negro);margin-top:1px}
+.dia-tab.on .dl,.dia-tab-d.on .dl{color:rgba(255,255,255,.65)}
+.dia-tab.on .dn,.dia-tab-d.on .dn{color:var(--w)}
+.dia-tab.pasado:not(.on),.dia-tab-d.pasado:not(.on){opacity:.45}
 .dia-dot{width:5px;height:5px;border-radius:50%;margin-top:3px}
 
 /* PEDIDOS */
@@ -279,7 +279,7 @@ html,body{height:100%;font-family:'Inter',system-ui,sans-serif;background:var(--
     <div class="topbar-right">
       <span class="topbar-name" id="top-nombre">—</span>
       <span class="topbar-role">Empleado</span>
-      <span style="display:block;font-size:.55rem;color:#b7b09c;text-align:right;margin-top:2px">🍳 v20260907-2</span>
+      <span style="display:block;font-size:.55rem;color:#b7b09c;text-align:right;margin-top:2px">🍳 v20260907-4</span>
     </div>
   </div>
 
@@ -291,7 +291,7 @@ html,body{height:100%;font-family:'Inter',system-ui,sans-serif;background:var(--
         <div class="sub-seccion" id="sal-fecha">—</div>
       </div>
       <div id="inicio-contenido"><div class="loading"><div class="spinner"></div>Cargando menú...</div></div>
-      <div id="desayuno-contenido" style="border:2px dashed #cc0000;min-height:40px">(desayuno debería salir aquí)</div>
+      <div id="desayuno-contenido"></div>
     </div>
 
     <!-- MENÚS -->
@@ -967,51 +967,96 @@ function actuTick(modo, menu) {
 // variables (buffetHoy/extrasHoy/platHoy/etc.) ni el mapa "ordenes" de
 // comida, justamente para no arriesgarse a romper nada de lo que ya
 // funciona. Vive en su propio contenedor #desayuno-contenido.
+// Día seleccionado en el selector de Desayuno — separado de "diaIdx" (que es
+// el de la pestaña MENÚS, para comida) para no interferir entre ambos.
+let diaIdxDesayuno = null;
+
 function renderDesayuno() {
   const cont = document.getElementById('desayuno-contenido');
   if (!cont || !perfil) return;
-  const ordenHoyD = ordenesDesayuno[hoy()];
-  const ordenActiva = ordenHoyD && ordenHoyD.estado !== 'cancelado' ? ordenHoyD : null;
+  const dias = getDias();
+  if (diaIdxDesayuno === null || diaIdxDesayuno < 0 || diaIdxDesayuno >= dias.length) {
+    const idxHoy = dias.indexOf(hoy());
+    diaIdxDesayuno = idxHoy >= 0 ? idxHoy : 0;
+  }
+  cont.innerHTML = `
+    <div class="card" style="margin-top:1.25rem">
+      <div class="card-head"><span class="card-label">🍳 Desayuno</span></div>
+      <div class="card-bod">
+        <div style="font-size:.72rem;color:var(--g3);margin-bottom:.6rem">Elige el día — puedes adelantar tu pedido para cualquier día de esta semana, sin esperar a que abra.</div>
+        <div class="dias-wrap" id="dias-tabs-desayuno"></div>
+        <div id="desayuno-dia-contenido"></div>
+      </div>
+    </div>`;
+  renderDiasTabsDesayuno();
+  selDiaDesayuno(diaIdxDesayuno);
+}
+
+function renderDiasTabsDesayuno() {
+  const wrap = document.getElementById('dias-tabs-desayuno');
+  if (!wrap) return;
+  wrap.innerHTML = '';
+  const dias = getDias();
+  dias.forEach((f, i) => {
+    const d = new Date(f + 'T12:00:00');
+    const ordenD = ordenesDesayuno[f];
+    const tieneOrden = !!(ordenD && ordenD.estado !== 'cancelado');
+    const esPasado = f < hoy();
+    const btn = document.createElement('div');
+    btn.className = 'dia-tab-d' + (i === diaIdxDesayuno ? ' on' : '') + (esPasado ? ' pasado' : '');
+    btn.innerHTML = `<span class="dl">${DS[d.getDay()]}</span><span class="dn">${d.getDate()}</span><span class="dia-dot" style="background:${tieneOrden ? 'var(--v)' : 'transparent'}"></span>`;
+    btn.addEventListener('click', () => {
+      diaIdxDesayuno = i;
+      renderDiasTabsDesayuno();
+      selDiaDesayuno(i);
+    });
+    wrap.appendChild(btn);
+  });
+}
+
+function selDiaDesayuno(i) {
+  const dias = getDias();
+  const fecha = dias[i];
+  const cont = document.getElementById('desayuno-dia-contenido');
+  if (!cont) return;
+  const ordenD = ordenesDesayuno[fecha];
+  const ordenActiva = ordenD && ordenD.estado !== 'cancelado' ? ordenD : null;
+  const esHoy = fecha === hoy();
+  const esPasado = fecha < hoy();
+  desayunoSel = {}; // al cambiar de día se limpia la selección — cada día es un pedido aparte
 
   if (ordenActiva) {
     const o = ordenActiva;
     cont.innerHTML = `
-      <div class="card" style="margin-top:1.25rem">
-        <div class="card-head"><span class="card-label">🍳 Desayuno de hoy</span><span class="badge badge-verde">${o.escaneado ? 'Escaneado' : 'Pedido'}</span></div>
-        <div class="card-bod">
-          <div style="background:var(--crema);border-radius:var(--rs);padding:.75rem 1rem">
-            <div style="font-size:.65rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--g3);margin-bottom:.4rem">Tu pedido</div>
-            ${(o.platillos || []).map(p => `<div style="font-size:.82rem;color:var(--g1);padding:.15rem 0">• ${p}</div>`).join('')}
-            <div style="font-size:.82rem;font-weight:700;color:var(--v);margin-top:.4rem">Total: $${o.cargo}.00</div>
-          </div>
-          <div style="font-size:.75rem;color:var(--g3);margin-top:.6rem">🪪 Presenta tu gafete en el comedor antes de la 1:00pm — si no se escanea a tiempo, se cancela automático y no se cobra.</div>
-          ${!o.escaneado ? `<button class="btn-ghost" style="margin-top:.75rem;color:var(--rojo)" onclick="cancelarPedidoDesayuno('${o.id}')">Cancelar este pedido</button>` : ''}
-        </div>
-      </div>`;
+      <div style="background:var(--crema);border-radius:var(--rs);padding:.75rem 1rem;margin-top:.9rem">
+        <div style="font-size:.65rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--g3);margin-bottom:.4rem">${esHoy ? 'Tu pedido de hoy' : 'Tu pedido para ' + fmtFecha(fecha)}</div>
+        ${(o.platillos || []).map(p => `<div style="font-size:.82rem;color:var(--g1);padding:.15rem 0">• ${p}</div>`).join('')}
+        <div style="font-size:.82rem;font-weight:700;color:var(--v);margin-top:.4rem">Total: $${o.cargo}.00</div>
+      </div>
+      <div style="font-size:.75rem;color:var(--g3);margin-top:.6rem">🪪 ${esHoy ? 'Presenta tu gafete en el comedor antes de la 1:00pm' : 'Ese día, presenta tu gafete en el comedor antes de la 1:00pm'} — si no se escanea a tiempo, se cancela automático y no se cobra.</div>
+      ${!o.escaneado ? `<button class="btn-ghost" style="margin-top:.75rem;color:var(--rojo)" onclick="cancelarPedidoDesayuno('${o.id}')">Cancelar este pedido</button>` : ''}
+    `;
     return;
   }
 
-  if (!dentroHorarioDesayuno()) {
-    cont.innerHTML = `
-      <div class="card" style="margin-top:1.25rem">
-        <div class="card-head"><span class="card-label">🍳 Desayuno</span><span class="badge badge-gris">Cerrado</span></div>
-        <div class="card-bod"><div class="empty-s">El desayuno se sirve todos los días de 8:00am a 1:00pm. Vuelve en ese horario para pedir.</div></div>
-      </div>`;
+  if (esPasado) {
+    cont.innerHTML = `<div class="empty-s" style="margin-top:.9rem">Este día ya pasó.</div>`;
+    return;
+  }
+
+  if (esHoy && !dentroHorarioDesayuno()) {
+    cont.innerHTML = `<div class="empty-s" style="margin-top:.9rem">El desayuno de hoy se sirve de 8:00am a 1:00pm — vuelve en ese horario para pedirlo, o elige otro día arriba para adelantar tu pedido.</div>`;
     return;
   }
 
   cont.innerHTML = `
-    <div class="card" style="margin-top:1.25rem" id="card-desayuno">
-      <div class="card-head"><span class="card-label">🍳 Desayuno</span><span class="badge badge-verde">8am – 1pm</span></div>
-      <div class="card-bod">
-        <div id="items-desayuno"></div>
-        <div class="ticket" id="ticket-desayuno"><div id="ticket-desayuno-rows"></div></div>
-        <button class="btn-fill" id="btn-pedir-desayuno" style="margin-top:.9rem">Pedir desayuno</button>
-      </div>
-    </div>`;
+    <div id="items-desayuno" style="margin-top:.6rem"></div>
+    <div class="ticket" id="ticket-desayuno"><div id="ticket-desayuno-rows"></div></div>
+    <button class="btn-fill" id="btn-pedir-desayuno" style="margin-top:.9rem">Pedir desayuno</button>
+  `;
   renderItemsDesayuno(document.getElementById('items-desayuno'));
   actuTicketDesayuno();
-  document.getElementById('btn-pedir-desayuno').addEventListener('click', pedirDesayuno);
+  document.getElementById('btn-pedir-desayuno').addEventListener('click', () => pedirDesayuno(fecha));
 }
 
 function renderItemsDesayuno(cont) {
@@ -1087,24 +1132,29 @@ async function cancelarOrdenesDesayunoDelDia(fecha) {
   await Promise.all(promises);
 }
 
-async function pedirDesayuno() {
+async function pedirDesayuno(fecha) {
+  fecha = fecha || hoy();
   const items = Object.values(desayunoSel);
   if (!items.length) { alert('Selecciona al menos un producto de desayuno'); return; }
-  if (!dentroHorarioDesayuno()) { alert('El desayuno solo se puede pedir de 8:00am a 1:00pm.'); renderDesayuno(); return; }
+  // El límite de horario (8am-1pm) solo aplica al pedir el desayuno DE HOY —
+  // adelantar el pedido para otro día de la semana no tiene restricción de
+  // hora, igual que las pre-órdenes de comida.
+  if (fecha === hoy() && !dentroHorarioDesayuno()) { alert('El desayuno de hoy solo se puede pedir de 8:00am a 1:00pm.'); renderDesayuno(); return; }
+  if (fecha < hoy()) { alert('Ese día ya pasó.'); return; }
   if (_pidiendoDesayuno) return;
   _pidiendoDesayuno = true;
   const btn = document.getElementById('btn-pedir-desayuno');
   const txtOriginal = btn ? btn.textContent : null;
   if (btn) { btn.disabled = true; btn.textContent = 'Enviando...'; }
   try {
-    await cancelarOrdenesDesayunoDelDia(hoy());
+    await cancelarOrdenesDesayunoDelDia(fecha);
     const total = items.reduce((s, i) => s + i.precio * i.cantidad, 0);
     const platillos = [];
     items.forEach(i => { for (let k = 0; k < i.cantidad; k++) platillos.push(i.nombre); });
     const data = {
       empleado_uid: auth.currentUser.uid,
       empleado_nombre: perfil.nombre,
-      fecha: hoy(),
+      fecha,
       categoria: 'desayuno',
       desayuno_items: items,
       platillos,
@@ -1117,9 +1167,10 @@ async function pedirDesayuno() {
       creado_en: serverTimestamp()
     };
     const ref = await addDoc(collection(db, 'ordenes'), data);
-    ordenesDesayuno[hoy()] = { id: ref.id, ...data };
+    ordenesDesayuno[fecha] = { id: ref.id, ...data };
     desayunoSel = {};
-    renderDesayuno();
+    renderDiasTabsDesayuno();
+    selDiaDesayuno(diaIdxDesayuno);
   } catch (err) {
     console.error('Error al pedir desayuno:', err);
     alert('No se pudo enviar tu pedido de desayuno, intenta de nuevo.');
@@ -1130,7 +1181,7 @@ async function pedirDesayuno() {
 }
 
 window.cancelarPedidoDesayuno = async function(ordenId) {
-  if (!confirm('¿Cancelar este pedido de desayuno? Podrás volver a pedir mientras siga dentro del horario (8am–1pm).')) return;
+  if (!confirm('¿Cancelar este pedido de desayuno?')) return;
   await updateDoc(doc(db, 'ordenes', ordenId), { estado: 'cancelado', cancelado_en: serverTimestamp() });
 };
 // ══════════════ FIN DESAYUNO ══════════════
