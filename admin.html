@@ -15,7 +15,7 @@
 // fuerza una recarga limpia. sessionStorage evita que se quede en bucle si
 // version.txt no está disponible por algún motivo.
 (function(){
-  var V='20260907-1';
+  var V='20260907-2';
   try{
     fetch('version.txt?_='+Date.now(),{cache:'no-store'}).then(function(r){return r.ok?r.text():null;}).then(function(t){
       if(!t) return;
@@ -317,6 +317,7 @@ input[type=file]{display:none}
     </nav>
     <div class="sidebar-footer">
       <div id="admin-nombre" style="font-size:.8rem;color:rgba(255,255,255,.7)">—</div>
+      <div style="font-size:.65rem;color:rgba(255,255,255,.45);margin-bottom:.4rem">🍳 v20260907-2</div>
       <button class="btn-salir-sidebar" id="btn-salir">
         <svg viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>Cerrar sesión
       </button>
