@@ -15,7 +15,7 @@
 // fuerza una recarga limpia. sessionStorage evita que se quede en bucle si
 // version.txt no está disponible por algún motivo.
 (function(){
-  var V='20260909-4';
+  var V='20260910-1';
   try{
     fetch('version.txt?_='+Date.now(),{cache:'no-store'}).then(function(r){return r.ok?r.text():null;}).then(function(t){
       if(!t) return;
@@ -414,7 +414,7 @@ input[type=file]{display:none}
           <div class="metrica chica"><div class="metrica-label">Empleados activos</div><div class="metrica-val" id="m-empleados">—</div><div class="metrica-sub">Registrados</div></div>
           <div class="metrica chica ciruela"><div class="metrica-label">Pre-órdenes hoy</div><div class="metrica-val" id="m-preordenes">—</div><div class="metrica-sub">Con hora agendada</div></div>
           <div class="metrica chica"><div class="metrica-label">Pagos empleados</div><div class="metrica-val" id="m-recaudado">—</div><div class="metrica-sub">Solo lo que se les cobra a ellos</div></div>
-          <div class="metrica chica"><div class="metrica-label">Corresponde a Sistema</div><div class="metrica-val" id="m-sistema">—</div><div class="metrica-sub">5% del total del día</div></div>
+          <div class="metrica chica"><div class="metrica-label">Corresponde a Sistema</div><div class="metrica-val" id="m-sistema">—</div><div class="metrica-sub">5% de comida + desayuno + visitas, sin importar quién pagó</div></div>
           <div class="metrica chica verde"><div class="metrica-label">Subsidiados hoy</div><div class="metrica-val" id="m-subsidiados">—</div><div class="metrica-sub">Comida 100% empresa</div></div>
           <div class="metrica chica ciruela"><div class="metrica-label">Visitas hoy</div><div class="metrica-val" id="m-visitas">—</div><div class="metrica-sub">Sin cuenta, por link</div></div>
         </div>
@@ -1376,8 +1376,10 @@ function actualizarUIPrecios(){
   if (ie && document.activeElement !== ie) ie.value = PRECIO_EMPLEADO;
   const exp = document.getElementById('precio-explicacion');
   if (exp) exp.textContent = 'La empresa subsidia $' + (PRECIO_TOTAL - PRECIO_EMPLEADO) + ' por cada buffet de un empleado no subsidiado (paga los $' + PRECIO_EMPLEADO + ' restantes). Un empleado subsidiado no paga nada del buffet — la empresa cubre los $' + PRECIO_TOTAL + ' completos. Los extras siempre los paga quien los pide, sin importar si es subsidiado.';
-  const sub = document.getElementById('m-valor-total-sub');
-  if (sub) sub.textContent = '$' + PRECIO_TOTAL + ' por buffet + extras, de todos';
+  // Nota: el texto chico de "Total del día" (m-valor-total-sub) ya NO se
+  // toca aquí — ahora lo controla cargarDashboard() con el desglose real
+  // comida/desayuno de las órdenes de hoy, para no perder ese desglose
+  // cada vez que se guardan los precios.
 }
 function suscribirPrecios(){
   return new Promise(function(resolve){
@@ -1495,26 +1497,41 @@ async function cargarDashboard(){
     // "Pagos empleados": literal, lo que se le cobra a cada empleado (campo
     // cargo) — para subsidiados es solo extras, para visitas siempre 0.
     const total=ordenes.reduce((s,o)=>s+(o.cargo||0),0);
-    // "Pagos empleados + Subsidio": valor completo de lo consumido hoy —
-    // $110 por cada orden que trajo buffet (sea empleado normal, subsidiado
-    // o visita, todos cuentan el mismo $110) más el costo de los extras de
-    // cada orden. Se calcula de platillos/extras y NO del campo cargo,
-    // porque a las visitas el cargo siempre se guarda en 0 aunque sí hayan
-    // pedido buffet o extras.
-    const valorTotal=ordenes.reduce((s,o)=>{
-      // El desayuno nunca lo subsidia la empresa — nunca cuenta como "tuvo
-      // buffet" aquí, o se le acreditaría de más un subsidio de $110/$55
-      // sobre algo que el empleado ya pagó completo.
-      const tuvoBuffet=o.categoria==='desayuno' ? false : (o.platillos||[]).length>0;
+    // "Total del día" (antes "Pagos empleados + Subsidio"): la FACTURACIÓN
+    // TOTAL de hoy — lo que de verdad vale todo lo que salió de cocina, sin
+    // importar quién lo pagó. Se separa en dos partes porque se calculan
+    // distinto:
+    //  · Comida: $110 por cada orden que trajo buffet (empleado normal,
+    //    subsidiado o visita, todos cuentan el mismo $110 de valor aunque
+    //    el subsidiado/visita no paguen nada de su bolsa) más el costo de
+    //    sus extras. Se calcula de platillos/extras y NO del campo cargo,
+    //    porque a las visitas y subsidiados el cargo se guarda en $0 o solo
+    //    extras aunque sí hayan recibido el buffet completo.
+    //  · Desayuno: la empresa NUNCA lo subsidia (nunca cuenta como "tuvo
+    //    buffet" en la lógica de arriba), pero el dinero SÍ pasó por el
+    //    sistema — el empleado pagó el 100% del precio de lista (guardado
+    //    en "cargo") — así que sí debe sumar a la facturación total y al 5%
+    //    de Sistema. Antes esto se quedaba en $0 por error, y el desayuno
+    //    desaparecía de "Total del día" y de "Corresponde a Sistema"
+    //    (bug reportado el 10 de septiembre de 2026 por Sebastián).
+    let valorComida=0, valorDesayuno=0;
+    ordenes.forEach(o=>{
+      if(o.categoria==='desayuno'){ valorDesayuno += Number(o.cargo)||0; return; }
+      const tuvoBuffet=(o.platillos||[]).length>0;
       const costoExtras=(o.extras||[]).reduce((se,e)=>se+(Number(e&&e.precio)||0),0);
-      return s+(tuvoBuffet?PRECIO_TOTAL:0)+costoExtras;
-    },0);
+      valorComida += (tuvoBuffet?PRECIO_TOTAL:0)+costoExtras;
+    });
+    const valorTotal=valorComida+valorDesayuno;
     document.getElementById('m-ordenes').textContent=ordenes.length;
     document.getElementById('m-preordenes').textContent=preordenes.length;
     document.getElementById('m-recaudado').textContent='$'+total;
     document.getElementById('m-valor-total').textContent='$'+valorTotal;
-    // "Corresponde a Sistema": 5% de la Pagos empleados + Subsidio (el valor
-    // completo de lo consumido hoy, no solo lo cobrado a los empleados).
+    const valorTotalSub=document.getElementById('m-valor-total-sub');
+    if(valorTotalSub) valorTotalSub.textContent='$'+valorComida+' comida + $'+valorDesayuno+' desayuno';
+    // "Corresponde a Sistema": 5% de la facturación total de hoy (comida +
+    // desayuno + visitas, sin importar quién pagó cada parte) — el
+    // desayuno cuenta aunque la empresa no lo subsidie, porque el 5% es
+    // sobre lo facturado, no sobre lo subsidiado.
     document.getElementById('m-sistema').textContent='$'+Math.round(valorTotal*0.05);
     document.getElementById('m-subsidiados').textContent=ordenes.filter(o=>o.subsidiado).length;
     document.getElementById('m-visitas').textContent=ordenes.filter(o=>o.tipo==='visita').length;
@@ -5141,6 +5158,50 @@ function renderizarReporte(){
     </div>
   </div>`;
 
+  // Total general — pedido por Sebastián que quede HASTA ARRIBA del
+  // reporte (antes quedaba al final, después de la lista de todos los
+  // empleados). "Total empresa" incluye tanto el subsidio de empleados
+  // subsidiados (gtEmpresaEmp) como el valor completo de las visitas
+  // (gtEmpresaVisitas), porque la empresa las cubre al 100% aunque no se
+  // les cobre nada. El 5% de Sistema se calcula sobre ese gran total ya
+  // con subsidiados y visitas incluidos.
+  //
+  // Desglose comida/desayuno/visitas — pedido explícito de Sebastián para
+  // que quede claro QUÉ es cada peso: el desayuno nunca lo subsidia la
+  // empresa (el empleado paga el 100%), pero ese dinero SÍ es facturación
+  // real que pasó por el sistema, así que SÍ cuenta dentro del 5% de
+  // Sistema — no desaparece ni se resta de nada.
+  const gtEmpComidaTop = _reporteRaw.reduce((s,e)=>s+e.dias.filter(d=>d.categoria!=='desayuno').reduce((ss,d)=>ss+d.pago_empleado,0),0);
+  const gtEmpDesayunoTop = _reporteRaw.reduce((s,e)=>s+e.dias.filter(d=>d.categoria==='desayuno').reduce((ss,d)=>ss+d.pago_empleado,0),0);
+  html += `
+  <div style="border-top:1.5px solid var(--borde);padding-top:1rem;padding-bottom:1rem;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:1rem">
+    <div style="font-size:.8rem;color:var(--g2)">${_reporteRaw.length} empleado${_reporteRaw.length!==1?'s':''} &nbsp;·&nbsp; ${gtComidas} comidas totales${visitasPeriodo.length?(' &nbsp;·&nbsp; '+visitasPeriodo.length+' visita'+(visitasPeriodo.length!==1?'s':'')):''}</div>
+    <div style="display:flex;gap:2rem;text-align:right;flex-wrap:wrap">
+      <div>
+        <div style="font-size:.68rem;color:var(--g3);margin-bottom:.2rem">Total empleados</div>
+        <div style="font-size:1rem;font-weight:800;color:var(--c)">$${gtEmp}.00</div>
+      </div>
+      <div>
+        <div style="font-size:.68rem;color:var(--g3);margin-bottom:.2rem">Total empresa</div>
+        <div style="font-size:1rem;font-weight:800;color:var(--v)">$${gtEmpresa}.00</div>
+      </div>
+      <div>
+        <div style="font-size:.68rem;color:var(--g3);margin-bottom:.2rem">Gran total</div>
+        <div style="font-size:1.1rem;font-weight:800;color:var(--negro)">$${gtEmp+gtEmpresa}.00</div>
+      </div>
+      <div>
+        <div style="font-size:.68rem;color:var(--g3);margin-bottom:.2rem">Corresponde a Sistema (5%)</div>
+        <div style="font-size:1.1rem;font-weight:800;color:#B8860B">$${gtSistema}.00</div>
+      </div>
+    </div>
+  </div>
+  <div style="padding-bottom:1.5rem;margin-bottom:.5rem;border-bottom:1.5px solid var(--borde);font-size:.72rem;color:var(--g3);line-height:1.6">
+    De dónde sale ese Gran total de $${gtEmp+gtEmpresa}.00 — el 5% de Sistema se calcula sobre todo esto junto, sin importar quién pagó cada parte:
+    <br>🍽 Comida: <b style="color:var(--negro)">$${gtEmpComidaTop}.00</b> pagados por empleados + <b style="color:var(--negro)">$${gtEmpresaEmp}.00</b> subsidiados por la empresa
+    <br>🍳 Desayuno: <b style="color:var(--negro)">$${gtEmpDesayunoTop}.00</b> pagados 100% por empleados — la empresa no lo subsidia, pero sí forma parte de la facturación y sí cuenta en el 5%
+    ${visitasPeriodo.length ? `<br>🎟 Visitas: <b style="color:var(--negro)">$${gtEmpresaVisitas}.00</b> cubiertos 100% por la empresa` : ''}
+  </div>`;
+
   // Por empleado
   _reporteRaw.forEach((emp, ei)=>{
     const color = COLORS[ei % COLORS.length];
@@ -5231,36 +5292,9 @@ function renderizarReporte(){
     </div>`;
   });
 
-  // Total general — "Total empresa" ahora incluye tanto el subsidio de
-  // empleados subsidiados (gtEmpresaEmp) como el valor completo de las
-  // visitas (gtEmpresaVisitas), porque la empresa las cubre al 100% aunque
-  // no se les cobre nada. El 5% de Sistema se calcula sobre ese gran total
-  // ya con subsidiados y visitas incluidos.
-  html += `
-  <div style="border-top:1.5px solid var(--borde);padding-top:1rem;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:1rem">
-    <div style="font-size:.8rem;color:var(--g2)">${_reporteRaw.length} empleado${_reporteRaw.length!==1?'s':''} &nbsp;·&nbsp; ${gtComidas} comidas totales${visitasPeriodo.length?(' &nbsp;·&nbsp; '+visitasPeriodo.length+' visita'+(visitasPeriodo.length!==1?'s':'')):''}</div>
-    <div style="display:flex;gap:2rem;text-align:right;flex-wrap:wrap">
-      <div>
-        <div style="font-size:.68rem;color:var(--g3);margin-bottom:.2rem">Total empleados</div>
-        <div style="font-size:1rem;font-weight:800;color:var(--c)">$${gtEmp}.00</div>
-      </div>
-      <div>
-        <div style="font-size:.68rem;color:var(--g3);margin-bottom:.2rem">Total empresa</div>
-        <div style="font-size:1rem;font-weight:800;color:var(--v)">$${gtEmpresa}.00</div>
-      </div>
-      <div>
-        <div style="font-size:.68rem;color:var(--g3);margin-bottom:.2rem">Gran total</div>
-        <div style="font-size:1.1rem;font-weight:800;color:var(--negro)">$${gtEmp+gtEmpresa}.00</div>
-      </div>
-      <div>
-        <div style="font-size:.68rem;color:var(--g3);margin-bottom:.2rem">Corresponde a Sistema (5%)</div>
-        <div style="font-size:1.1rem;font-weight:800;color:#B8860B">$${gtSistema}.00</div>
-      </div>
-    </div>
-  </div>`;
-
   // Visitas del período — ya calculadas arriba (con costo_extras y
-  // valor_empresa) junto con el Total general. Se muestran aparte, sin
+  // valor_empresa) junto con el Total general (que ahora se pinta hasta
+  // arriba del reporte, justo después del encabezado). Se muestran aparte, sin
   // nómina que descontarles (no tienen empleado_uid), pero ahora sí con su
   // valor: la empresa las cubre al 100%.
   if (visitasPeriodo.length) {
@@ -5717,12 +5751,19 @@ async function construirWorkbookReporte(datosPorEmpleado, opts){
     fila++;
   }
 
-  // ── RESUMEN DE TOTALES — cuadro aparte, solo con estos 6 renglones ──
+  // ── RESUMEN DE TOTALES — cuadro aparte, solo con estos renglones ──
   const gtEmpComida = datosPorEmpleado.reduce(function(s,e){ return s+e.dias.filter(function(d){ return d.categoria!=='desayuno'; }).reduce(function(ss,d){ return ss+d.pago_empleado; },0); },0);
   const gtEmpresaComida = datosPorEmpleado.reduce(function(s,e){ return s+e.dias.filter(function(d){ return d.categoria!=='desayuno'; }).reduce(function(ss,d){ return ss+d.subsidio_empresa; },0); },0);
   const totalComidas = gtEmpComida + gtEmpresaComida;
   const gtDesayuno = datosPorEmpleado.reduce(function(s,e){ return s+e.dias.filter(function(d){ return d.categoria==='desayuno'; }).reduce(function(ss,d){ return ss+d.pago_empleado; },0); },0);
-  const totalGeneral = totalComidas + gtDesayuno;
+  // Las visitas no tienen empleado_uid (no están en datosPorEmpleado), pero
+  // la empresa cubre el 100% de lo que pidieron (el "valor_empresa" de cada
+  // una, calculado igual que en el reporte en pantalla) — sin esto el 5%
+  // de Sistema salía corto, sin contar las visitas (pedido explícito de
+  // Sebastián: el subsidio de empresa debe incluir el valor de cada visita
+  // para que el cálculo del 5% esté bien).
+  const gtEmpresaVisitas = visitas.reduce(function(s,v){ return s+(v.valor_empresa||0); },0);
+  const totalGeneral = totalComidas + gtDesayuno + gtEmpresaVisitas;
   const sistema5 = Math.round(totalGeneral * 0.05);
 
   fila += 2;
@@ -5740,8 +5781,9 @@ async function construirWorkbookReporte(datosPorEmpleado, opts){
     { label: 'Total subsidio empresa (comidas)',   valor: gtEmpresaComida, estilo: 'normal' },
     { label: 'Total comidas',                       valor: totalComidas, estilo: 'sub' },
     { label: 'Total desayunos',                     valor: gtDesayuno, estilo: 'sub' },
-    { label: 'Total desayunos + total comidas',     valor: totalGeneral, estilo: 'total' },
-    { label: 'Corresponde a Sistema (5% de desayunos + comidas)', valor: sistema5, estilo: 'total' }
+    { label: 'Total visitas (100% empresa)',        valor: gtEmpresaVisitas, estilo: 'sub' },
+    { label: 'Total general (comidas + desayunos + visitas)', valor: totalGeneral, estilo: 'total' },
+    { label: 'Corresponde a Sistema (5% del total general)', valor: sistema5, estilo: 'total' }
   ];
   renglones.forEach(function(r){
     const row = ws.getRow(fila);
@@ -5925,6 +5967,14 @@ async function construirWorkbookResumenOrdenes(docsCrudos, opts){
   // platillos/extras y NO del campo cargo, porque a las visitas el cargo
   // siempre se guarda en 0 aunque sí hayan pedido buffet o extras.
   function valorOrden(o){
+    // El desayuno guarda sus platillos en el mismo campo "platillos" que la
+    // comida, pero NUNCA es un buffet de precio completo — su valor real es
+    // lo que de verdad se cobró (campo "cargo", precio de lista de cada
+    // producto, sin subsidio). Antes esto no distinguía categoría y le
+    // asignaba por error el valor completo del buffet a cada desayuno
+    // (bug reportado el 10 de septiembre de 2026 — inflaba el "Valor total"
+    // y el 5% de Sistema de este reporte cuando había desayunos).
+    if (o.categoria === 'desayuno') return Number(o.cargo) || 0;
     const tuvoBuffet = (o.platillos||[]).length > 0;
     const costoExtras = (o.extras||[]).reduce(function(se,e){ return se+(Number(e&&e.precio)||0); }, 0);
     return (tuvoBuffet?PRECIO_TOTAL:0) + costoExtras;
