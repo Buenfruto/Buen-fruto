@@ -15,7 +15,7 @@
 // fuerza una recarga limpia. sessionStorage evita que se quede en bucle si
 // version.txt no está disponible por algún motivo.
 (function(){
-  var V='20260907-2';
+  var V='20260909-4';
   try{
     fetch('version.txt?_='+Date.now(),{cache:'no-store'}).then(function(r){return r.ok?r.text():null;}).then(function(t){
       if(!t) return;
@@ -128,6 +128,28 @@ html,body{height:100%;font-family:'Inter',system-ui,sans-serif;background:var(--
 .metrica-sub{font-size:.72rem;color:var(--g2);margin-top:.25rem}
 .metrica.verde .metrica-val{color:var(--v)}
 .metrica.ciruela .metrica-val{color:var(--c)}
+.metrica.alerta .metrica-val{color:var(--rojo)}
+
+/* DASHBOARD: jerarquía titulares/secundarias — pedido por Sebastián para
+   tener más claridad de un vistazo (antes eran 8 tarjetas idénticas). */
+.metricas-titulares{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:1rem;margin-bottom:1rem}
+.metrica.titular{padding:1.5rem 1.75rem}
+.metrica.titular .metrica-label{font-size:.72rem}
+.metrica.titular .metrica-val{font-size:2.5rem}
+.metricas-chicas{display:grid;grid-template-columns:repeat(auto-fit,minmax(145px,1fr));gap:.65rem}
+.metrica.chica{padding:.8rem 1rem}
+.metrica.chica .metrica-label{font-size:.6rem;margin-bottom:.2rem}
+.metrica.chica .metrica-val{font-size:1.2rem}
+.metrica.chica .metrica-sub{font-size:.64rem;margin-top:.15rem}
+
+/* DASHBOARD: comparativa de centros (barras) y tendencia de 7 días */
+.centro-comp-fila{display:flex;align-items:center;gap:.75rem;margin-bottom:.6rem}
+.centro-comp-fila:last-child{margin-bottom:0}
+.centro-comp-nombre{width:90px;flex-shrink:0;font-size:.78rem;font-weight:600;color:var(--negro)}
+.centro-comp-pista{flex:1;background:var(--crema);border-radius:8px;height:22px;overflow:hidden}
+.centro-comp-barra{height:100%;background:var(--v);border-radius:8px;transition:width .3s}
+.centro-comp-val{width:34px;flex-shrink:0;text-align:right;font-size:.82rem;font-weight:700;color:var(--negro)}
+.tendencia-fila{display:flex;align-items:flex-end;gap:.5rem}
 
 /* SECCIONES */
 .seccion{display:none}
@@ -371,19 +393,55 @@ input[type=file]{display:none}
 
         <!-- MÉTRICAS GLOBALES -->
         <div style="font-size:.6rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--g3);margin-bottom:.6rem">Global — Hoy</div>
-        <div class="metricas" id="metricas-wrap" style="margin-bottom:1.75rem">
-          <div class="metrica verde"><div class="metrica-label">Órdenes totales</div><div class="metrica-val" id="m-ordenes">—</div><div class="metrica-sub">Todos los centros</div></div>
-          <div class="metrica"><div class="metrica-label">Empleados activos</div><div class="metrica-val" id="m-empleados">—</div><div class="metrica-sub">Registrados</div></div>
-          <div class="metrica ciruela"><div class="metrica-label">Pre-órdenes hoy</div><div class="metrica-val" id="m-preordenes">—</div><div class="metrica-sub">Con hora agendada</div></div>
-          <div class="metrica"><div class="metrica-label">Pagos empleados</div><div class="metrica-val" id="m-recaudado">—</div><div class="metrica-sub">Solo lo que se les cobra a ellos</div></div>
-          <div class="metrica"><div class="metrica-label">Pagos empleados + Subsidio</div><div class="metrica-val" id="m-valor-total">—</div><div class="metrica-sub" id="m-valor-total-sub">$110 por buffet + extras, de todos</div></div>
-          <div class="metrica"><div class="metrica-label">Corresponde a Sistema</div><div class="metrica-val" id="m-sistema">—</div><div class="metrica-sub">5% de Pagos empleados + Subsidio</div></div>
-          <div class="metrica verde"><div class="metrica-label">Subsidiados hoy</div><div class="metrica-val" id="m-subsidiados">—</div><div class="metrica-sub">Comida 100% empresa</div></div>
-          <div class="metrica ciruela"><div class="metrica-label">Visitas hoy</div><div class="metrica-val" id="m-visitas">—</div><div class="metrica-sub">Sin cuenta, por link</div></div>
+
+        <!-- Titulares: las 3 cifras que más importan de un vistazo -->
+        <div class="metricas-titulares">
+          <div class="metrica titular verde"><div class="metrica-label">Órdenes totales</div><div class="metrica-val" id="m-ordenes">—</div><div class="metrica-sub">Todos los centros</div></div>
+          <div class="metrica titular" id="m-pendientes-card"><div class="metrica-label">Pendientes por escanear</div><div class="metrica-val" id="m-pendientes">—</div><div class="metrica-sub">Ya pedidas, aún no recogidas</div></div>
+          <div class="metrica titular"><div class="metrica-label">Total del día</div><div class="metrica-val" id="m-valor-total">—</div><div class="metrica-sub" id="m-valor-total-sub">Pagos empleados + subsidio, $110 por buffet + extras de todos</div></div>
+        </div>
+
+        <!-- Tendencia de los últimos 7 días -->
+        <div class="card" style="margin-bottom:1rem">
+          <div class="card-head"><span class="card-titulo">Tendencia — últimos 7 días</span><span style="font-size:.7rem;color:var(--g3)">Órdenes por día, todos los centros</span></div>
+          <div class="card-body" style="padding:1rem 1.25rem">
+            <div class="tendencia-fila" id="tendencia-dashboard"><div style="font-size:.78rem;color:var(--g3)">Cargando…</div></div>
+          </div>
+        </div>
+
+        <!-- Secundarias: el resto de las cifras, en detalle -->
+        <div class="metricas-chicas" style="margin-bottom:1.75rem">
+          <div class="metrica chica"><div class="metrica-label">Empleados activos</div><div class="metrica-val" id="m-empleados">—</div><div class="metrica-sub">Registrados</div></div>
+          <div class="metrica chica ciruela"><div class="metrica-label">Pre-órdenes hoy</div><div class="metrica-val" id="m-preordenes">—</div><div class="metrica-sub">Con hora agendada</div></div>
+          <div class="metrica chica"><div class="metrica-label">Pagos empleados</div><div class="metrica-val" id="m-recaudado">—</div><div class="metrica-sub">Solo lo que se les cobra a ellos</div></div>
+          <div class="metrica chica"><div class="metrica-label">Corresponde a Sistema</div><div class="metrica-val" id="m-sistema">—</div><div class="metrica-sub">5% del total del día</div></div>
+          <div class="metrica chica verde"><div class="metrica-label">Subsidiados hoy</div><div class="metrica-val" id="m-subsidiados">—</div><div class="metrica-sub">Comida 100% empresa</div></div>
+          <div class="metrica chica ciruela"><div class="metrica-label">Visitas hoy</div><div class="metrica-val" id="m-visitas">—</div><div class="metrica-sub">Sin cuenta, por link</div></div>
+        </div>
+
+        <!-- COMPARATIVA DE CENTROS -->
+        <div style="font-size:.6rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--g3);margin-bottom:.6rem">Por centro</div>
+        <div class="card" style="margin-bottom:1rem">
+          <div class="card-body" style="padding:1rem 1.25rem">
+            <div class="centro-comp-fila">
+              <div class="centro-comp-nombre">Betel</div>
+              <div class="centro-comp-pista"><div class="centro-comp-barra" id="barra-betel" style="width:0%"></div></div>
+              <div class="centro-comp-val" id="barra-val-betel">—</div>
+            </div>
+            <div class="centro-comp-fila">
+              <div class="centro-comp-nombre">Cuauhtémoc</div>
+              <div class="centro-comp-pista"><div class="centro-comp-barra" id="barra-cuauhtemoc" style="width:0%"></div></div>
+              <div class="centro-comp-val" id="barra-val-cuauhtemoc">—</div>
+            </div>
+            <div class="centro-comp-fila">
+              <div class="centro-comp-nombre">Interlomas</div>
+              <div class="centro-comp-pista"><div class="centro-comp-barra" id="barra-interlomas" style="width:0%"></div></div>
+              <div class="centro-comp-val" id="barra-val-interlomas">—</div>
+            </div>
+          </div>
         </div>
 
         <!-- TARJETAS POR CENTRO -->
-        <div style="font-size:.6rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--g3);margin-bottom:.6rem">Por centro</div>
         <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:1rem;margin-bottom:1.75rem">
 
           <div class="card" style="margin:0">
@@ -765,6 +823,11 @@ input[type=file]{display:none}
           <button class="btn btn-outline btn-sm rep-comedor-btn" onclick="setRepComedor('betel',this)">Betel</button>
           <button class="btn btn-outline btn-sm rep-comedor-btn" onclick="setRepComedor('cuauhtemoc',this)">Cuauhtémoc</button>
           <button class="btn btn-outline btn-sm rep-comedor-btn" onclick="setRepComedor('interlomas',this)">Interlomas</button>
+        </div>
+
+        <div style="display:flex;gap:.5rem;flex-wrap:wrap;margin-bottom:.5rem">
+          <button class="btn btn-outline btn-sm rep-vista-btn active" onclick="setRepVista('comidas',this)">🍽 Comidas</button>
+          <button class="btn btn-outline btn-sm rep-vista-btn" onclick="setRepVista('desayunos',this)">🍳 Desayunos</button>
         </div>
 
         <!-- Selector de período -->
@@ -1455,10 +1518,32 @@ async function cargarDashboard(){
     document.getElementById('m-sistema').textContent='$'+Math.round(valorTotal*0.05);
     document.getElementById('m-subsidiados').textContent=ordenes.filter(o=>o.subsidiado).length;
     document.getElementById('m-visitas').textContent=ordenes.filter(o=>o.tipo==='visita').length;
+    // "Pendientes por escanear": ya pedidas hoy pero todavía sin pasar por
+    // el escáner de ningún comedor — es la cifra que de verdad dice qué
+    // falta por atender ahora mismo, así que se destaca en rojo si hay
+    // alguna pendiente (y en verde si ya no queda ninguna).
+    const pendientes=ordenes.filter(o=>!o.escaneado).length;
+    document.getElementById('m-pendientes').textContent=pendientes;
+    const pendCard=document.getElementById('m-pendientes-card');
+    if(pendCard){ pendCard.classList.toggle('alerta', pendientes>0); pendCard.classList.toggle('verde', pendientes===0); }
     document.getElementById('loading-dashboard').style.display='none';
     const hora=new Date();
     const horaStr=hora.getHours()+':'+String(hora.getMinutes()).padStart(2,'0');
     document.getElementById('dashboard-hora').textContent='Actualizado '+horaStr;
+
+    // Comparativa de centros (barras) — nada más visual, mismas cuentas que
+    // las tarjetas de abajo, solo puestas una junto a otra para comparar de
+    // un vistazo quién va más lleno hoy.
+    const centrosConteo={betel:0,cuauhtemoc:0,interlomas:0};
+    ordenes.forEach(o=>{ if(centrosConteo[o.comedor]!==undefined) centrosConteo[o.comedor]++; });
+    const maxCentro=Math.max(1, centrosConteo.betel, centrosConteo.cuauhtemoc, centrosConteo.interlomas);
+    ['betel','cuauhtemoc','interlomas'].forEach(c=>{
+      const pct=Math.round((centrosConteo[c]/maxCentro)*100);
+      const barEl=document.getElementById('barra-'+c);
+      if(barEl) barEl.style.width=(centrosConteo[c]>0?Math.max(pct,3):0)+'%';
+      const valEl=document.getElementById('barra-val-'+c);
+      if(valEl) valEl.textContent=centrosConteo[c];
+    });
 
     // Tarjetas por centro
     ['betel','cuauhtemoc','interlomas'].forEach(c=>{
@@ -1500,6 +1585,55 @@ async function cargarDashboard(){
   // Empleados count
   const empSnap=await db.collection('empleados').get();
   document.getElementById('m-empleados').textContent=empSnap.size;
+  // Tendencia de 7 días: consulta aparte (no en vivo, se refresca cada vez
+  // que se entra al Dashboard) — no toca ni el listener de hoy ni ningún
+  // cálculo de reportes/nómina, solo cuenta órdenes por fecha para dibujar
+  // las barritas.
+  cargarTendenciaDashboard();
+}
+
+// Cuenta órdenes (no canceladas) por día de los últimos 7 días, incluyendo
+// hoy, y dibuja una barrita por día en el Dashboard. Es de solo lectura —
+// una consulta aparte a 'ordenes' que no interfiere con nada más del
+// sistema (ni el listener en vivo de hoy, ni reportes, ni nómina).
+async function cargarTendenciaDashboard(){
+  const cont=document.getElementById('tendencia-dashboard');
+  if(!cont) return;
+  try{
+    const dias=[];
+    for(let i=6;i>=0;i--){
+      const d=new Date();
+      d.setDate(d.getDate()-i);
+      dias.push(d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'));
+    }
+    const snap=await db.collection('ordenes').where('fecha','>=',dias[0]).where('fecha','<=',dias[dias.length-1]).get();
+    const porDia={};
+    dias.forEach(f=>{ porDia[f]=0; });
+    snap.forEach(d=>{
+      const o=d.data();
+      if(o.estado==='cancelado') return;
+      if(porDia[o.fecha]!==undefined) porDia[o.fecha]++;
+    });
+    const max=Math.max(1, ...dias.map(f=>porDia[f]));
+    const DS_T=['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'];
+    const hoyStr=hoy();
+    cont.innerHTML=dias.map(f=>{
+      const dt=new Date(f+'T12:00:00');
+      const val=porDia[f];
+      const pct=Math.max(Math.round((val/max)*100), val>0?6:0);
+      const esHoy=f===hoyStr;
+      return '<div style="display:flex;flex-direction:column;align-items:center;gap:.4rem;flex:1;min-width:0">'
+        +'<div style="font-size:.72rem;font-weight:700;color:var(--negro)">'+val+'</div>'
+        +'<div style="width:100%;max-width:34px;height:64px;display:flex;align-items:flex-end;background:var(--crema);border-radius:6px;overflow:hidden">'
+        +'<div style="width:100%;height:'+pct+'%;background:'+(esHoy?'var(--v)':'var(--salvia)')+';border-radius:6px 6px 0 0"></div>'
+        +'</div>'
+        +'<div style="font-size:.64rem;color:var(--g3);font-weight:'+(esHoy?'700':'500')+';white-space:nowrap">'+DS_T[dt.getDay()]+' '+dt.getDate()+'</div>'
+        +'</div>';
+    }).join('');
+  }catch(err){
+    console.error('Error al cargar tendencia del dashboard:', err);
+    cont.innerHTML='<div style="font-size:.75rem;color:var(--g3)">No se pudo cargar la tendencia.</div>';
+  }
 }
 
 function fmtHora(d){ return d.getHours()+':'+String(d.getMinutes()).padStart(2,'0'); }
@@ -4432,6 +4566,21 @@ window.setRepComedor = function(comedor, btn) {
   cargarReporte();
 };
 
+// ── VISTA DE REPORTE: Comidas (default) vs Desayunos ──
+// Pestaña aparte pedida por Sebastián para ver el desayuno sin mezclarlo con
+// el reporte de comida. Solo cambia qué se pinta en pantalla (renderizarReporte
+// se ramifica a renderizarReporteDesayunos) — reusa los mismos datos ya
+// cargados (_repOrdenesDocs / _reporteRaw), así que no hace falta recargar
+// nada del servidor ni tocar el reporte de comida/nómina para nada.
+let _reporteVista = 'comidas'; // 'comidas' | 'desayunos'
+
+window.setRepVista = function(vista, btn) {
+  _reporteVista = vista;
+  document.querySelectorAll('.rep-vista-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  renderizarReporte();
+};
+
 // ── ÓRDENES PENDIENTES (aún no escaneadas) Y TERMINADAS DE HOY ──
 let _pendComedor = 'todos';
 let _pendEstado = 'pendientes'; // 'pendientes' | 'terminadas' | 'todas'
@@ -4937,6 +5086,14 @@ function renderizarReporte(){
     return;
   }
 
+  // Vista "Desayunos" — pestaña de solo lectura aparte, no toca ni recalcula
+  // nada de lo que sigue abajo (comida, nómina, Excel, etc.).
+  if (_reporteVista === 'desayunos') {
+    renderizarReporteDesayunos(body, desde, hasta, tipo, d0, d1);
+    _reporteMarcarExito(desde, hasta);
+    return;
+  }
+
   const gtEmp     = _reporteRaw.reduce((s,e)=>s+e.dias.reduce((ss,d)=>ss+d.pago_empleado,0),0);
   const gtEmpresaEmp = _reporteRaw.reduce((s,e)=>s+e.dias.reduce((ss,d)=>ss+d.subsidio_empresa,0),0);
   const gtComidas = _reporteRaw.reduce((s,e)=>s+e.dias.length,0);
@@ -4978,7 +5135,8 @@ function renderizarReporte(){
     </div>
     <div style="text-align:right">
       <div style="font-size:.7rem;color:var(--g3);margin-bottom:.2rem">Comidas en este período</div>
-      <div style="font-size:1.4rem;font-weight:800;color:var(--negro)">${gtComidas}</div>
+      <div style="font-size:1.4rem;font-weight:800;color:var(--negro)">${gtComidas + visitasPeriodo.length}</div>
+      <div style="font-size:.66rem;color:var(--g3);margin-top:.05rem">incluye ${visitasPeriodo.length} visita${visitasPeriodo.length!==1?'s':''}</div>
       <div style="font-size:.72rem;color:var(--g2);margin-top:.1rem">● actualizado en vivo</div>
     </div>
   </div>`;
@@ -5148,6 +5306,115 @@ function renderizarReporte(){
     mostrarAlertaReporte('error', 'Ocurrió un error inesperado al calcular el reporte. Prueba "Recalcular"; si sigue pasando, avísale a soporte.', true);
     console.error('renderizarReporte error:', e);
   }
+}
+
+// Vista aparte de "Desayunos" dentro de Reportes (pestaña 🍳 Desayunos).
+// Reusa _reporteRaw ya calculado por renderizarReporte() con el mismo
+// período/comedor activos — solo filtra los días de categoria 'desayuno' de
+// cada empleado. Es de solo lectura: no recalcula ni modifica nada del
+// reporte de comida ni de los reportes de nómina — así nunca se rompe lo que
+// ya existe ahí (ver petición explícita de Sebastián de no tocar nómina).
+function renderizarReporteDesayunos(body, desde, hasta, tipo, d0, d1){
+  const ahora = new Date();
+  const empsD = _reporteRaw
+    .map(emp => Object.assign({}, emp, { dias: emp.dias.filter(d => d.categoria === 'desayuno') }))
+    .filter(emp => emp.dias.length);
+
+  const gtDesayunos = empsD.reduce((s,e)=>s+e.dias.length,0);
+  const gtTotalDesayunos = empsD.reduce((s,e)=>s+e.dias.reduce((ss,d)=>ss+d.pago_empleado,0),0);
+
+  let html = `
+  <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:1.5rem;padding-bottom:1rem;border-bottom:1.5px solid var(--borde)">
+    <div>
+      <div style="font-size:.68rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--g3);margin-bottom:.3rem">Buen Fruto — Betel</div>
+      <div style="font-size:1.1rem;font-weight:700;color:var(--negro)">🍳 Reporte ${tipo==='dia'?'diario':tipo==='semana'?'semanal':'mensual'} de desayunos</div>
+      <div style="font-size:.78rem;color:var(--g2);margin-top:.2rem">
+        ${tipo==='dia' ? ('Hoy, '+DS_R[d0.getDay()]+' '+d0.getDate()+' de '+MS_R[d0.getMonth()]) : tipo==='semana' ? ('Semana del '+d0.getDate()+' de '+MS_R[d0.getMonth()]+' al '+d1.getDate()+' de '+MS_R[d1.getMonth()]) : (MF_R[d0.getMonth()]+' '+d0.getFullYear())} &nbsp;·&nbsp;
+        Generado ${DS_R[ahora.getDay()]} ${ahora.getDate()} ${MS_R[ahora.getMonth()]}, ${ahora.getHours()}:${String(ahora.getMinutes()).padStart(2,'0')} ${ahora.getHours()<12?'am':'pm'}
+      </div>
+    </div>
+    <div style="text-align:right">
+      <div style="font-size:.7rem;color:var(--g3);margin-bottom:.2rem">Desayunos en este período</div>
+      <div style="font-size:1.4rem;font-weight:800;color:var(--negro)">${gtDesayunos}</div>
+      <div style="font-size:.72rem;color:var(--g2);margin-top:.1rem">● actualizado en vivo</div>
+    </div>
+  </div>`;
+
+  if (!empsD.length) {
+    html += '<div style="text-align:center;padding:3rem;color:var(--g3)">Sin desayunos en este período'+(_repComedor!=='todos'?' para este comedor':'')+'</div>';
+    body.innerHTML = html;
+    return;
+  }
+
+  const COLORS = ['#1a5c96','#6b3fa0','#0f6e56','#993c1d','#854f0b'];
+  empsD.forEach((emp, ei) => {
+    const color = COLORS[ei % COLORS.length];
+    const tEmp = emp.dias.reduce((s,d)=>s+d.pago_empleado,0);
+    const bg = color+'18';
+    const idBadge = `<span style="display:inline-block;margin-left:.5rem;font-size:.65rem;font-weight:700;padding:.15rem .55rem;border-radius:20px;background:var(--crema);color:var(--g2);font-family:monospace">ID ${emp.id_empleado||'—'}</span>`;
+
+    html += `
+    <div style="margin-bottom:1.75rem">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.65rem">
+        <div style="display:flex;align-items:center;gap:10px">
+          <div style="width:32px;height:32px;border-radius:50%;background:${bg};display:flex;align-items:center;justify-content:center;font-size:.75rem;font-weight:700;color:${color};flex-shrink:0">${emp.iniciales}</div>
+          <div>
+            <div style="font-size:.88rem;font-weight:700;color:var(--negro)">${emp.nombre}${idBadge}</div>
+            <div style="font-size:.72rem;color:var(--g3)">${emp.dias.length} desayuno${emp.dias.length!==1?'s':''} en este período</div>
+          </div>
+        </div>
+        <div style="text-align:right">
+          <div style="font-size:.68rem;color:var(--g3)">Descuento nómina</div>
+          <div style="font-size:.95rem;font-weight:800;color:var(--negro)">$${tEmp}.00</div>
+        </div>
+      </div>
+      <table style="width:100%;border-collapse:collapse;font-size:.8rem">
+        <thead>
+          <tr style="border-bottom:1.5px solid var(--borde)">
+            <th style="text-align:left;padding:.45rem .75rem;font-size:.65rem;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--g3);background:var(--crema)">Fecha</th>
+            <th style="text-align:left;padding:.45rem .75rem;font-size:.65rem;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--g3);background:var(--crema)">Platillos</th>
+            <th style="text-align:right;padding:.45rem .75rem;font-size:.65rem;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--g3);background:var(--crema)">Total</th>
+            <th style="text-align:center;padding:.45rem .75rem;font-size:.65rem;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--g3);background:var(--crema)">Acciones</th>
+          </tr>
+        </thead>
+        <tbody>`;
+
+    emp.dias.forEach((d,di)=>{
+      const dt = new Date(d.fecha+'T12:00:00');
+      const fmtDia = DS_R[dt.getDay()]+' '+dt.getDate()+' '+MS_R[dt.getMonth()];
+      const bgRow = di%2===0 ? 'var(--w)' : '#FAFAF8';
+      html += `
+          <tr style="border-bottom:1.5px solid var(--borde);background:${bgRow}">
+            <td style="padding:.65rem .75rem;white-space:nowrap">
+              <span style="display:inline-block;background:var(--vl);color:var(--v);font-size:.72rem;font-weight:700;padding:.2rem .65rem;border-radius:20px">${fmtDia}</span>
+            </td>
+            <td style="padding:.65rem .75rem;color:var(--negro)">${d.platillos}</td>
+            <td style="padding:.65rem .75rem;text-align:right;font-weight:700;color:var(--negro)">$${d.total_dia}.00</td>
+            <td style="padding:.65rem .75rem;text-align:center">${d.id ? '<button class="btn btn-outline btn-sm" style="color:var(--rojo);border-color:var(--rojo)" onclick="eliminarOrdenReporte(\''+d.id+'\')">🗑 Borrar</button>' : ''}</td>
+          </tr>`;
+    });
+
+    html += `
+          <tr style="background:var(--crema)">
+            <td colspan="2" style="padding:.55rem .75rem;font-weight:700;font-size:.78rem;color:var(--g2)">Subtotal ${emp.nombre.split(' ')[0]}</td>
+            <td style="padding:.55rem .75rem;text-align:right;font-weight:800;color:var(--negro)">$${tEmp}.00</td>
+            <td style="padding:.55rem .75rem"></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>`;
+  });
+
+  html += `
+  <div style="border-top:1.5px solid var(--borde);padding-top:1rem;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:1rem">
+    <div style="font-size:.8rem;color:var(--g2)">${empsD.length} empleado${empsD.length!==1?'s':''} &nbsp;·&nbsp; ${gtDesayunos} desayunos totales</div>
+    <div style="text-align:right">
+      <div style="font-size:.68rem;color:var(--g3);margin-bottom:.2rem">Total desayunos (100% empleado)</div>
+      <div style="font-size:1.1rem;font-weight:800;color:var(--negro)">$${gtTotalDesayunos}.00</div>
+    </div>
+  </div>`;
+
+  body.innerHTML = html;
 }
 
 window.exportarCSV = function(){
