@@ -15,7 +15,7 @@
 // fuerza una recarga limpia. sessionStorage evita que se quede en bucle si
 // version.txt no está disponible por algún motivo.
 (function(){
-  var V='20260910-1';
+  var V='20260913-2';
   try{
     fetch('version.txt?_='+Date.now(),{cache:'no-store'}).then(function(r){return r.ok?r.text():null;}).then(function(t){
       if(!t) return;
@@ -550,11 +550,11 @@ input[type=file]{display:none}
           </div>
         </div>
 
-        <!-- EMPLEADOS SUBSIDIADOS 100% -->
+        <!-- EMPLEADOS SUBSIDIADOS -->
         <div class="card">
-          <div class="card-head"><span class="card-titulo">💚 Empleados subsidiados 100%</span></div>
+          <div class="card-head"><span class="card-titulo">💚 Empleados subsidiados</span></div>
           <div class="card-body">
-            <p style="font-size:.82rem;color:var(--g2);margin-bottom:1rem">Empleados a los que la empresa les cubre toda la comida (no se les cobra nada, y sus comidas se ven aparte en Reportes y Dashboard). Sube un Excel con las mismas columnas del Head Count, o agrega uno por uno con el formulario de abajo. Si el ID ya existe en el directorio (por ID o por nombre), nomás se marca como subsidiado; si no existe, se crea de cero.</p>
+            <p style="font-size:.82rem;color:var(--g2);margin-bottom:1rem">Empleados con 5 créditos de subsidio a la semana (compartidos entre comida y desayuno — no son 5 de cada uno). Cada uno elige, comida por comida y desayuno por desayuno, si quiere usar un crédito ese día; mientras le queden, esa comida no le cuesta nada del buffet y ese desayuno no le cuesta hasta el precio del buffet configurado en "💲 Precio del buffet" (la empresa lo cubre). Al acabársele los créditos de la semana, se le cobra normal como a cualquier empleado. Sube un Excel con las mismas columnas del Head Count, o agrega uno por uno con el formulario de abajo. Si el ID ya existe en el directorio (por ID o por nombre), nomás se marca como subsidiado; si no existe, se crea de cero.</p>
             <div class="drop-area" id="subs-drop-area" onclick="document.getElementById('subs-input').click()">
               <div class="drop-icon">
                 <svg viewBox="0 0 24 24" fill="none" stroke="var(--g3)" stroke-width="1.5" stroke-linecap="round">
@@ -953,7 +953,7 @@ input[type=file]{display:none}
     </div>
     <div class="campo" style="display:flex;align-items:center;gap:.5rem">
       <input type="checkbox" id="emp-subsidiado" style="width:auto"/>
-      <label for="emp-subsidiado" style="margin:0;cursor:pointer">💚 Subsidiado 100% (la empresa paga toda su comida)</label>
+      <label for="emp-subsidiado" style="margin:0;cursor:pointer">💚 Subsidiado (5 créditos a la semana para comida y/o desayuno, la empresa los cubre)</label>
     </div>
     <div class="campo" style="display:flex;align-items:center;gap:.5rem">
       <input type="checkbox" id="emp-completo" style="width:auto"/>
@@ -1375,7 +1375,7 @@ function actualizarUIPrecios(){
   if (it && document.activeElement !== it) it.value = PRECIO_TOTAL;
   if (ie && document.activeElement !== ie) ie.value = PRECIO_EMPLEADO;
   const exp = document.getElementById('precio-explicacion');
-  if (exp) exp.textContent = 'La empresa subsidia $' + (PRECIO_TOTAL - PRECIO_EMPLEADO) + ' por cada buffet de un empleado no subsidiado (paga los $' + PRECIO_EMPLEADO + ' restantes). Un empleado subsidiado no paga nada del buffet — la empresa cubre los $' + PRECIO_TOTAL + ' completos. Los extras siempre los paga quien los pide, sin importar si es subsidiado.';
+  if (exp) exp.textContent = 'La empresa subsidia $' + (PRECIO_TOTAL - PRECIO_EMPLEADO) + ' por cada buffet de comida de un empleado no subsidiado (paga los $' + PRECIO_EMPLEADO + ' restantes). Un empleado subsidiado tiene 5 créditos a la semana (comida + desayuno, compartidos) — cada vez que elige usar uno, esa comida o desayuno no le cuesta nada del buffet/hasta $' + PRECIO_TOTAL + ' (la empresa lo cubre); al acabársele los créditos, se le cobra normal como a cualquier empleado. Los extras siempre los paga quien los pide, sin importar si es subsidiado.';
   // Nota: el texto chico de "Total del día" (m-valor-total-sub) ya NO se
   // toca aquí — ahora lo controla cargarDashboard() con el desglose real
   // comida/desayuno de las órdenes de hoy, para no perder ese desglose
@@ -1507,16 +1507,19 @@ async function cargarDashboard(){
     //    sus extras. Se calcula de platillos/extras y NO del campo cargo,
     //    porque a las visitas y subsidiados el cargo se guarda en $0 o solo
     //    extras aunque sí hayan recibido el buffet completo.
-    //  · Desayuno: la empresa NUNCA lo subsidia (nunca cuenta como "tuvo
-    //    buffet" en la lógica de arriba), pero el dinero SÍ pasó por el
-    //    sistema — el empleado pagó el 100% del precio de lista (guardado
-    //    en "cargo") — así que sí debe sumar a la facturación total y al 5%
+    //  · Desayuno: normalmente el empleado paga el 100% del precio de lista
+    //    (guardado en "cargo"), pero desde sept 2026 un empleado subsidiado
+    //    puede usar uno de sus créditos semanales ahí — en ese caso "cargo"
+    //    solo trae lo que él pagó y "subsidio_empresa" lo que cubrió la
+    //    empresa (tope PRECIO_TOTAL). Sumando ambos siempre se obtiene el
+    //    valor de lista completo, sin importar quién pagó cada parte — igual
+    //    que con comida. Esto sí debe sumar a la facturación total y al 5%
     //    de Sistema. Antes esto se quedaba en $0 por error, y el desayuno
     //    desaparecía de "Total del día" y de "Corresponde a Sistema"
     //    (bug reportado el 10 de septiembre de 2026 por Sebastián).
     let valorComida=0, valorDesayuno=0;
     ordenes.forEach(o=>{
-      if(o.categoria==='desayuno'){ valorDesayuno += Number(o.cargo)||0; return; }
+      if(o.categoria==='desayuno'){ valorDesayuno += (Number(o.cargo)||0) + (Number(o.subsidio_empresa)||0); return; }
       const tuvoBuffet=(o.platillos||[]).length>0;
       const costoExtras=(o.extras||[]).reduce((se,e)=>se+(Number(e&&e.precio)||0),0);
       valorComida += (tuvoBuffet?PRECIO_TOTAL:0)+costoExtras;
@@ -3322,7 +3325,7 @@ window.descargarExcelEmpleados = async function(){
     ws['!cols'] = [{wch:12},{wch:28},{wch:14},{wch:26},{wch:16}];
 
     const filaTitulo = filas.length + 3; // encabezado(1) + N filas + 1 en blanco
-    XLSX.utils.sheet_add_aoa(ws, [['Subsidiados 100%']], { origin: 'A' + filaTitulo });
+    XLSX.utils.sheet_add_aoa(ws, [['Subsidiados (5 créditos/semana)']], { origin: 'A' + filaTitulo });
     if (filasSubs.length) {
       XLSX.utils.sheet_add_json(ws, filasSubs, { origin: 'A' + (filaTitulo + 1), skipHeader: false });
     } else {
@@ -4733,27 +4736,59 @@ function agregarOrdenesPorEmpleado(docs, comedorFiltro){
     // aparte en su propia tabla de "Visitas" (ver renderizarReporte), no aquí.
     if(o.tipo === 'visita' || !o.empleado_uid) return;
     if(comedorFiltro !== 'todos' && o.comedor !== comedorFiltro) return;
-    if(!porEmp[o.empleado_uid]) porEmp[o.empleado_uid] = { uid: o.empleado_uid, nombre: o.empleado_nombre||'—', iniciales: (o.empleado_nombre||'??').split(' ').map(x=>x[0]).slice(0,2).join(''), subsidiado: !!o.subsidiado, dias:[] };
+    if(!porEmp[o.empleado_uid]) {
+      // "subsidiado" a nivel empleado (para el badge 💚 y conteos) debe
+      // reflejar si el empleado ES subsidiado en su perfil (padrón de
+      // Empleados), NO si esta orden en particular usó un crédito — desde
+      // que el subsidio de desayuno/comida se volvió una elección por
+      // orden (créditos semanales limitados), o.subsidiado ya varía día a
+      // día para el mismo empleado y dejó de ser un proxy confiable de su
+      // elegibilidad. Si el padrón aún no cargó (carrera improbable, mismo
+      // caso que buscarIdEmpleado), se usa o.subsidiado como respaldo.
+      const perfilCache = (_empleadosListaCache||[]).find(function(x){ return x.id === o.empleado_uid; });
+      const esSubsidiadoPerfil = perfilCache ? !!perfilCache.subsidiado : !!o.subsidiado;
+      porEmp[o.empleado_uid] = { uid: o.empleado_uid, nombre: o.empleado_nombre||'—', iniciales: (o.empleado_nombre||'??').split(' ').map(x=>x[0]).slice(0,2).join(''), subsidiado: esSubsidiadoPerfil, dias:[] };
+    }
     // Extras se separa en nombres (texto) y costo (numérico) en vez de un
     // solo string combinado — así el reporte puede tener una columna
     // "Extras" y otra "Costo extras" por separado.
     const extrasTexto = (o.extras||[]).map(e=>typeof e==='string'?e:e.nombre).join(', ');
     const costoExtras = (o.extras||[]).reduce((s,e)=>s+(typeof e==='string'?0:(Number(e.precio)||0)), 0);
-    // El desayuno NUNCA lo subsidia la empresa (precio de lista = precio que
-    // paga el empleado, siempre) — a diferencia del buffet de comida. Por
-    // eso una orden de desayuno jamás debe contarse como "tuvo buffet" aquí:
-    // si se dejara pasar, se le acreditaría por error un subsidio de $55 a
-    // la empresa sobre algo que el empleado sí pagó completo.
+    // El desayuno normalmente lo paga el empleado al 100% (precio de lista =
+    // precio que paga el empleado) — a diferencia del buffet de comida, que
+    // siempre tiene el beneficio 45/45. Por eso una orden de desayuno jamás
+    // debe contarse como "tuvo buffet" aquí (ese campo es solo para el
+    // beneficio automático de comida). Desde sept 2026 un desayuno SÍ puede
+    // llevar subsidio, pero solo cuando el empleado (subsidiado, con
+    // créditos semanales) lo eligió al pedirlo — eso se guarda en la propia
+    // orden como subsidio_empresa (lo que cubrió la empresa, tope PRECIO_TOTAL)
+    // y cargo (lo que de verdad le tocó pagar a él, cargo = costo - subsidio_empresa).
     const esDesayuno = o.categoria === 'desayuno';
-    // Un empleado subsidiado al 100% no paga el buffet — la empresa cubre
-    // el buffet completo ($110, no solo los $55 de siempre) — pero SÍ se le
-    // cobran los extras igual que a cualquiera, y eso sí se descuenta de
-    // nómina (pagoEmp), no lo cubre la empresa. Si ese día no hubo buffet
-    // (solo extras), no hay nada que subsidiar — antes esto marcaba $55 de
-    // subsidio aunque no hubiera buffet ese día; ya corregido.
+    // Un empleado subsidiado (con crédito usado ese día) no paga el buffet de
+    // comida — la empresa cubre el buffet completo (PRECIO_TOTAL, no solo el
+    // beneficio normal PRECIO_TOTAL-PRECIO_EMPLEADO) — pero SÍ se le cobran
+    // los extras igual que a cualquiera, y eso sí se descuenta de nómina
+    // (pagoEmp), no lo cubre la empresa. Si ese día no hubo buffet (solo
+    // extras), no hay nada que subsidiar.
     const tuvoBuffet = esDesayuno ? false : (o.platillos||[]).length > 0;
-    const subsidio = tuvoBuffet ? (o.subsidiado ? PRECIO_TOTAL : (PRECIO_TOTAL - PRECIO_EMPLEADO)) : 0;
-    const pagoEmp = o.subsidiado ? costoExtras : (Number(o.cargo) || 0); // blindaje: un dato mal formado nunca debe volverse "$NaN.00" en el total
+    // pagoEmp: lo que realmente se le cobra al empleado ese día.
+    //  - Desayuno: siempre es o.cargo — ya viene calculado y con el subsidio
+    //    (si lo hubo) restado desde index.html; a diferencia de comida, aquí
+    //    NO se puede derivar de subsidiado+costoExtras porque el desayuno no
+    //    tiene "extras" separados del resto ni un precio fijo de buffet.
+    //  - Comida: si fue subsidiada ese día, el buffet es gratis y solo se
+    //    cobran los extras (costoExtras); si no, se cobra o.cargo tal cual.
+    const pagoEmp = esDesayuno
+      ? (Number(o.cargo) || 0) // blindaje: un dato mal formado nunca debe volverse "$NaN.00" en el total
+      : (o.subsidiado ? costoExtras : (Number(o.cargo) || 0));
+    // subsidio: lo que le costó a la empresa ese día.
+    //  - Desayuno: subsidio_empresa si el empleado usó su crédito ahí, si no 0
+    //    (el desayuno normal NO lo subsidia la empresa).
+    //  - Comida: PRECIO_TOTAL completo si fue subsidiada, o el beneficio
+    //    normal (PRECIO_TOTAL-PRECIO_EMPLEADO) si hubo buffet sin subsidio.
+    const subsidio = esDesayuno
+      ? (o.subsidiado ? (Number(o.subsidio_empresa) || 0) : 0)
+      : (tuvoBuffet ? (o.subsidiado ? PRECIO_TOTAL : (PRECIO_TOTAL - PRECIO_EMPLEADO)) : 0);
     porEmp[o.empleado_uid].dias.push({
       id: o.id,
       fecha: o.fecha,
@@ -4764,7 +4799,15 @@ function agregarOrdenesPorEmpleado(docs, comedorFiltro){
       costo_extras: costoExtras,
       pago_empleado: pagoEmp,
       subsidio_empresa: subsidio,
-      total_dia: pagoEmp + subsidio
+      total_dia: pagoEmp + subsidio,
+      // Si ESTA orden en particular usó un crédito de subsidio — a
+      // diferencia de emp.subsidiado (elegibilidad del empleado en su
+      // perfil), esto varía día a día porque el subsidio ahora es una
+      // elección por orden con cupo semanal limitado. Lo usa
+      // construirWorkbookNomina para separar "buffets subsidiados" de
+      // "buffets por cobrar" sin asumir que un empleado subsidiado lo usó
+      // TODOS los días.
+      subsidiado: !!o.subsidiado
     });
   });
   const lista = Object.values(porEmp);
@@ -5167,12 +5210,15 @@ function renderizarReporte(){
   // con subsidiados y visitas incluidos.
   //
   // Desglose comida/desayuno/visitas — pedido explícito de Sebastián para
-  // que quede claro QUÉ es cada peso: el desayuno nunca lo subsidia la
-  // empresa (el empleado paga el 100%), pero ese dinero SÍ es facturación
-  // real que pasó por el sistema, así que SÍ cuenta dentro del 5% de
-  // Sistema — no desaparece ni se resta de nada.
+  // que quede claro QUÉ es cada peso. El desayuno normalmente lo paga el
+  // empleado al 100%, pero desde sept 2026 un empleado subsidiado puede
+  // usar ahí uno de sus créditos semanales — en ese caso la empresa sí
+  // cubre una parte (gtEmpresaDesayunoTop). De cualquier forma, todo ese
+  // dinero SÍ es facturación real que pasó por el sistema, así que SÍ
+  // cuenta dentro del 5% de Sistema — no desaparece ni se resta de nada.
   const gtEmpComidaTop = _reporteRaw.reduce((s,e)=>s+e.dias.filter(d=>d.categoria!=='desayuno').reduce((ss,d)=>ss+d.pago_empleado,0),0);
   const gtEmpDesayunoTop = _reporteRaw.reduce((s,e)=>s+e.dias.filter(d=>d.categoria==='desayuno').reduce((ss,d)=>ss+d.pago_empleado,0),0);
+  const gtEmpresaDesayunoTop = _reporteRaw.reduce((s,e)=>s+e.dias.filter(d=>d.categoria==='desayuno').reduce((ss,d)=>ss+d.subsidio_empresa,0),0);
   html += `
   <div style="border-top:1.5px solid var(--borde);padding-top:1rem;padding-bottom:1rem;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:1rem">
     <div style="font-size:.8rem;color:var(--g2)">${_reporteRaw.length} empleado${_reporteRaw.length!==1?'s':''} &nbsp;·&nbsp; ${gtComidas} comidas totales${visitasPeriodo.length?(' &nbsp;·&nbsp; '+visitasPeriodo.length+' visita'+(visitasPeriodo.length!==1?'s':'')):''}</div>
@@ -5198,7 +5244,7 @@ function renderizarReporte(){
   <div style="padding-bottom:1.5rem;margin-bottom:.5rem;border-bottom:1.5px solid var(--borde);font-size:.72rem;color:var(--g3);line-height:1.6">
     De dónde sale ese Gran total de $${gtEmp+gtEmpresa}.00 — el 5% de Sistema se calcula sobre todo esto junto, sin importar quién pagó cada parte:
     <br>🍽 Comida: <b style="color:var(--negro)">$${gtEmpComidaTop}.00</b> pagados por empleados + <b style="color:var(--negro)">$${gtEmpresaEmp}.00</b> subsidiados por la empresa
-    <br>🍳 Desayuno: <b style="color:var(--negro)">$${gtEmpDesayunoTop}.00</b> pagados 100% por empleados — la empresa no lo subsidia, pero sí forma parte de la facturación y sí cuenta en el 5%
+    <br>🍳 Desayuno: <b style="color:var(--negro)">$${gtEmpDesayunoTop}.00</b> pagados por empleados${gtEmpresaDesayunoTop ? ` + <b style="color:var(--negro)">$${gtEmpresaDesayunoTop}.00</b> subsidiados por la empresa (créditos semanales usados en desayuno)` : ' — normalmente el empleado lo paga al 100%, salvo que use ahí un crédito de subsidio semanal'}
     ${visitasPeriodo.length ? `<br>🎟 Visitas: <b style="color:var(--negro)">$${gtEmpresaVisitas}.00</b> cubiertos 100% por la empresa` : ''}
   </div>`;
 
@@ -5208,16 +5254,22 @@ function renderizarReporte(){
     const tEmp     = emp.dias.reduce((s,d)=>s+d.pago_empleado,0);
     const tEmpresa = emp.dias.reduce((s,d)=>s+d.subsidio_empresa,0);
     const tTotal   = tEmp + tEmpresa;
-    // Desayuno se separa del total de comida (nunca lo subsidia la empresa,
-    // así que aquí "tEmp" y "tTotal" del desayuno son siempre lo mismo).
+    // Desayuno se separa del total de comida — normalmente el empleado lo
+    // paga al 100% (tEmpDesayuno === subtotal desayuno), pero si usó un
+    // crédito de subsidio semanal ahí, tEmpresaDesayuno trae lo que cubrió
+    // la empresa en esos días.
     const diasComida = emp.dias.filter(d=>d.categoria!=='desayuno');
     const diasDesayuno = emp.dias.filter(d=>d.categoria==='desayuno');
     const tEmpDesayuno = diasDesayuno.reduce((s,d)=>s+d.pago_empleado,0);
+    const tEmpresaDesayuno = diasDesayuno.reduce((s,d)=>s+d.subsidio_empresa,0);
     const bg = color+'18';
     const mov = indicativoMovimiento(emp.nombre, _repMovDocs);
     const movBadge = mov ? `<span style="display:inline-block;margin-left:.5rem;font-size:.65rem;font-weight:700;padding:.15rem .55rem;border-radius:20px;background:${mov.tipo==='alta'?'var(--vl)':'var(--rojol)'};color:${mov.tipo==='alta'?'var(--v)':'var(--rojo)'}">${mov.texto}</span>` : '';
     const idBadge = `<span style="display:inline-block;margin-left:.5rem;font-size:.65rem;font-weight:700;padding:.15rem .55rem;border-radius:20px;background:var(--crema);color:var(--g2);font-family:monospace">ID ${emp.id_empleado||'—'}</span>`;
-    const subsBadge = emp.subsidiado ? `<span style="display:inline-block;margin-left:.5rem;font-size:.65rem;font-weight:700;padding:.15rem .55rem;border-radius:20px;background:var(--vl);color:var(--v)">💚 Subsidiado 100%</span>` : '';
+    // Ya no dice "100%": desde sept 2026 el subsidio es un cupo de 5
+    // créditos a la semana (comida + desayuno) que el empleado elige usar
+    // orden por orden, no una gratuidad automática de todo lo que pide.
+    const subsBadge = emp.subsidiado ? `<span style="display:inline-block;margin-left:.5rem;font-size:.65rem;font-weight:700;padding:.15rem .55rem;border-radius:20px;background:var(--vl);color:var(--v)">💚 Subsidiado</span>` : '';
 
     html += `
     <div style="margin-bottom:1.75rem">
@@ -5276,8 +5328,8 @@ function renderizarReporte(){
           <tr style="background:#FFF7E6">
             <td colspan="5" style="padding:.5rem .75rem;font-weight:700;font-size:.75rem;color:var(--g2)">Subtotal desayuno ${emp.nombre.split(' ')[0]}</td>
             <td style="padding:.5rem .75rem;text-align:right;font-weight:700;color:var(--negro)">$${tEmpDesayuno}.00</td>
-            <td style="padding:.5rem .75rem;text-align:right;font-weight:700;color:var(--v)">$0.00</td>
-            <td style="padding:.5rem .75rem;text-align:right;font-weight:700;color:var(--negro)">$${tEmpDesayuno}.00</td>
+            <td style="padding:.5rem .75rem;text-align:right;font-weight:700;color:var(--v)">$${tEmpresaDesayuno}.00</td>
+            <td style="padding:.5rem .75rem;text-align:right;font-weight:700;color:var(--negro)">$${tEmpDesayuno+tEmpresaDesayuno}.00</td>
             <td style="padding:.5rem .75rem"></td>
           </tr>` : ''}
           <tr style="background:var(--crema)">
@@ -5355,7 +5407,13 @@ function renderizarReporteDesayunos(body, desde, hasta, tipo, d0, d1){
     .filter(emp => emp.dias.length);
 
   const gtDesayunos = empsD.reduce((s,e)=>s+e.dias.length,0);
-  const gtTotalDesayunos = empsD.reduce((s,e)=>s+e.dias.reduce((ss,d)=>ss+d.pago_empleado,0),0);
+  const gtEmpDesayunos = empsD.reduce((s,e)=>s+e.dias.reduce((ss,d)=>ss+d.pago_empleado,0),0);
+  // Desde sept 2026 un desayuno puede llevar subsidio (crédito semanal del
+  // empleado subsidiado) — se separa aparte, no se mezcla con lo que paga
+  // el empleado, para que este reporte de "solo desayunos" cuadre línea por
+  // línea con la columna "Total" de cada día (pago + subsidio).
+  const gtEmpresaDesayunos = empsD.reduce((s,e)=>s+e.dias.reduce((ss,d)=>ss+d.subsidio_empresa,0),0);
+  const gtTotalDesayunos = gtEmpDesayunos + gtEmpresaDesayunos;
 
   let html = `
   <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:1.5rem;padding-bottom:1rem;border-bottom:1.5px solid var(--borde)">
@@ -5384,6 +5442,7 @@ function renderizarReporteDesayunos(body, desde, hasta, tipo, d0, d1){
   empsD.forEach((emp, ei) => {
     const color = COLORS[ei % COLORS.length];
     const tEmp = emp.dias.reduce((s,d)=>s+d.pago_empleado,0);
+    const tEmpresa = emp.dias.reduce((s,d)=>s+d.subsidio_empresa,0);
     const bg = color+'18';
     const idBadge = `<span style="display:inline-block;margin-left:.5rem;font-size:.65rem;font-weight:700;padding:.15rem .55rem;border-radius:20px;background:var(--crema);color:var(--g2);font-family:monospace">ID ${emp.id_empleado||'—'}</span>`;
 
@@ -5407,6 +5466,8 @@ function renderizarReporteDesayunos(body, desde, hasta, tipo, d0, d1){
           <tr style="border-bottom:1.5px solid var(--borde)">
             <th style="text-align:left;padding:.45rem .75rem;font-size:.65rem;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--g3);background:var(--crema)">Fecha</th>
             <th style="text-align:left;padding:.45rem .75rem;font-size:.65rem;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--g3);background:var(--crema)">Platillos</th>
+            <th style="text-align:right;padding:.45rem .75rem;font-size:.65rem;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--g3);background:var(--crema)">Empleado</th>
+            <th style="text-align:right;padding:.45rem .75rem;font-size:.65rem;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--g3);background:var(--crema)">Empresa</th>
             <th style="text-align:right;padding:.45rem .75rem;font-size:.65rem;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--g3);background:var(--crema)">Total</th>
             <th style="text-align:center;padding:.45rem .75rem;font-size:.65rem;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--g3);background:var(--crema)">Acciones</th>
           </tr>
@@ -5423,6 +5484,8 @@ function renderizarReporteDesayunos(body, desde, hasta, tipo, d0, d1){
               <span style="display:inline-block;background:var(--vl);color:var(--v);font-size:.72rem;font-weight:700;padding:.2rem .65rem;border-radius:20px">${fmtDia}</span>
             </td>
             <td style="padding:.65rem .75rem;color:var(--negro)">${d.platillos}</td>
+            <td style="padding:.65rem .75rem;text-align:right;font-weight:600;color:var(--negro)">$${d.pago_empleado}.00</td>
+            <td style="padding:.65rem .75rem;text-align:right;color:${d.subsidio_empresa?'var(--v)':'var(--g3)'}">${d.subsidio_empresa?('$'+d.subsidio_empresa+'.00'):'—'}</td>
             <td style="padding:.65rem .75rem;text-align:right;font-weight:700;color:var(--negro)">$${d.total_dia}.00</td>
             <td style="padding:.65rem .75rem;text-align:center">${d.id ? '<button class="btn btn-outline btn-sm" style="color:var(--rojo);border-color:var(--rojo)" onclick="eliminarOrdenReporte(\''+d.id+'\')">🗑 Borrar</button>' : ''}</td>
           </tr>`;
@@ -5432,6 +5495,8 @@ function renderizarReporteDesayunos(body, desde, hasta, tipo, d0, d1){
           <tr style="background:var(--crema)">
             <td colspan="2" style="padding:.55rem .75rem;font-weight:700;font-size:.78rem;color:var(--g2)">Subtotal ${emp.nombre.split(' ')[0]}</td>
             <td style="padding:.55rem .75rem;text-align:right;font-weight:800;color:var(--negro)">$${tEmp}.00</td>
+            <td style="padding:.55rem .75rem;text-align:right;font-weight:700;color:var(--v)">$${tEmpresa}.00</td>
+            <td style="padding:.55rem .75rem;text-align:right;font-weight:800;color:var(--negro)">$${tEmp+tEmpresa}.00</td>
             <td style="padding:.55rem .75rem"></td>
           </tr>
         </tbody>
@@ -5442,9 +5507,19 @@ function renderizarReporteDesayunos(body, desde, hasta, tipo, d0, d1){
   html += `
   <div style="border-top:1.5px solid var(--borde);padding-top:1rem;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:1rem">
     <div style="font-size:.8rem;color:var(--g2)">${empsD.length} empleado${empsD.length!==1?'s':''} &nbsp;·&nbsp; ${gtDesayunos} desayunos totales</div>
-    <div style="text-align:right">
-      <div style="font-size:.68rem;color:var(--g3);margin-bottom:.2rem">Total desayunos (100% empleado)</div>
-      <div style="font-size:1.1rem;font-weight:800;color:var(--negro)">$${gtTotalDesayunos}.00</div>
+    <div style="display:flex;gap:2rem;text-align:right;flex-wrap:wrap">
+      <div>
+        <div style="font-size:.68rem;color:var(--g3);margin-bottom:.2rem">Pagado por empleados</div>
+        <div style="font-size:1rem;font-weight:800;color:var(--negro)">$${gtEmpDesayunos}.00</div>
+      </div>
+      <div>
+        <div style="font-size:.68rem;color:var(--g3);margin-bottom:.2rem">Subsidiado por la empresa</div>
+        <div style="font-size:1rem;font-weight:800;color:var(--v)">$${gtEmpresaDesayunos}.00</div>
+      </div>
+      <div>
+        <div style="font-size:.68rem;color:var(--g3);margin-bottom:.2rem">Total desayunos</div>
+        <div style="font-size:1.1rem;font-weight:800;color:var(--negro)">$${gtTotalDesayunos}.00</div>
+      </div>
     </div>
   </div>`;
 
@@ -5489,7 +5564,8 @@ window.exportarCSV = function(){
     });
     if (diasDesayuno.length) {
       const tEmpD = diasDesayuno.reduce((s,d)=>s+d.pago_empleado,0);
-      rows.push(['SUBTOTAL DESAYUNO '+emp.nombre,'','',diasDesayuno.length+' desayunos','','$'+tEmpD,'$0','$'+tEmpD]);
+      const tEmpresaD = diasDesayuno.reduce((s,d)=>s+d.subsidio_empresa,0);
+      rows.push(['SUBTOTAL DESAYUNO '+emp.nombre,'','',diasDesayuno.length+' desayunos','','$'+tEmpD,'$'+tEmpresaD,'$'+(tEmpD+tEmpresaD)]);
     }
     const tEmp = emp.dias.reduce((s,d)=>s+d.pago_empleado,0);
     const tEmp2 = emp.dias.reduce((s,d)=>s+d.subsidio_empresa,0);
@@ -5519,7 +5595,8 @@ window.exportarCSV = function(){
   const gtEmpresaVisitas = visitasPeriodo.reduce((s,v)=>s+v.valor_empresa,0);
   const gtEmpresa = gtEmpresaEmp + gtEmpresaVisitas;
   const gtDesayuno = _reporteRaw.reduce((s,e)=>s+e.dias.filter(d=>d.categoria==='desayuno').reduce((ss,d)=>ss+d.pago_empleado,0),0);
-  rows.push(['TOTAL DESAYUNOS','','','','','$'+gtDesayuno,'$0','$'+gtDesayuno]);
+  const gtEmpresaDesayuno = _reporteRaw.reduce((s,e)=>s+e.dias.filter(d=>d.categoria==='desayuno').reduce((ss,d)=>ss+d.subsidio_empresa,0),0);
+  rows.push(['TOTAL DESAYUNOS','','','','','$'+gtDesayuno,'$'+gtEmpresaDesayuno,'$'+(gtDesayuno+gtEmpresaDesayuno)]);
   // "TOTAL GENERAL" ahora sí incluye el valor de las visitas en "Subsidio
   // empresa", igual que el "Total empresa" que se ve en pantalla — antes
   // solo sumaba lo de empleados y por eso no cuadraba con la interfaz.
@@ -5613,12 +5690,13 @@ async function construirWorkbookReporte(datosPorEmpleado, opts){
     const diasDesayuno = emp.dias.filter(function(d){ return d.categoria==='desayuno'; });
     if (diasDesayuno.length) {
       const tEmpD = diasDesayuno.reduce(function(s,d){ return s+d.pago_empleado; }, 0);
+      const tEmpresaD = diasDesayuno.reduce(function(s,d){ return s+d.subsidio_empresa; }, 0);
       const rSubD = ws.getRow(fila);
       rSubD.getCell(2).value = 'Subtotal desayuno '+emp.nombre.split(' ')[0];
       rSubD.getCell(5).value = diasDesayuno.length+' desayuno'+(diasDesayuno.length!==1?'s':'');
       rSubD.getCell(8).value = tEmpD;
-      rSubD.getCell(9).value = 0;
-      rSubD.getCell(10).value = tEmpD;
+      rSubD.getCell(9).value = tEmpresaD;
+      rSubD.getCell(10).value = tEmpD+tEmpresaD;
       for (let c=1;c<=10;c++){
         const cell = rSubD.getCell(c);
         cell.font = { name:'Arial', size:10, bold:true };
@@ -5756,6 +5834,13 @@ async function construirWorkbookReporte(datosPorEmpleado, opts){
   const gtEmpresaComida = datosPorEmpleado.reduce(function(s,e){ return s+e.dias.filter(function(d){ return d.categoria!=='desayuno'; }).reduce(function(ss,d){ return ss+d.subsidio_empresa; },0); },0);
   const totalComidas = gtEmpComida + gtEmpresaComida;
   const gtDesayuno = datosPorEmpleado.reduce(function(s,e){ return s+e.dias.filter(function(d){ return d.categoria==='desayuno'; }).reduce(function(ss,d){ return ss+d.pago_empleado; },0); },0);
+  // Desde sept 2026 el desayuno también puede llevar subsidio (créditos
+  // semanales del empleado subsidiado) — antes esto siempre era $0 y por
+  // eso no se incluía en ningún total; ahora sí se separa igual que en
+  // comida, para no mezclarlo (pedido explícito de Sebastián) pero sin que
+  // desaparezca del Total general ni del 5% de Sistema.
+  const gtEmpresaDesayuno = datosPorEmpleado.reduce(function(s,e){ return s+e.dias.filter(function(d){ return d.categoria==='desayuno'; }).reduce(function(ss,d){ return ss+d.subsidio_empresa; },0); },0);
+  const totalDesayunos = gtDesayuno + gtEmpresaDesayuno;
   // Las visitas no tienen empleado_uid (no están en datosPorEmpleado), pero
   // la empresa cubre el 100% de lo que pidieron (el "valor_empresa" de cada
   // una, calculado igual que en el reporte en pantalla) — sin esto el 5%
@@ -5763,7 +5848,7 @@ async function construirWorkbookReporte(datosPorEmpleado, opts){
   // Sebastián: el subsidio de empresa debe incluir el valor de cada visita
   // para que el cálculo del 5% esté bien).
   const gtEmpresaVisitas = visitas.reduce(function(s,v){ return s+(v.valor_empresa||0); },0);
-  const totalGeneral = totalComidas + gtDesayuno + gtEmpresaVisitas;
+  const totalGeneral = totalComidas + totalDesayunos + gtEmpresaVisitas;
   const sistema5 = Math.round(totalGeneral * 0.05);
 
   fila += 2;
@@ -5780,7 +5865,9 @@ async function construirWorkbookReporte(datosPorEmpleado, opts){
     { label: 'Total a pagar empleados (comidas)', valor: gtEmpComida, estilo: 'normal' },
     { label: 'Total subsidio empresa (comidas)',   valor: gtEmpresaComida, estilo: 'normal' },
     { label: 'Total comidas',                       valor: totalComidas, estilo: 'sub' },
-    { label: 'Total desayunos',                     valor: gtDesayuno, estilo: 'sub' },
+    { label: 'Total a pagar empleados (desayunos)', valor: gtDesayuno, estilo: 'normal' },
+    { label: 'Total subsidio empresa (desayunos)',  valor: gtEmpresaDesayuno, estilo: 'normal' },
+    { label: 'Total desayunos',                     valor: totalDesayunos, estilo: 'sub' },
     { label: 'Total visitas (100% empresa)',        valor: gtEmpresaVisitas, estilo: 'sub' },
     { label: 'Total general (comidas + desayunos + visitas)', valor: totalGeneral, estilo: 'total' },
     { label: 'Corresponde a Sistema (5% del total general)', valor: sistema5, estilo: 'total' }
@@ -5861,12 +5948,20 @@ async function construirWorkbookNomina(datosPorEmpleado, opts){
 
   const filas = (datosPorEmpleado||[]).map(function(emp){
     const buffets = emp.dias.filter(function(d){ return d.tuvo_buffet; }).length;
+    // Antes se asumía que un empleado subsidiado (emp.subsidiado) tenía TODOS
+    // sus buffets subsidiados y uno no-subsidiado ninguno. Desde que el
+    // subsidio (comida + desayuno) se volvió un cupo de 5 créditos a la
+    // semana elegido orden por orden, un mismo empleado subsidiado puede
+    // tener unos días de buffet cubiertos por la empresa y otros cobrados
+    // normal (45/45) — así que se cuenta día por día con d.subsidiado, no
+    // con el flag del empleado.
+    const buffetsSubsidiar = emp.dias.filter(function(d){ return d.tuvo_buffet && d.subsidiado; }).length;
     return {
       id: emp.id_empleado || '—',
       nombre: emp.nombre,
       buffets: buffets,
-      buffetsSubsidiar: emp.subsidiado ? buffets : 0,
-      buffetsPorCobrar: emp.subsidiado ? 0 : buffets,
+      buffetsSubsidiar: buffetsSubsidiar,
+      buffetsPorCobrar: buffets - buffetsSubsidiar,
       extrasPorCobrar: emp.dias.reduce(function(s,d){ return s+d.costo_extras; }, 0),
       totalPorCobrar: emp.dias.reduce(function(s,d){ return s+d.pago_empleado; }, 0),
       totalSubsidiado: emp.dias.reduce(function(s,d){ return s+d.subsidio_empresa; }, 0)
@@ -5968,13 +6063,16 @@ async function construirWorkbookResumenOrdenes(docsCrudos, opts){
   // siempre se guarda en 0 aunque sí hayan pedido buffet o extras.
   function valorOrden(o){
     // El desayuno guarda sus platillos en el mismo campo "platillos" que la
-    // comida, pero NUNCA es un buffet de precio completo — su valor real es
-    // lo que de verdad se cobró (campo "cargo", precio de lista de cada
-    // producto, sin subsidio). Antes esto no distinguía categoría y le
-    // asignaba por error el valor completo del buffet a cada desayuno
-    // (bug reportado el 10 de septiembre de 2026 — inflaba el "Valor total"
-    // y el 5% de Sistema de este reporte cuando había desayunos).
-    if (o.categoria === 'desayuno') return Number(o.cargo) || 0;
+    // comida, pero NUNCA es un buffet de precio completo — su valor real de
+    // lista es lo que de verdad se cobró más lo que haya cubierto la
+    // empresa (cargo + subsidio_empresa; subsidio_empresa es 0 salvo que el
+    // empleado haya usado ahí un crédito de subsidio semanal). Antes esto no
+    // distinguía categoría y le asignaba por error el valor completo del
+    // buffet a cada desayuno (bug reportado el 10 de septiembre de 2026 —
+    // inflaba el "Valor total" y el 5% de Sistema de este reporte cuando
+    // había desayunos); luego, al no sumar subsidio_empresa, un desayuno
+    // subsidiado se subvaluaba.
+    if (o.categoria === 'desayuno') return (Number(o.cargo) || 0) + (Number(o.subsidio_empresa) || 0);
     const tuvoBuffet = (o.platillos||[]).length > 0;
     const costoExtras = (o.extras||[]).reduce(function(se,e){ return se+(Number(e&&e.precio)||0); }, 0);
     return (tuvoBuffet?PRECIO_TOTAL:0) + costoExtras;
