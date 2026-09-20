@@ -15,7 +15,7 @@
 // fuerza una recarga limpia. sessionStorage evita que se quede en bucle si
 // version.txt no está disponible por algún motivo.
 (function(){
-  var V='20260913-2';
+  var V='20260920-1';
   try{
     fetch('version.txt?_='+Date.now(),{cache:'no-store'}).then(function(r){return r.ok?r.text():null;}).then(function(t){
       if(!t) return;
@@ -251,6 +251,8 @@ input[type=file]{display:none}
 }
 .fila-editor input:focus{border-color:var(--v);background:var(--w)}
 .fila-editor input.input-extra-precio{flex:0 0 90px;text-align:right}
+.fila-editor input.input-df-precio,.fila-editor input.input-ef-precio{flex:0 0 90px;text-align:right}
+.fila-editor input.input-df-grupo{flex:0 0 140px}
 .btn-quitar{
   flex-shrink:0;width:32px;height:32px;border-radius:8px;
   border:1.5px solid var(--rojol);background:var(--rojol);color:var(--rojo);
@@ -790,6 +792,30 @@ input[type=file]{display:none}
             <input type="file" id="menu-input" accept=".csv,.xlsx,.xls,.xltx,.xltm,.xlsm"/>
             <div id="menu-import-preview" style="display:none;margin-top:1.25rem"></div>
             <div class="msg" id="menu-import-msg"></div>
+          </div>
+        </div>
+
+        <!-- MENÚ DE DESAYUNO FIJO -->
+        <div class="card" style="margin-bottom:1.25rem">
+          <div class="card-head"><span class="card-titulo">🍳 Menú de desayuno (fijo, todos los días)</span></div>
+          <div class="card-body">
+            <p style="font-size:.82rem;color:var(--g2);margin-bottom:1rem">Esta es la lista que ven los empleados TODOS los días en la pestaña de Desayuno — siempre la misma hasta que tú la cambies aquí abajo (ya no hace falta pedir un cambio de código para agregar, quitar o cambiarle el precio a un producto). El campo "Grupo" es opcional: úsalo para agrupar variantes bajo un mismo título, como "Tortas".</p>
+            <div id="lista-desayuno-fijo"></div>
+            <button class="btn btn-outline btn-sm" id="btn-add-desayuno-fijo" type="button" style="margin-top:.4rem" onclick="desayunoFijoBuf.push({nombre:'',precio:0,grupo:''});renderListaDesayunoFijo()">+ Agregar producto</button>
+            <div class="msg" id="desayuno-fijo-msg"></div>
+            <button class="btn btn-v btn-sm" id="btn-guardar-desayuno-fijo" onclick="guardarDesayunoFijo()" style="margin-top:1rem">Guardar menú de desayuno</button>
+          </div>
+        </div>
+
+        <!-- EXTRAS FIJOS DE COMIDA -->
+        <div class="card" style="margin-bottom:1.25rem">
+          <div class="card-head"><span class="card-titulo">➕ Extras fijos de comida (todos los días)</span></div>
+          <div class="card-body">
+            <p style="font-size:.82rem;color:var(--g2);margin-bottom:1rem">Estos extras se suman automáticamente a los extras de CADA día del menú de comida — ya no hace falta volver a capturarlos en el editor de cada día, de cada semana. Siguen siendo los mismos hasta que tú los cambies aquí abajo. Si algún día necesitas un extra que solo aplica ESE día, lo puedes seguir agregando normal en "Extras con costo adicional" del editor del día, más abajo — se suma a estos, no los reemplaza.</p>
+            <div id="lista-extras-fijos"></div>
+            <button class="btn btn-outline btn-sm" id="btn-add-extra-fijo" type="button" style="margin-top:.4rem" onclick="extrasFijosBuf.push({nombre:'',precio:0});renderListaExtrasFijos()">+ Agregar extra fijo</button>
+            <div class="msg" id="extras-fijos-msg"></div>
+            <button class="btn btn-v btn-sm" id="btn-guardar-extras-fijos" onclick="guardarExtrasFijos()" style="margin-top:1rem">Guardar extras fijos</button>
           </div>
         </div>
 
@@ -1468,6 +1494,7 @@ async function iniciarAdmin(){
   limpiarOrdenesNoEscaneadas();
   cargarDashboard();
   cargarEmpleados();
+  cargarConfigFija();
   initMenuEditor();
   renderHistorialMensual();
   const inpBorrarHasta = document.getElementById('borrar-historial-hasta');
@@ -4078,6 +4105,159 @@ async function limpiarOrdenesNoEscaneadas(){
     console.log('[BuenFruto] '+pendientes.length+' orden(es) sin escanear de días pasados marcadas como canceladas (no cobradas).');
   } catch(e) {
     console.error('Error al limpiar órdenes sin escanear:', e);
+  }
+}
+
+// ── MENÚ DE DESAYUNO FIJO Y EXTRAS FIJOS DE COMIDA ──
+// config/desayuno_fijo = { items:[{nombre,precio,grupo}] }
+// config/extras_fijos  = { items:[{nombre,precio}] }
+// Antes el menú de desayuno vivía hardcodeado en el código de index.html
+// (pedir un cambio de código para agregar/quitar un producto) y los extras
+// de comida había que volver a capturarlos cada semana en cada día.
+// Sebastián pidió (sept 2026) que ambos queden fijos — siempre los mismos
+// hasta que él los edite aquí — así que ahora viven en Firestore y
+// index.html los lee en vivo (ver suscribirMenuDesayunoFijo/
+// suscribirExtrasFijos ahí, mismo patrón que suscribirPrecios). Los extras
+// fijos se SUMAN a los que el admin capture para cada día en el editor de
+// abajo (no los reemplazan) — un extra de temporada se puede seguir
+// agregando solo para un día sin tocar la lista fija.
+//
+// Los DEFAULT de aquí abajo son el mismo menú/extras vigentes al momento de
+// este cambio (respaldo de index.html, por si el documento de Firestore
+// todavía no existe) — se usan también para que el editor no arranque
+// vacío la primera vez que se abre esta pestaña, antes de que el admin haya
+// guardado nada.
+const DESAYUNO_FIJO_DEFAULT = [
+  { nombre: 'Café 12oz', precio: 15, grupo: null },
+  { nombre: 'Té', precio: 15, grupo: null },
+  { nombre: 'Hot Cakes', precio: 50, grupo: null },
+  { nombre: 'Molletes', precio: 50, grupo: null },
+  { nombre: 'Sincronizadas', precio: 50, grupo: null },
+  { nombre: 'Chilaquiles c/huevo o pollo', precio: 50, grupo: null },
+  { nombre: 'Huevos al gusto', precio: 50, grupo: null },
+  { nombre: 'Torta de Jamón', precio: 50, grupo: 'Tortas' },
+  { nombre: 'Torta de Salchicha', precio: 50, grupo: 'Tortas' },
+  { nombre: 'Torta de Milanesa de Res', precio: 50, grupo: 'Tortas' },
+  { nombre: 'Torta de Milanesa de Pollo', precio: 50, grupo: 'Tortas' },
+  { nombre: 'Torta de Pierna', precio: 50, grupo: 'Tortas' },
+];
+const EXTRAS_FIJOS_DEFAULT = [
+  { nombre: 'Burritos bistec o pollo c/papas', precio: 25 },
+  { nombre: 'Hamburguesa c/papas', precio: 30 },
+  { nombre: 'Pechuga asada c/papas y ensalada', precio: 25 },
+  { nombre: 'Pechuga/res empanizada c/papas y ensalada', precio: 30 },
+  { nombre: 'Carne asada c/papas', precio: 25 },
+  { nombre: 'Bowl atún/pollo/res', precio: 30 },
+  { nombre: 'Ensalada César', precio: 30 },
+  { nombre: 'Chilaquiles', precio: 25 },
+  { nombre: 'Maizitos', precio: 25 },
+];
+let desayunoFijoBuf = [];
+let extrasFijosBuf = [];
+
+async function cargarConfigFija(){
+  try {
+    const [snapD, snapE] = await Promise.all([
+      db.collection('config').doc('desayuno_fijo').get(),
+      db.collection('config').doc('extras_fijos').get()
+    ]);
+    desayunoFijoBuf = (snapD.exists && Array.isArray(snapD.data().items) && snapD.data().items.length)
+      ? snapD.data().items.map(function(it){ return { nombre: it.nombre||'', precio: Number(it.precio)||0, grupo: it.grupo||'' }; })
+      : DESAYUNO_FIJO_DEFAULT.map(function(it){ return Object.assign({},it,{grupo: it.grupo||''}); });
+    extrasFijosBuf = (snapE.exists && Array.isArray(snapE.data().items))
+      ? snapE.data().items.map(function(it){ return { nombre: it.nombre||'', precio: Number(it.precio)||0 }; })
+      : EXTRAS_FIJOS_DEFAULT.map(function(it){ return Object.assign({},it); });
+  } catch(e){
+    console.error('Error al cargar menú de desayuno fijo / extras fijos:', e);
+    desayunoFijoBuf = DESAYUNO_FIJO_DEFAULT.map(function(it){ return Object.assign({},it,{grupo: it.grupo||''}); });
+    extrasFijosBuf = EXTRAS_FIJOS_DEFAULT.map(function(it){ return Object.assign({},it); });
+  }
+  renderListaDesayunoFijo();
+  renderListaExtrasFijos();
+}
+
+function renderListaDesayunoFijo(){
+  const cont = document.getElementById('lista-desayuno-fijo');
+  if(!cont) return;
+  cont.innerHTML = desayunoFijoBuf.length ? desayunoFijoBuf.map(function(it,i){
+    return '<div class="fila-editor"><input type="text" class="input-df-nombre" data-i="'+i+'" placeholder="Ej. Huevos al gusto" value="'+escHtml(it.nombre)+'" style="flex:1"/>'+
+      '<input type="number" class="input-df-precio" data-i="'+i+'" placeholder="$" min="0" step="1" value="'+(it.precio||0)+'"/>'+
+      '<input type="text" class="input-df-grupo" data-i="'+i+'" placeholder="Grupo (opcional)" value="'+escHtml(it.grupo||'')+'" style="max-width:140px"/>'+
+      '<button class="btn-quitar" data-i="'+i+'" type="button" title="Quitar">✕</button></div>';
+  }).join('') : '<div style="font-size:.8rem;color:var(--g3);padding:.4rem 0 .2rem">Sin productos — agrega al menos uno</div>';
+  cont.querySelectorAll('.input-df-nombre').forEach(function(inp){
+    inp.addEventListener('input', function(e){ desayunoFijoBuf[+e.target.dataset.i].nombre = e.target.value; });
+  });
+  cont.querySelectorAll('.input-df-precio').forEach(function(inp){
+    inp.addEventListener('input', function(e){ desayunoFijoBuf[+e.target.dataset.i].precio = Number(e.target.value)||0; });
+  });
+  cont.querySelectorAll('.input-df-grupo').forEach(function(inp){
+    inp.addEventListener('input', function(e){ desayunoFijoBuf[+e.target.dataset.i].grupo = e.target.value; });
+  });
+  cont.querySelectorAll('.btn-quitar').forEach(function(btn){
+    btn.addEventListener('click', function(e){ desayunoFijoBuf.splice(+e.target.dataset.i,1); renderListaDesayunoFijo(); });
+  });
+}
+
+function renderListaExtrasFijos(){
+  const cont = document.getElementById('lista-extras-fijos');
+  if(!cont) return;
+  cont.innerHTML = extrasFijosBuf.length ? extrasFijosBuf.map(function(ex,i){
+    return '<div class="fila-editor"><input type="text" class="input-ef-nombre" data-i="'+i+'" placeholder="Ej. Hamburguesa c/papas" value="'+escHtml(ex.nombre)+'"/>'+
+      '<input type="number" class="input-ef-precio" data-i="'+i+'" placeholder="$" min="0" step="1" value="'+(ex.precio||0)+'"/>'+
+      '<button class="btn-quitar" data-i="'+i+'" type="button" title="Quitar">✕</button></div>';
+  }).join('') : '<div style="font-size:.8rem;color:var(--g3);padding:.4rem 0 .2rem">Sin extras fijos</div>';
+  cont.querySelectorAll('.input-ef-nombre').forEach(function(inp){
+    inp.addEventListener('input', function(e){ extrasFijosBuf[+e.target.dataset.i].nombre = e.target.value; });
+  });
+  cont.querySelectorAll('.input-ef-precio').forEach(function(inp){
+    inp.addEventListener('input', function(e){ extrasFijosBuf[+e.target.dataset.i].precio = Number(e.target.value)||0; });
+  });
+  cont.querySelectorAll('.btn-quitar').forEach(function(btn){
+    btn.addEventListener('click', function(e){ extrasFijosBuf.splice(+e.target.dataset.i,1); renderListaExtrasFijos(); });
+  });
+}
+
+async function guardarDesayunoFijo(){
+  const msg = document.getElementById('desayuno-fijo-msg');
+  function mostrarMsg(t,ok){ if(!msg) return; msg.textContent=t; msg.className='msg '+(ok?'ok':'err'); msg.style.display='block'; }
+  const limpios = desayunoFijoBuf
+    .map(function(it){ return { nombre:(it.nombre||'').trim(), precio:Number(it.precio)||0, grupo:(it.grupo||'').trim()||null }; })
+    .filter(function(it){ return it.nombre; });
+  if(!limpios.length){ mostrarMsg('Agrega al menos un producto — si se queda vacío, los empleados no verían nada que pedir en Desayuno.', false); return; }
+  const btn = document.getElementById('btn-guardar-desayuno-fijo');
+  if(btn){ btn.disabled=true; btn.textContent='Guardando...'; }
+  try {
+    await db.collection('config').doc('desayuno_fijo').set({ items: limpios });
+    desayunoFijoBuf = limpios.map(function(it){ return { nombre: it.nombre, precio: it.precio, grupo: it.grupo||'' }; });
+    renderListaDesayunoFijo();
+    mostrarMsg('Menú de desayuno guardado — ya se actualizó para todos los empleados.', true);
+  } catch(e){
+    console.error('Error al guardar menú de desayuno fijo:', e);
+    mostrarMsg('No se pudo guardar. Intenta de nuevo.', false);
+  } finally {
+    if(btn){ btn.disabled=false; btn.textContent='Guardar menú de desayuno'; }
+  }
+}
+
+async function guardarExtrasFijos(){
+  const msg = document.getElementById('extras-fijos-msg');
+  function mostrarMsg(t,ok){ if(!msg) return; msg.textContent=t; msg.className='msg '+(ok?'ok':'err'); msg.style.display='block'; }
+  const limpios = extrasFijosBuf
+    .map(function(ex){ return { nombre:(ex.nombre||'').trim(), precio:Number(ex.precio)||0 }; })
+    .filter(function(ex){ return ex.nombre; });
+  const btn = document.getElementById('btn-guardar-extras-fijos');
+  if(btn){ btn.disabled=true; btn.textContent='Guardando...'; }
+  try {
+    await db.collection('config').doc('extras_fijos').set({ items: limpios });
+    extrasFijosBuf = limpios.map(function(ex){ return { nombre: ex.nombre, precio: ex.precio }; });
+    renderListaExtrasFijos();
+    mostrarMsg('Extras fijos guardados — ya aparecen en el menú de todos los días.', true);
+  } catch(e){
+    console.error('Error al guardar extras fijos:', e);
+    mostrarMsg('No se pudo guardar. Intenta de nuevo.', false);
+  } finally {
+    if(btn){ btn.disabled=false; btn.textContent='Guardar extras fijos'; }
   }
 }
 
