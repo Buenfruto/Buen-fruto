@@ -12,7 +12,7 @@
 <meta http-equiv="Expires" content="0"/>
 <script>
 (function(){
-  var V='20260913-2';
+  var V='20260920-1';
   try{
     fetch('version.txt?_='+Date.now(),{cache:'no-store'}).then(function(r){return r.ok?r.text():null;}).then(function(t){
       if(!t) return;
@@ -571,19 +571,92 @@ let unsubOrdenes = null;
 // que paga el empleado). No cambia por día como el menú de comida, así que
 // no vive en Firestore — es una constante aquí mismo. Si algún día cambian
 // los precios o los productos, se edita esta lista.
-const MENU_DESAYUNO = [
+// Antes esta lista vivía fija en el código (había que pedir un cambio de
+// código para agregar/quitar un producto o cambiarle el precio). Desde
+// sept 2026, por pedido de Sebastián, el menú de desayuno queda fijo —
+// siempre el mismo hasta que él lo edite — y editable desde el admin
+// (pestaña Menús → "🍳 Menú de desayuno"), guardado en Firestore
+// (config/desayuno_fijo). Por eso ya es "let" y no "const": se reemplaza
+// por completo en cuanto suscribirMenuDesayunoFijo() carga lo guardado en
+// Firestore. Lo de aquí abajo es solo el valor de respaldo (el menú vigente
+// al momento de este cambio) por si ese documento todavía no existe.
+let MENU_DESAYUNO = [
   { nombre: 'Café 12oz', precio: 15, grupo: null },
   { nombre: 'Té', precio: 15, grupo: null },
   { nombre: 'Hot Cakes', precio: 50, grupo: null },
-  { nombre: 'Molletes', precio: 45, grupo: null },
-  { nombre: 'Sincronizadas', precio: 45, grupo: null },
-  { nombre: 'Huevos al gusto', precio: 45, grupo: null },
-  { nombre: 'Torta de Jamón', precio: 45, grupo: 'Tortas' },
-  { nombre: 'Torta de Salchicha', precio: 45, grupo: 'Tortas' },
+  { nombre: 'Molletes', precio: 50, grupo: null },
+  { nombre: 'Sincronizadas', precio: 50, grupo: null },
+  { nombre: 'Chilaquiles c/huevo o pollo', precio: 50, grupo: null },
+  { nombre: 'Huevos al gusto', precio: 50, grupo: null },
+  { nombre: 'Torta de Jamón', precio: 50, grupo: 'Tortas' },
+  { nombre: 'Torta de Salchicha', precio: 50, grupo: 'Tortas' },
   { nombre: 'Torta de Milanesa de Res', precio: 50, grupo: 'Tortas' },
   { nombre: 'Torta de Milanesa de Pollo', precio: 50, grupo: 'Tortas' },
-  { nombre: 'Torta de Pierna', precio: 45, grupo: 'Tortas' },
+  { nombre: 'Torta de Pierna', precio: 50, grupo: 'Tortas' },
 ];
+// Extras de comida que aparecen TODOS los días, en cualquier menú, sin que
+// el admin tenga que volver a capturarlos cada semana — se suman a los
+// extras que el admin sí capture para un día en particular (ver
+// renderItems() más abajo, donde se combinan). También editable desde el
+// admin (pestaña Menús → "➕ Extras fijos de comida"), guardado en
+// Firestore (config/extras_fijos). Lo de aquí abajo es solo el valor de
+// respaldo por si ese documento todavía no existe.
+let EXTRAS_FIJOS = [
+  { nombre: 'Burritos bistec o pollo c/papas', precio: 25 },
+  { nombre: 'Hamburguesa c/papas', precio: 30 },
+  { nombre: 'Pechuga asada c/papas y ensalada', precio: 25 },
+  { nombre: 'Pechuga/res empanizada c/papas y ensalada', precio: 30 },
+  { nombre: 'Carne asada c/papas', precio: 25 },
+  { nombre: 'Bowl atún/pollo/res', precio: 30 },
+  { nombre: 'Ensalada César', precio: 30 },
+  { nombre: 'Chilaquiles', precio: 25 },
+  { nombre: 'Maizitos', precio: 25 },
+];
+// Vive junto a suscribirPrecios() (mismo patrón: no bloquea la entrada a la
+// app, y si el documento no existe todavía se queda con el respaldo de
+// arriba). Se llama desde iniciarApp().
+function suscribirMenuDesayunoFijo() {
+  return new Promise(function (resolve) {
+    let resuelto = false;
+    db.collection('config').doc('desayuno_fijo').onSnapshot(function (snap) {
+      if (snap.exists && Array.isArray(snap.data().items) && snap.data().items.length) {
+        MENU_DESAYUNO = snap.data().items.map(function (it) {
+          return { nombre: it.nombre, precio: Number(it.precio) || 0, grupo: it.grupo || null };
+        });
+      }
+      if (!resuelto) { resuelto = true; resolve(); }
+      else if (perfil) { renderDesayuno(); } // cambió con la app abierta — refresca lo que ve el empleado
+    }, function (err) {
+      console.error('Error al cargar menú de desayuno fijo:', err);
+      if (!resuelto) { resuelto = true; resolve(); }
+    });
+  });
+}
+// Mismo patrón que suscribirMenuDesayunoFijo(), para los extras fijos de
+// comida. Aquí SÍ se acepta una lista vacía guardada (a diferencia del
+// desayuno, que necesita al menos un producto o el empleado no vería nada
+// que pedir) — el admin puede querer quitarlos todos.
+function suscribirExtrasFijos() {
+  return new Promise(function (resolve) {
+    let resuelto = false;
+    db.collection('config').doc('extras_fijos').onSnapshot(function (snap) {
+      if (snap.exists && Array.isArray(snap.data().items)) {
+        EXTRAS_FIJOS = snap.data().items.map(function (it) {
+          return { nombre: it.nombre, precio: Number(it.precio) || 0 };
+        });
+      }
+      if (!resuelto) { resuelto = true; resolve(); }
+      else {
+        // Cambió con la app abierta — refresca lo que ve el empleado, si hay algo que refrescar.
+        if (menuHoy) renderInicio();
+        if (menusSemana && menusSemana[diaIdx]) selDia(diaIdx);
+      }
+    }, function (err) {
+      console.error('Error al cargar extras fijos:', err);
+      if (!resuelto) { resuelto = true; resolve(); }
+    });
+  });
+}
 let ordenesDesayuno = {}; // { fecha: ordenDoc } — separado de "ordenes" (comida) a propósito, ver suscribirOrdenes()
 let desayunoSel = {};     // { nombre: {nombre, precio, cantidad} }
 let _pidiendoDesayuno = false;
@@ -787,6 +860,11 @@ async function iniciarApp() {
     // "await": antes si esto se quedaba trabado, se quedaba trabada TODA la
     // entrada a la app, aunque el usuario y contraseña fueran correctos.
     suscribirPrecios();
+    // Mismo motivo que suscribirPrecios(): sin "await" para no bloquear la
+    // entrada a la app — arrancan con el respaldo hardcodeado y se
+    // actualizan solos en cuanto carga lo que haya guardado el admin.
+    suscribirMenuDesayunoFijo();
+    suscribirExtrasFijos();
     // Igual que suscribirPrecios(): sin "await" para no bloquear la entrada
     // a la app. subsidiosRestantes arranca optimista en 5 y, en cuanto esto
     // resuelve, se repinta lo que ya esté en pantalla para mostrar la cuenta
@@ -1068,7 +1146,19 @@ function renderItems(cont, menu, modo) {
   st.className = 'sec-tit'; st.textContent = 'Extras con costo adicional';
   cont.appendChild(st);
 
-  (menu.extras || []).forEach(ex => {
+  // Extras fijos (siempre los mismos, ver EXTRAS_FIJOS arriba) + los que el
+  // admin haya capturado para este día en particular — combinados y sin
+  // duplicar por nombre (si el admin repite sin querer un extra fijo en el
+  // editor del día, se queda solo el fijo).
+  const extrasCombinados = [];
+  const _nombresVistos = new Set();
+  [...(EXTRAS_FIJOS || []), ...(menu.extras || [])].forEach(ex => {
+    const key = (ex.nombre || '').trim().toLowerCase();
+    if (!key || _nombresVistos.has(key)) return;
+    _nombresVistos.add(key);
+    extrasCombinados.push(ex);
+  });
+  extrasCombinados.forEach(ex => {
     const exSel = arrEx.some(x => x.nombre === ex.nombre);
     const d = document.createElement('div');
     d.className = 'item' + (exSel ? ' on' : '');
