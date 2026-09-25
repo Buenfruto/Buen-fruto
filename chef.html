@@ -11,7 +11,7 @@
 <meta http-equiv="Expires" content="0"/>
 <script>
 (function(){
-  var V='20260907-1';
+  var V='20260925-1';
   try{
     fetch('version.txt?_='+Date.now(),{cache:'no-store'}).then(function(r){return r.ok?r.text():null;}).then(function(t){
       if(!t) return;
@@ -477,6 +477,20 @@ function render(){
 
     const tiempoTxt = esActiva ? 'Preparando ahora' : 'En espera';
     const plHTML = (o.platillos||[]).map(p => '<div class="platillo"><div class="platillo-dot"></div>'+p+'</div>').join('');
+    // Antes esta caja de "Buffet del día"/"Desayuno" se mostraba SIEMPRE,
+    // aunque la orden no trajera ningún platillo (ej. un pedido de solo
+    // extra, sin buffet) — quedaba una caja con el título pero vacía por
+    // dentro, y en la práctica confundía a cocina: se veía como que había
+    // que darle buffet también, aunque el empleado no lo pidió ni lo pagó
+    // (bug reportado por Sebastián — se estaba dando buffet gratis en pedidos
+    // de solo extra). Ahora la caja completa solo aparece si de verdad hay
+    // platillos que preparar.
+    const tienePlatillos = (o.platillos||[]).length > 0;
+    const buffetHTML = tienePlatillos
+      ? '<div style="background:var(--vl2);border-radius:8px;padding:.5rem .75rem;margin-bottom:.25rem">'
+        +'<div class="card-sec" style="color:var(--v);margin-bottom:.35rem">'+(o.categoria==='desayuno'?'Desayuno':'Buffet del día')+'</div>'+plHTML
+        +'</div>'
+      : '';
     let exHTML = '';
     if ((o.extras||[]).length) {
       exHTML = '<div style="margin-top:.5rem;background:var(--naranjal);border-radius:8px;padding:.5rem .75rem"><div class="card-sec" style="color:var(--naranja);margin-bottom:.35rem">Extras adicionales</div>'
@@ -498,9 +512,7 @@ function render(){
         +'<div class="card-tiempo">'+tiempoTxt+'</div></div></div>'+badge+preordenTag+desayunoTag
       +'</div>'
       +'<div class="card-body">'
-        +'<div style="background:var(--vl2);border-radius:8px;padding:.5rem .75rem;margin-bottom:.25rem">'
-        +'<div class="card-sec" style="color:var(--v);margin-bottom:.35rem">'+(o.categoria==='desayuno'?'Desayuno':'Buffet del día')+'</div>'+plHTML
-        +'</div>'+exHTML
+        +buffetHTML+exHTML
       +'</div>'+timerHTML+footHTML;
 
     grid.appendChild(card);
