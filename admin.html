@@ -15,7 +15,7 @@
 // fuerza una recarga limpia. sessionStorage evita que se quede en bucle si
 // version.txt no está disponible por algún motivo.
 (function(){
-  var V='20260920-1';
+  var V='20261002-1';
   try{
     fetch('version.txt?_='+Date.now(),{cache:'no-store'}).then(function(r){return r.ok?r.text():null;}).then(function(t){
       if(!t) return;
@@ -811,9 +811,9 @@ input[type=file]{display:none}
         <div class="card" style="margin-bottom:1.25rem">
           <div class="card-head"><span class="card-titulo">➕ Extras fijos de comida (todos los días)</span></div>
           <div class="card-body">
-            <p style="font-size:.82rem;color:var(--g2);margin-bottom:1rem">Estos extras se suman automáticamente a los extras de CADA día del menú de comida — ya no hace falta volver a capturarlos en el editor de cada día, de cada semana. Siguen siendo los mismos hasta que tú los cambies aquí abajo. Si algún día necesitas un extra que solo aplica ESE día, lo puedes seguir agregando normal en "Extras con costo adicional" del editor del día, más abajo — se suma a estos, no los reemplaza.</p>
+            <p style="font-size:.82rem;color:var(--g2);margin-bottom:1rem">Estos extras se suman automáticamente a los extras de CADA día del menú de comida — ya no hace falta volver a capturarlos en el editor de cada día, de cada semana. Siguen siendo los mismos hasta que tú los cambies aquí abajo. Si algún día necesitas un extra que solo aplica ESE día, lo puedes seguir agregando normal en "Extras con costo adicional" del editor del día, más abajo — se suma a estos, no los reemplaza. Con las casillas de Betel/Cuauhtémoc/Interlomas de cada uno puedes limitar un extra a solo ciertos comedores — si dejas las 3 marcadas (o las 3 sin marcar), se le muestra a todos los comedores igual que antes.</p>
             <div id="lista-extras-fijos"></div>
-            <button class="btn btn-outline btn-sm" id="btn-add-extra-fijo" type="button" style="margin-top:.4rem" onclick="extrasFijosBuf.push({nombre:'',precio:0});renderListaExtrasFijos()">+ Agregar extra fijo</button>
+            <button class="btn btn-outline btn-sm" id="btn-add-extra-fijo" type="button" style="margin-top:.4rem" onclick="extrasFijosBuf.push({nombre:'',precio:0,comedores:[]});renderListaExtrasFijos()">+ Agregar extra fijo</button>
             <div class="msg" id="extras-fijos-msg"></div>
             <button class="btn btn-v btn-sm" id="btn-guardar-extras-fijos" onclick="guardarExtrasFijos()" style="margin-top:1rem">Guardar extras fijos</button>
           </div>
@@ -4165,12 +4165,12 @@ async function cargarConfigFija(){
       ? snapD.data().items.map(function(it){ return { nombre: it.nombre||'', precio: Number(it.precio)||0, grupo: it.grupo||'' }; })
       : DESAYUNO_FIJO_DEFAULT.map(function(it){ return Object.assign({},it,{grupo: it.grupo||''}); });
     extrasFijosBuf = (snapE.exists && Array.isArray(snapE.data().items))
-      ? snapE.data().items.map(function(it){ return { nombre: it.nombre||'', precio: Number(it.precio)||0 }; })
-      : EXTRAS_FIJOS_DEFAULT.map(function(it){ return Object.assign({},it); });
+      ? snapE.data().items.map(function(it){ return { nombre: it.nombre||'', precio: Number(it.precio)||0, comedores: Array.isArray(it.comedores) ? it.comedores : [] }; })
+      : EXTRAS_FIJOS_DEFAULT.map(function(it){ return Object.assign({comedores:[]},it); });
   } catch(e){
     console.error('Error al cargar menú de desayuno fijo / extras fijos:', e);
     desayunoFijoBuf = DESAYUNO_FIJO_DEFAULT.map(function(it){ return Object.assign({},it,{grupo: it.grupo||''}); });
-    extrasFijosBuf = EXTRAS_FIJOS_DEFAULT.map(function(it){ return Object.assign({},it); });
+    extrasFijosBuf = EXTRAS_FIJOS_DEFAULT.map(function(it){ return Object.assign({comedores:[]},it); });
   }
   renderListaDesayunoFijo();
   renderListaExtrasFijos();
@@ -4199,12 +4199,27 @@ function renderListaDesayunoFijo(){
   });
 }
 
+// Comedores disponibles para restringir un extra fijo — mismo orden/claves
+// que usa el resto del admin (ver comedorLabelsPf en index.html). Si el
+// arreglo "comedores" de un extra queda vacío (o con los 3 marcados), se
+// interpreta como "todos los comedores", igual que el comportamiento de
+// siempre antes de que existiera esta restricción.
+const COMEDORES_EF = [ {key:'betel', label:'Betel'}, {key:'cuauhtemoc', label:'Cuauhtémoc'}, {key:'interlomas', label:'Interlomas'} ];
+
 function renderListaExtrasFijos(){
   const cont = document.getElementById('lista-extras-fijos');
   if(!cont) return;
   cont.innerHTML = extrasFijosBuf.length ? extrasFijosBuf.map(function(ex,i){
-    return '<div class="fila-editor"><input type="text" class="input-ef-nombre" data-i="'+i+'" placeholder="Ej. Hamburguesa c/papas" value="'+escHtml(ex.nombre)+'"/>'+
+    const comedores = Array.isArray(ex.comedores) ? ex.comedores : [];
+    const todos = comedores.length === 0; // sin restricción guardada = se ve en los 3
+    const checks = COMEDORES_EF.map(function(c){
+      const marcado = todos || comedores.indexOf(c.key) !== -1;
+      return '<label style="display:flex;align-items:center;gap:.25rem;font-size:.72rem;color:var(--g2);white-space:nowrap;cursor:pointer">'
+        + '<input type="checkbox" class="input-ef-comedor" data-i="'+i+'" data-comedor="'+c.key+'" '+(marcado?'checked':'')+' style="width:auto"/>'+c.label+'</label>';
+    }).join('');
+    return '<div class="fila-editor" style="flex-wrap:wrap"><input type="text" class="input-ef-nombre" data-i="'+i+'" placeholder="Ej. Hamburguesa c/papas" value="'+escHtml(ex.nombre)+'" style="flex:1 1 200px"/>'+
       '<input type="number" class="input-ef-precio" data-i="'+i+'" placeholder="$" min="0" step="1" value="'+(ex.precio||0)+'"/>'+
+      '<div style="display:flex;gap:.6rem;flex:0 0 auto">'+checks+'</div>'+
       '<button class="btn-quitar" data-i="'+i+'" type="button" title="Quitar">✕</button></div>';
   }).join('') : '<div style="font-size:.8rem;color:var(--g3);padding:.4rem 0 .2rem">Sin extras fijos</div>';
   cont.querySelectorAll('.input-ef-nombre').forEach(function(inp){
@@ -4212,6 +4227,20 @@ function renderListaExtrasFijos(){
   });
   cont.querySelectorAll('.input-ef-precio').forEach(function(inp){
     inp.addEventListener('input', function(e){ extrasFijosBuf[+e.target.dataset.i].precio = Number(e.target.value)||0; });
+  });
+  cont.querySelectorAll('.input-ef-comedor').forEach(function(chk){
+    chk.addEventListener('change', function(e){
+      const i = +e.target.dataset.i;
+      const item = extrasFijosBuf[i];
+      // Reconstruye el arreglo de comedores leyendo las 3 casillas de esa
+      // misma fila (no solo la que cambió), para que siempre quede
+      // consistente con lo que se ve en pantalla.
+      const marcados = Array.from(cont.querySelectorAll('.input-ef-comedor[data-i="'+i+'"]'))
+        .filter(function(c){ return c.checked; })
+        .map(function(c){ return c.dataset.comedor; });
+      // 0 marcados o los 3 marcados = sin restricción (se ve en todos).
+      item.comedores = (marcados.length === 0 || marcados.length === COMEDORES_EF.length) ? [] : marcados;
+    });
   });
   cont.querySelectorAll('.btn-quitar').forEach(function(btn){
     btn.addEventListener('click', function(e){ extrasFijosBuf.splice(+e.target.dataset.i,1); renderListaExtrasFijos(); });
@@ -4244,15 +4273,15 @@ async function guardarExtrasFijos(){
   const msg = document.getElementById('extras-fijos-msg');
   function mostrarMsg(t,ok){ if(!msg) return; msg.textContent=t; msg.className='msg '+(ok?'ok':'err'); msg.style.display='block'; }
   const limpios = extrasFijosBuf
-    .map(function(ex){ return { nombre:(ex.nombre||'').trim(), precio:Number(ex.precio)||0 }; })
+    .map(function(ex){ return { nombre:(ex.nombre||'').trim(), precio:Number(ex.precio)||0, comedores: Array.isArray(ex.comedores) ? ex.comedores : [] }; })
     .filter(function(ex){ return ex.nombre; });
   const btn = document.getElementById('btn-guardar-extras-fijos');
   if(btn){ btn.disabled=true; btn.textContent='Guardando...'; }
   try {
     await db.collection('config').doc('extras_fijos').set({ items: limpios });
-    extrasFijosBuf = limpios.map(function(ex){ return { nombre: ex.nombre, precio: ex.precio }; });
+    extrasFijosBuf = limpios.map(function(ex){ return { nombre: ex.nombre, precio: ex.precio, comedores: ex.comedores }; });
     renderListaExtrasFijos();
-    mostrarMsg('Extras fijos guardados — ya aparecen en el menú de todos los días.', true);
+    mostrarMsg('Extras fijos guardados — ya aparecen en el menú de los comedores que marcaste para cada uno.', true);
   } catch(e){
     console.error('Error al guardar extras fijos:', e);
     mostrarMsg('No se pudo guardar. Intenta de nuevo.', false);
