@@ -12,7 +12,7 @@
 <meta http-equiv="Expires" content="0"/>
 <script>
 (function(){
-  var V='20260925-2';
+  var V='20261002-1';
   try{
     fetch('version.txt?_='+Date.now(),{cache:'no-store'}).then(function(r){return r.ok?r.text():null;}).then(function(t){
       if(!t) return;
@@ -642,7 +642,10 @@ function suscribirExtrasFijos() {
     db.collection('config').doc('extras_fijos').onSnapshot(function (snap) {
       if (snap.exists && Array.isArray(snap.data().items)) {
         EXTRAS_FIJOS = snap.data().items.map(function (it) {
-          return { nombre: it.nombre, precio: Number(it.precio) || 0 };
+          // comedores: lista de comedores donde se ofrece este extra fijo
+          // (ver "➕ Extras fijos de comida" en admin). Vacío o ausente =
+          // se ofrece en los 3 comedores, igual que siempre.
+          return { nombre: it.nombre, precio: Number(it.precio) || 0, comedores: Array.isArray(it.comedores) ? it.comedores : [] };
         });
       }
       if (!resuelto) { resuelto = true; resolve(); }
@@ -1159,9 +1162,16 @@ function renderItems(cont, menu, modo) {
   // admin haya capturado para este día en particular — combinados y sin
   // duplicar por nombre (si el admin repite sin querer un extra fijo en el
   // editor del día, se queda solo el fijo).
+  // Algunos extras fijos solo aplican a ciertos comedores (ej. "Maizitos"
+  // nada más en Interlomas y Betel, no en Cuauhtémoc) — se filtran aquí
+  // antes de combinar, así nunca se le ofrece a un empleado un extra que no
+  // corresponde a su comedor. Sin restricción guardada (comedores vacío o
+  // ausente) = se ofrece en los 3 comedores, como siempre.
+  const miComedor = perfil && perfil.comedor;
+  const extrasFijosDelComedor = (EXTRAS_FIJOS || []).filter(ex => !ex.comedores || ex.comedores.length === 0 || (miComedor && ex.comedores.includes(miComedor)));
   const extrasCombinados = [];
   const _nombresVistos = new Set();
-  [...(EXTRAS_FIJOS || []), ...(menu.extras || [])].forEach(ex => {
+  [...extrasFijosDelComedor, ...(menu.extras || [])].forEach(ex => {
     const key = (ex.nombre || '').trim().toLowerCase();
     if (!key || _nombresVistos.has(key)) return;
     _nombresVistos.add(key);
@@ -1567,7 +1577,15 @@ async function pedirAhora() {
     ordenes[hoy()] = { id: ref.id, ...data };
     renderInicio(); renderDiasTabs();
     mostrarConf(hoy(), null, cg, 'Llega al comedor y escanea tu gafete', true, extrasSel, platSel, usarSubsidio);
-    if (usarSubsidio) refrescarSubsidiosSemana().then(function(){ renderInicio(); renderDesayuno(); });
+    // Se espera (await) el refresco del contador de créditos antes de soltar
+    // el candado de este pedido — igual que ya hacía pedirDesayuno(). Antes
+    // esto era "fire and forget" (sin await), así que si el empleado corría
+    // a pedir otra cosa (desayuno, o comida de otro día) en el segundo
+    // siguiente, esa otra pantalla todavía veía el conteo viejo de créditos
+    // y podía dejarlo subsidiar de más. Con el await, mientras no haya
+    // terminado de confirmarse el conteo real, sigue mostrando "Enviando..."
+    // en este botón en vez de soltarlo con un dato viejo.
+    if (usarSubsidio) { await refrescarSubsidiosSemana(); renderInicio(); renderDesayuno(); }
   } catch (err) {
     console.error('Error al pedir ahora:', err);
     alert('No se pudo enviar tu pedido, intenta de nuevo.');
@@ -1759,7 +1777,12 @@ function selDia(i) {
         ordenes[fecha] = { id: ref.id, ...data };
         renderInicio(); renderDiasTabs();
         mostrarConf(fecha, null, cg, 'Llega al comedor y escanea tu gafete', true, extrasSelDet, platSelDet, usarSubsidioDet);
-        if (usarSubsidioDet) refrescarSubsidiosSemana().then(function(){ renderInicio(); renderDesayuno(); });
+        // Mismo motivo que en pedirAhora(): se espera (await) el refresco del
+        // contador de créditos antes de soltar el candado de este pedido, en
+        // vez de dispararlo sin esperar — así se reduce la ventana en la que
+        // otro pedido (desayuno u hoy) podría ver un conteo de créditos
+        // desactualizado y dejar subsidiar de más de los 5 a la semana.
+        if (usarSubsidioDet) { await refrescarSubsidiosSemana(); renderInicio(); renderDesayuno(); }
       } catch (err) {
         console.error('Error al ordenar para este día:', err);
         alert('No se pudo enviar tu pedido, intenta de nuevo.');
