@@ -11,7 +11,7 @@
 <meta http-equiv="Expires" content="0"/>
 <script>
 (function(){
-  var V='20260925-1';
+  var V='20261117-1';
   try{
     fetch('version.txt?_='+Date.now(),{cache:'no-store'}).then(function(r){return r.ok?r.text():null;}).then(function(t){
       if(!t) return;
@@ -257,6 +257,9 @@ html,body{min-height:100%;font-family:'Inter',system-ui,sans-serif;background:va
 }
 .empty-sub{font-size:.9rem;color:var(--g2);max-width:360px;line-height:1.6}
 
+/* TOAST (antes no tenía estilos y nunca se veía) */
+.toast{position:fixed;left:50%;bottom:1.5rem;transform:translateX(-50%) translateY(20px);background:#3E4A34;color:#fff;padding:.75rem 1.25rem;border-radius:12px;font-size:.9rem;font-weight:600;box-shadow:0 8px 24px rgba(0,0,0,.2);opacity:0;pointer-events:none;transition:all .25s;z-index:999}
+.toast.on{opacity:1;transform:translateX(-50%) translateY(0)}
 </style>
 </head>
 <body>
@@ -320,6 +323,10 @@ const MS = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','s
 
 function hoy(){ const d=new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
 
+
+// Escapa texto antes de meterlo a innerHTML — los nombres de visita los escribe
+// cualquiera desde el link público, y un nombre con HTML/script se ejecutaba aquí (pantalla de cocina).
+function esc(t){ return String(t==null?'':t).replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch])); }
 // Comedor de esta pantalla — se pasa en la URL: chef.html?comedor=betel
 // Se normaliza (sin acentos/mayúsculas, aceptando "interlomas"/"intelomas"
 // como el mismo) para que nunca importe cuál variante haya quedado guardada
@@ -376,6 +383,7 @@ function suscribirOrdenes() {
   if (_unsubOrdenes) { _unsubOrdenes(); _unsubOrdenes = null; }
   const q = db.collection('ordenes').where('fecha', '==', hoy());
   _unsubOrdenes = q.onSnapshot(snap => {
+    _errSuscripcion = 0;
     const todasHoy = [];
     snap.forEach(d => {
       const data = d.data();
@@ -408,8 +416,16 @@ function suscribirOrdenes() {
 
     cola = nuevasCola;
     render();
+  }, err => {
+    // Si el listener se cae (sin internet, sesión anónima aún no lista, etc.)
+    // se reintenta solo en 10s — antes esto lo "arreglaba" re-suscribirse a
+    // ciegas cada minuto, releyendo TODAS las órdenes del día cada vez.
+    console.error('Error en listener de cocina:', err);
+    _errSuscripcion++;
+    setTimeout(suscribirOrdenes, 10000);
   });
 }
+let _errSuscripcion = 0;
 
 // ── MARCAR LISTA ──
 async function marcarLista(id) {
@@ -476,7 +492,7 @@ function render(){
     const desayunoTag = o.categoria==='desayuno' ? '<span class="card-badge" style="background:rgba(255,255,255,.2);color:white;margin-left:.35rem">🍳 Desayuno</span>' : '';
 
     const tiempoTxt = esActiva ? 'Preparando ahora' : 'En espera';
-    const plHTML = (o.platillos||[]).map(p => '<div class="platillo"><div class="platillo-dot"></div>'+p+'</div>').join('');
+    const plHTML = (o.platillos||[]).map(p => '<div class="platillo"><div class="platillo-dot"></div>'+esc(p)+'</div>').join('');
     // Antes esta caja de "Buffet del día"/"Desayuno" se mostraba SIEMPRE,
     // aunque la orden no trajera ningún platillo (ej. un pedido de solo
     // extra, sin buffet) — quedaba una caja con el título pero vacía por
@@ -494,7 +510,7 @@ function render(){
     let exHTML = '';
     if ((o.extras||[]).length) {
       exHTML = '<div style="margin-top:.5rem;background:var(--naranjal);border-radius:8px;padding:.5rem .75rem"><div class="card-sec" style="color:var(--naranja);margin-bottom:.35rem">Extras adicionales</div>'
-        + o.extras.map(e => '<div class="platillo" style="border-color:rgba(198,94,0,.15)"><div class="platillo-dot" style="background:var(--naranja)"></div><span style="color:var(--naranja);font-weight:600">'+(e.nombre||e)+'</span></div>').join('')
+        + o.extras.map(e => '<div class="platillo" style="border-color:rgba(198,94,0,.15)"><div class="platillo-dot" style="background:var(--naranja)"></div><span style="color:var(--naranja);font-weight:600">'+esc(e.nombre||e)+'</span></div>').join('')
         + '</div>';
     }
 
@@ -508,7 +524,7 @@ function render(){
     card.innerHTML =
       '<div class="card-head" style="background:'+headBg+'">'
         +'<div class="card-num-wrap"><div class="card-num">'+(i+1)+'</div>'
-        +'<div><div class="card-empleado">'+(o.empleado_nombre||'—').split(' ').slice(0,2).join(' ')+'</div>'
+        +'<div><div class="card-empleado">'+esc((o.empleado_nombre||'—').split(' ').slice(0,2).join(' '))+'</div>'
         +'<div class="card-tiempo">'+tiempoTxt+'</div></div></div>'+badge+preordenTag+desayunoTag
       +'</div>'
       +'<div class="card-body">'
@@ -538,12 +554,12 @@ function render(){
     completadasLista.slice().reverse().forEach(o => {
       const chip = document.createElement('div');
       chip.style.cssText = 'background:var(--w);border:1px solid var(--borde2);border-left:3px solid '+(o.hora_preorden?'var(--c)':'var(--v)')+';border-radius:10px;overflow:hidden;cursor:pointer;transition:box-shadow .15s';
-      const plHTML2 = (o.platillos||[]).map(p=>'<div style="display:flex;align-items:center;gap:.4rem;padding:.2rem 0;font-size:.78rem;color:var(--g1)"><div style="width:5px;height:5px;border-radius:50%;background:var(--v);flex-shrink:0"></div>'+p+'</div>').join('');
-      const exHTML2 = (o.extras||[]).length ? (o.extras||[]).map(e=>'<div style="display:flex;align-items:center;gap:.4rem;padding:.2rem 0;font-size:.78rem;color:var(--naranja);font-weight:600"><div style="width:5px;height:5px;border-radius:50%;background:var(--naranja);flex-shrink:0"></div>'+(e.nombre||e)+'</div>').join('') : '';
+      const plHTML2 = (o.platillos||[]).map(p=>'<div style="display:flex;align-items:center;gap:.4rem;padding:.2rem 0;font-size:.78rem;color:var(--g1)"><div style="width:5px;height:5px;border-radius:50%;background:var(--v);flex-shrink:0"></div>'+esc(p)+'</div>').join('');
+      const exHTML2 = (o.extras||[]).length ? (o.extras||[]).map(e=>'<div style="display:flex;align-items:center;gap:.4rem;padding:.2rem 0;font-size:.78rem;color:var(--naranja);font-weight:600"><div style="width:5px;height:5px;border-radius:50%;background:var(--naranja);flex-shrink:0"></div>'+esc(e.nombre||e)+'</div>').join('') : '';
       chip.innerHTML =
         '<div class="chip-head" style="display:flex;align-items:center;gap:.5rem;padding:.55rem .85rem;font-size:.8rem">'
           +'<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="'+(o.hora_preorden?'var(--c)':'var(--v)')+'" stroke-width="2.5" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg>'
-          +'<span style="font-weight:700;color:var(--negro)">'+(o.empleado_nombre||'—').split(' ').slice(0,2).join(' ')+'</span>'
+          +'<span style="font-weight:700;color:var(--negro)">'+esc((o.empleado_nombre||'—').split(' ').slice(0,2).join(' '))+'</span>'
           +'<span style="color:var(--g3)">'+fmtHoraTs(o.tsLista)+'</span>'
           +(o.hora_preorden?'<span style="font-size:.65rem;background:var(--cl);color:var(--c);padding:.1rem .4rem;border-radius:5px;font-weight:700">Pre-orden</span>':'')
           +(o.categoria==='desayuno'?'<span style="font-size:.65rem;background:var(--vl2);color:var(--v);padding:.1rem .4rem;border-radius:5px;font-weight:700">🍳 Desayuno</span>':'')
@@ -575,13 +591,14 @@ function toast(msg){
 }
 
 setInterval(()=>{ if(cola.length) render(); }, 30000);
-// Revisar cada minuto si alguna pre-orden llegó a su hora
-setInterval(()=> { if(cola.length || true) suscribirOrdenes(); }, 60000);
+// FIX nov 2026: se quitó la re-suscripción a ciegas cada 60s (releía todas
+// las órdenes del día de los 3 comedores cada minuto en cada iPad). El
+// listener en tiempo real ya trae los cambios solo, y si se cae se
+// reintenta (ver el manejo de error en suscribirOrdenes).
 
-// Autenticar anónimamente para acceder a Firestore
-// Iniciar órdenes directamente — las reglas permiten auth anónima
+// Autenticar anónimamente y DESPUÉS suscribirse (antes también se
+// suscribía antes de tener sesión, lo que fallaba con permiso denegado).
 auth.signInAnonymously().finally(() => suscribirOrdenes());
-suscribirOrdenes(); // también iniciar de inmediato sin esperar
 
 
 </script>
