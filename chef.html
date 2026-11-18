@@ -11,7 +11,7 @@
 <meta http-equiv="Expires" content="0"/>
 <script>
 (function(){
-  var V='20261117-1';
+  var V='20261117-3';
   try{
     fetch('version.txt?_='+Date.now(),{cache:'no-store'}).then(function(r){return r.ok?r.text():null;}).then(function(t){
       if(!t) return;
@@ -381,7 +381,15 @@ let completadasLista = [];
 let _unsubOrdenes = null;
 function suscribirOrdenes() {
   if (_unsubOrdenes) { _unsubOrdenes(); _unsubOrdenes = null; }
-  const q = db.collection('ordenes').where('fecha', '==', hoy());
+  // FIX nov 2026 (cuota): antes escuchaba TODAS las órdenes del día de los 3
+  // comedores (incluidas las no escaneadas, que cocina nunca muestra). Ahora
+  // solo las escaneadas de ESTE comedor — lo único que se pinta. Si esa
+  // consulta llegara a fallar por cualquier motivo, se regresa sola a la
+  // consulta amplia de antes, para que cocina nunca se quede sin órdenes.
+  const _variantes = _comedor === 'interlomas' ? ['interlomas', 'intelomas'] : [_comedor];
+  const q = _usarConsultaAmplia
+    ? db.collection('ordenes').where('fecha', '==', hoy())
+    : db.collection('ordenes').where('fecha', '==', hoy()).where('escaneado', '==', true).where('comedor', 'in', _variantes);
   _unsubOrdenes = q.onSnapshot(snap => {
     _errSuscripcion = 0;
     const todasHoy = [];
@@ -422,10 +430,18 @@ function suscribirOrdenes() {
     // ciegas cada minuto, releyendo TODAS las órdenes del día cada vez.
     console.error('Error en listener de cocina:', err);
     _errSuscripcion++;
+    // Si la consulta acotada no la acepta Firestore (ej. falta un índice),
+    // se usa la amplia de inmediato y para siempre en esta pantalla.
+    if (!_usarConsultaAmplia && err && (err.code === 'failed-precondition' || err.code === 'invalid-argument')) {
+      _usarConsultaAmplia = true;
+      setTimeout(suscribirOrdenes, 500);
+      return;
+    }
     setTimeout(suscribirOrdenes, 10000);
   });
 }
 let _errSuscripcion = 0;
+let _usarConsultaAmplia = false;
 
 // ── MARCAR LISTA ──
 async function marcarLista(id) {
