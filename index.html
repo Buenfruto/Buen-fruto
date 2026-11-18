@@ -12,7 +12,7 @@
 <meta http-equiv="Expires" content="0"/>
 <script>
 (function(){
-  var V='20261002-1';
+  var V='20261117-3';
   try{
     fetch('version.txt?_='+Date.now(),{cache:'no-store'}).then(function(r){return r.ok?r.text():null;}).then(function(t){
       if(!t) return;
@@ -279,7 +279,7 @@ html,body{height:100%;font-family:'Inter',system-ui,sans-serif;background:var(--
     <div class="topbar-right">
       <span class="topbar-name" id="top-nombre">—</span>
       <span class="topbar-role">Empleado</span>
-      <span style="display:block;font-size:.55rem;color:#b7b09c;text-align:right;margin-top:2px">🍳 v20260909-1</span>
+      <span style="display:block;font-size:.55rem;color:#b7b09c;text-align:right;margin-top:2px">v20261117-3</span>
     </div>
   </div>
 
@@ -317,7 +317,7 @@ html,body{height:100%;font-family:'Inter',system-ui,sans-serif;background:var(--
     <div id="t-hist" style="display:none">
       <div class="saludo">
         <div class="titulo-seccion">Historial</div>
-        <div class="sub-seccion">Tus comidas por semana y mes</div>
+        <div class="sub-seccion">Tus comidas de este mes y el anterior</div>
       </div>
       <div id="hist-lista"></div>
     </div>
@@ -493,10 +493,15 @@ function lunesDeEstaSemana(fecha) {
 async function contarSubsidiosUsadosSemana() {
   if (!auth.currentUser) return 0;
   const lunes = lunesDeEstaSemana(hoy());
+  // FIX nov 2026: antes el límite superior era hoy(), así que los pedidos
+  // subsidiados para días posteriores de la semana (pre-órdenes) no contaban
+  // y se podían usar más de 5 créditos. Ahora cuenta lunes→domingo completo.
+  const dDom = new Date(lunes + 'T12:00:00'); dDom.setDate(dDom.getDate() + 6);
+  const domingo = dDom.getFullYear() + '-' + String(dDom.getMonth() + 1).padStart(2, '0') + '-' + String(dDom.getDate()).padStart(2, '0');
   const q = query(collection(db, 'ordenes'),
     where('empleado_uid', '==', auth.currentUser.uid),
     where('fecha', '>=', lunes),
-    where('fecha', '<=', hoy()));
+    where('fecha', '<=', domingo));
   const snap = await getDocs(q);
   let usados = 0;
   snap.forEach(function (d) {
@@ -844,6 +849,12 @@ auth.onAuthStateChanged(function(user) {
       if (perfil.comedor === 'intelomas') perfil.comedor = 'interlomas';
       if (perfil.rol === 'admin') { _redirigiendo = true; window.location.replace('admin.html'); return; }
       if (perfil.rol === 'chef')  { _redirigiendo = true; window.location.replace('chef.html');  return; }
+      // FIX nov 2026: "Desactivar" en el admin no hacía nada — ahora sí bloquea la entrada.
+      if (perfil.activo === false) {
+        var errI = document.getElementById('login-err');
+        if (errI) { errI.style.display = 'block'; errI.style.background = '#FDEDEC'; errI.style.color = '#C0392B'; errI.textContent = 'Tu cuenta está desactivada. Contacta a la administración de tu comedor.'; }
+        auth.signOut(); pg('pg-login'); return;
+      }
       iniciarApp();
     })
     .catch(function(e) {
@@ -917,7 +928,15 @@ function suscribirOrdenes() {
   const uid = auth.currentUser ? auth.currentUser.uid : null;
   if (!uid) return;
   const hoyStr = hoy();
-  unsubOrdenes = db.collection('ordenes').where('empleado_uid', '==', uid).onSnapshot(function(snap) {
+  // FIX nov 2026 (cuota Firestore): antes leía TODO el historial del empleado
+  // cada vez que abría la app; aquí solo se usan las de hoy en adelante.
+  // Si Firestore no aceptara la consulta acotada (falta de índice), se usa
+  // la amplia de antes automáticamente — el empleado nunca se queda sin ver
+  // sus pedidos.
+  const qOrd = _ordenesConsultaAmplia
+    ? db.collection('ordenes').where('empleado_uid', '==', uid)
+    : db.collection('ordenes').where('empleado_uid', '==', uid).where('fecha', '>=', hoyStr);
+  unsubOrdenes = qOrd.onSnapshot(function(snap) {
     ordenes = {};
     ordenesDesayuno = {};
     snap.forEach(function(d) {
@@ -944,8 +963,10 @@ function suscribirOrdenes() {
     renderDiasTabs();
   }, function(err) {
     console.error('Error suscribirOrdenes:', err);
+    if (!_ordenesConsultaAmplia && err && err.code === 'failed-precondition') { _ordenesConsultaAmplia = true; suscribirOrdenes(); }
   });
 }
+let _ordenesConsultaAmplia = false;
 
 // ── MENÚ HOY EN TIEMPO REAL ──
 let unsubMenuHoy = null;
@@ -1412,11 +1433,12 @@ function actuTicketDesayuno() {
 // separado de cancelarOrdenesDelDia() (que es solo de comida) para no
 // cancelar por accidente el pedido de comida del empleado al pedir desayuno.
 async function cancelarOrdenesDesayunoDelDia(fecha) {
-  const q = query(collection(db, 'ordenes'), where('empleado_uid', '==', auth.currentUser.uid), where('categoria', '==', 'desayuno'));
+  const q = query(collection(db, 'ordenes'), where('empleado_uid', '==', auth.currentUser.uid), where('categoria', '==', 'desayuno'), where('fecha', '==', fecha));
   const snap = await getDocs(q);
   const promises = [];
   snap.forEach(d => {
     const data = d.data();
+    if (data.escaneado) return; // nunca cancelar un desayuno ya escaneado/consumido
     if (data.fecha === fecha && data.estado !== 'cancelado') {
       promises.push(updateDoc(doc(db, 'ordenes', d.id), { estado: 'cancelado', cancelado_en: new Date() }));
     }
@@ -1464,6 +1486,7 @@ async function pedirDesayuno(fecha) {
       estado: 'pagado', escaneado: false,
       subsidiado: usarSubsidio,
       subsidio_empresa: subsidioAplicado,
+      precio_total: PRECIO_TOTAL, precio_empleado: PRECIO_EMPLEADO,
       creado_en: serverTimestamp()
     };
     const ref = await addDoc(collection(db, 'ordenes'), data);
@@ -1515,11 +1538,17 @@ async function comedorVigente() {
 // ── PEDIR AHORA ──
 // Cancelar órdenes previas del mismo día para evitar duplicados
 async function cancelarOrdenesDelDia(fecha) {
-  const q = query(collection(db,'ordenes'), where('empleado_uid','==',auth.currentUser.uid));
+  const q = query(collection(db,'ordenes'), where('empleado_uid','==',auth.currentUser.uid), where('fecha','==',fecha)); // solo ese día, no todo el historial (cuota)
   const snap = await getDocs(q);
   const promises = [];
   snap.forEach(d => {
     const data = d.data();
+    // FIX nov 2026: antes esto cancelaba TODAS las órdenes del día, incluido
+    // el DESAYUNO (aunque ya se lo hubiera comido y escaneado) — al pedir
+    // comida, el desayuno desaparecía de nómina. Ahora solo toca comida, y
+    // nunca una orden ya escaneada (esa ya se consumió y se debe cobrar).
+    if (data.categoria === 'desayuno') return;
+    if (data.escaneado) return;
     if (data.fecha === fecha && data.estado !== 'cancelado') {
       promises.push(updateDoc(doc(db,'ordenes',d.id), {estado:'cancelado', cancelado_en:new Date()}));
     }
@@ -1571,6 +1600,7 @@ async function pedirAhora() {
       comedor: await comedorVigente(),
       estado: 'pagado', escaneado: false,
       subsidiado: usarSubsidio,
+      precio_total: PRECIO_TOTAL, precio_empleado: PRECIO_EMPLEADO,
       creado_en: serverTimestamp()
     };
     const ref = await addDoc(collection(db, 'ordenes'), data);
@@ -1637,9 +1667,19 @@ async function crearOrden(fecha, horaPreorden) {
 
 // ── MENÚ SEMANAL EN TIEMPO REAL ──
 const unsubMenus = [];
+let _menusSemanaLunes = null;
 async function cargarMenuSemana() {
-  document.getElementById('menu-det-contenido').innerHTML = '<div class="loading"><div class="spinner"></div>Cargando menús...</div>';
   const dias = getDias(); // siempre los 7 días completos (lunes a domingo) de esta semana, todos visibles
+  // FIX nov 2026 (cuota): los 7 menús ya se escuchan en vivo — si se vuelve a
+  // tocar la pestaña Menús en la misma semana, solo se repinta en vez de
+  // abrir 7 suscripciones nuevas (7 lecturas cada clic).
+  if (_menusSemanaLunes === dias[0] && unsubMenus.length === 7) {
+    renderDiasTabs();
+    if (menusSemana[diaIdx]) selDia(diaIdx);
+    return;
+  }
+  _menusSemanaLunes = dias[0];
+  document.getElementById('menu-det-contenido').innerHTML = '<div class="loading"><div class="spinner"></div>Cargando menús...</div>';
   const d0 = new Date(dias[0]+'T12:00:00'), d6 = new Date(dias[dias.length-1]+'T12:00:00');
   document.getElementById('subtitulo-semana').textContent = `${d0.getDate()} de ${MS[d0.getMonth()]} – ${d6.getDate()} de ${MS[d6.getMonth()]}`;
   // Cancelar suscripciones anteriores
@@ -1771,7 +1811,8 @@ function selDia(i) {
           comedor: await comedorVigente(),
           estado: 'pagado', escaneado: false,
           subsidiado: usarSubsidioDet,
-          creado_en: serverTimestamp()
+          precio_total: PRECIO_TOTAL, precio_empleado: PRECIO_EMPLEADO,
+      creado_en: serverTimestamp()
         };
         const ref = await addDoc(collection(db, 'ordenes'), data);
         ordenes[fecha] = { id: ref.id, ...data };
@@ -1875,16 +1916,25 @@ let unsubHistorial = null;
 function cargarHistorial() {
   document.getElementById('hist-lista').innerHTML = '<div class="loading"><div class="spinner"></div>Cargando historial...</div>';
   if (unsubHistorial) unsubHistorial();
-  const q = query(collection(db, 'ordenes'), where('empleado_uid', '==', auth.currentUser.uid));
-  unsubHistorial = onSnapshot(q, snap => {
+  // FIX nov 2026 (cuota): antes leía TODO el historial del empleado; ahora
+  // el mes actual y el anterior (lo que de verdad se consulta).
+  const _hD = new Date(); const _hIni = new Date(_hD.getFullYear(), _hD.getMonth() - 1, 1);
+  const desdeHist = _hIni.getFullYear() + '-' + String(_hIni.getMonth() + 1).padStart(2, '0') + '-01';
+  const q = _histConsultaAmplia
+    ? query(collection(db, 'ordenes'), where('empleado_uid', '==', auth.currentUser.uid))
+    : query(collection(db, 'ordenes'), where('empleado_uid', '==', auth.currentUser.uid), where('fecha', '>=', desdeHist));
+  unsubHistorial = q.onSnapshot(snap => {
     const lista = document.getElementById('hist-lista');
     const porMes = {};
     snap.forEach(d => {
       const h = d.data();
       if (h.estado === 'cancelado') return; // NUNCA mostrar canceladas
+      // Solo lo que de verdad se consumió (gafete escaneado) — un pedido
+      // pendiente o futuro todavía no se cobra, se ve en "Pedidos".
+      if (!h.escaneado) return;
       const dt = new Date(h.fecha+'T12:00:00');
-      const mk = dt.getFullYear()+'-'+dt.getMonth();
-      if (!porMes[mk]) porMes[mk] = { label: MF[dt.getMonth()]+' '+dt.getFullYear(), sems: {}, total: 0, dias: 0 };
+      const mk = dt.getFullYear()+'-'+String(dt.getMonth()).padStart(2,'0');
+      if (!porMes[mk]) porMes[mk] = { key: mk, label: MF[dt.getMonth()]+' '+dt.getFullYear(), sems: {}, total: 0, dias: 0 };
       porMes[mk].total += h.cargo; porMes[mk].dias++;
       const ns = Math.min(Math.ceil(dt.getDate()/7), 4);
       const sk = mk+'-'+ns;
@@ -1893,7 +1943,7 @@ function cargarHistorial() {
     });
     if (!Object.keys(porMes).length) { lista.innerHTML = '<div class="empty"><div class="empty-t">Sin comidas registradas</div></div>'; return; }
     let html = '';
-    Object.values(porMes).sort((a,b)=>b.label.localeCompare(a.label)).forEach(mes => {
+    Object.values(porMes).sort((a,b)=>b.key.localeCompare(a.key)).forEach(mes => {
       html += `<div class="mes-bloque"><div class="mes-head"><div class="mes-nombre">${mes.label}</div><div class="mes-right"><div class="mes-dias">${mes.dias} comidas</div><div class="mes-gasto">−$${mes.total}</div></div></div>`;
       Object.values(mes.sems).sort((a,b)=>a.num-b.num).forEach(sem => {
         html += `<div class="sem-bloque"><div class="sem-head"><div class="sem-num">${sem.num}</div><div class="sem-label">Semana ${sem.num}</div><div class="sem-total">−$${sem.total}</div></div>`;
@@ -1906,8 +1956,12 @@ function cargarHistorial() {
       html += `</div>`;
     });
     lista.innerHTML = html;
+  }, err => {
+    console.error('Error historial:', err);
+    if (!_histConsultaAmplia && err && err.code === 'failed-precondition') { _histConsultaAmplia = true; cargarHistorial(); }
   });
 }
+let _histConsultaAmplia = false;
 window.cargarHistorial = cargarHistorial;
 
 // ── BARCODE FULLSCREEN ──
