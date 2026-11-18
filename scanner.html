@@ -12,7 +12,7 @@
 <meta http-equiv="Expires" content="0"/>
 <script>
 (function(){
-  var V='20260909-4';
+  var V='20261117-1';
   try{
     fetch('version.txt?_='+Date.now(),{cache:'no-store'}).then(function(r){return r.ok?r.text():null;}).then(function(t){
       if(!t) return;
@@ -256,6 +256,10 @@ function normalizarComedorURL(s){
 function canonicalizarComedor(v){
   return v === 'intelomas' ? 'interlomas' : v;
 }
+
+// Escapa texto antes de meterlo a innerHTML — los nombres de visita los escribe
+// cualquiera desde el link público, y un nombre con HTML/script se ejecutaba aquí.
+function esc(t){ return String(t==null?'':t).replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch])); }
 const _comedor = normalizarComedorURL(new URLSearchParams(window.location.search).get('comedor'));
 const _comedorLabels = { betel:'Betel', cuauhtemoc:'Cuauhtémoc', interlomas:'Interlomas' };
 const _comedorNombre = _comedorLabels[_comedor] || _comedor;
@@ -293,6 +297,13 @@ window.escanear=async function(){
     const empDoc=empSnap.docs[0];
     const emp=empDoc.data();
     nombrePersona=emp.nombre||'Empleado';
+
+    // FIX nov 2026: un empleado desactivado en el admin ya no puede pasar.
+    if(emp.activo===false){
+      mostrarRes('error','Cuenta desactivada',nombrePersona,'Este empleado está desactivado — pasa con la administración del comedor');
+      agregarHistorial((nombrePersona||'?')+' (desactivado)','error');
+      return;
+    }
 
     // Buscar la orden de hoy para este empleado (que no esté cancelada)
     const qOrd=query(collection(db,'ordenes'),where('empleado_uid','==',empDoc.id),where('fecha','==',hoy()));
@@ -334,14 +345,28 @@ window.escanear=async function(){
   // de desayuno pendiente si existe; fuera de ese horario (o si no pidió
   // desayuno) se usa la de comida, igual que siempre. Así nunca se activa
   // por accidente la orden equivocada.
-  const desayunoPend=ordenes.filter(o=>o.categoria==='desayuno');
-  const comidaPend=ordenes.filter(o=>o.categoria!=='desayuno');
-  const orden=(dentroHorarioDesayuno() && desayunoPend.length) ? desayunoPend[0] : (comidaPend.length ? comidaPend[0] : ordenes[0]);
+  // FIX nov 2026: antes se elegía el desayuno aunque YA se hubiera escaneado,
+  // así que alguien que desayunó y llegaba a comer antes de la 1pm recibía
+  // "Ya fue escaneado" y no podía pasar. Ahora solo se eligen órdenes
+  // pendientes; si todas ya se usaron, entonces sí es "ya escaneado".
+  const pendientes=ordenes.filter(o=>!o.escaneado);
+  if(!pendientes.length){
+    mostrarRes('ya','Ya fue escaneado',nombrePersona,'Este código ya fue usado hoy — no puede usarse dos veces');
+    agregarHistorial((nombrePersona||'?')+' (ya escaneado)','error');
+    return;
+  }
+  const desayunoPend=pendientes.filter(o=>o.categoria==='desayuno');
+  const comidaPend=pendientes.filter(o=>o.categoria!=='desayuno');
+  const orden=(dentroHorarioDesayuno() && desayunoPend.length) ? desayunoPend[0] : (comidaPend.length ? comidaPend[0] : desayunoPend[0]);
 
-  // Si la orden elegida es de desayuno pero ya pasó la 1:00pm (no se
-  // escaneó a tiempo), se cancela ahí mismo sin costo en vez de dejarla
-  // pasar — el mismo criterio que aplica el barrido automático cada rato,
-  // pero de inmediato si alguien intenta escanearla justo en ese hueco.
+  // Desayuno antes de las 8:00am: todavía no abre — se avisa SIN cancelarlo
+  // (antes se cancelaba aunque solo hubiera llegado temprano).
+  if(orden.categoria==='desayuno' && antesDeDesayuno()){
+    mostrarRes('ya','Desayuno aún no abre',nombrePersona,'El desayuno se sirve a partir de las 8:00am — vuelve a escanear en ese horario');
+    agregarHistorial((nombrePersona||'?')+' (desayuno antes de 8am)','error');
+    return;
+  }
+  // Desayuno después de la 1:00pm sin escanear: se cancela sin costo.
   if(orden.categoria==='desayuno' && !dentroHorarioDesayuno()){
     try{ await updateDoc(doc(db,'ordenes',orden.id), { estado:'cancelado', cancelado_en:new Date() }); }catch(e){}
     mostrarRes('error','Desayuno fuera de horario',nombrePersona,'El desayuno se sirve de 8:00am a 1:00pm — este pedido se canceló, no se cobra');
@@ -386,7 +411,7 @@ window.escanear=async function(){
   const pls=(resultado.data.platillos||[]).concat((resultado.data.extras||[]).map(e=>typeof e==='string'?e:e.nombre+' (extra)'));
   mostrarRes('ok', resultado.data.categoria==='desayuno' ? '¡Bienvenido! · 🍳 Desayuno' : '¡Bienvenido!', nombrePersona,'Pasando a cocina ahora');
   document.getElementById('res-pedido').style.display='block';
-  document.getElementById('res-platillos').innerHTML=pls.map(p=>`<div class="res-platillo">• ${p}</div>`).join('');
+  document.getElementById('res-platillos').innerHTML=pls.map(p=>`<div class="res-platillo">• ${esc(p)}</div>`).join('');
   agregarHistorial(nombrePersona,'ok');
 };
 
@@ -411,7 +436,7 @@ function agregarHistorial(nombre,tipo){
   const lista=document.getElementById('hist-lista');
   lista.innerHTML=historial.slice(0,20).map(e=>`
     <div class="hist-item ${e.tipo==='error'?'error':''}">
-      <div class="hist-nombre">${e.nombre}</div>
+      <div class="hist-nombre">${esc(e.nombre)}</div>
       <div class="hist-hora">${e.hora}</div>
     </div>`).join('');
 }
@@ -423,6 +448,7 @@ function hoy(){ const d=new Date(); return d.getFullYear()+'-'+String(d.getMonth
 
 // Horario de desayuno: 8:00am a 1:00pm todos los días, siempre igual.
 function dentroHorarioDesayuno(){ const d=new Date(); const m=d.getHours()*60+d.getMinutes(); return m>=8*60 && m<13*60; }
+function antesDeDesayuno(){ const d=new Date(); return d.getHours()*60+d.getMinutes() < 8*60; }
 </script>
 </body>
 </html>
