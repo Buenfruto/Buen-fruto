@@ -15,7 +15,7 @@
 // fuerza una recarga limpia. sessionStorage evita que se quede en bucle si
 // version.txt no está disponible por algún motivo.
 (function(){
-  var V='20261117-1';
+  var V='20261117-3';
   try{
     fetch('version.txt?_='+Date.now(),{cache:'no-store'}).then(function(r){return r.ok?r.text():null;}).then(function(t){
       if(!t) return;
@@ -341,7 +341,7 @@ input[type=file]{display:none}
     </nav>
     <div class="sidebar-footer">
       <div id="admin-nombre" style="font-size:.8rem;color:rgba(255,255,255,.7)">—</div>
-      <div style="font-size:.65rem;color:rgba(255,255,255,.45);margin-bottom:.4rem">v20261117-1</div>
+      <div style="font-size:.65rem;color:rgba(255,255,255,.45);margin-bottom:.4rem">v20261117-3</div>
       <button class="btn-salir-sidebar" id="btn-salir">
         <svg viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>Cerrar sesión
       </button>
@@ -1517,17 +1517,24 @@ window.irSec=function(sec,el){
   document.getElementById('sec-'+sec).classList.add('on');
   const titulos={dashboard:'Dashboard',empleados:'Empleados',riesgo:'En riesgo',ingresos:'HC diario',menus:'Menús de la semana',reportes:'Reportes',pendientes:'Órdenes pendientes'};
   document.getElementById('topbar-titulo').textContent=titulos[sec]||sec;
-  if(sec==='reportes')cargarReporte();
-  if(sec==='pendientes')cargarPendientes();
+  // FIX nov 2026 (cuota): si el reporte/pendientes ya están escuchando en vivo
+  // (y siguen al día solos), al volver a la pestaña solo se repinta — antes
+  // se volvía a leer todo el periodo en cada clic.
+  if(sec==='reportes')asegurarReporte();
+  if(sec==='pendientes'){ if(_unsubPendientes && _pendDocs!==null) renderizarPendientes(); else cargarPendientes(); }
 };
 
 // ── DASHBOARD ──
+let _tendPromesa = null, _tendPromesaDia = null;
+let _ordenesHoyActivas = 0;
 async function cargarDashboard(){
   if(unsubOrdenes)unsubOrdenes();
   const q=db.collection('ordenes').where('fecha','==',hoy());
   unsubOrdenes=q.onSnapshot(snap=>{
     const ordenes=[];
     snap.forEach(d=>{ const o=d.data(); if(o.estado!=='cancelado') ordenes.push({id:d.id,...o, comedor: canonicalizarComedor(o.comedor)}); });
+    // La barrita de HOY de la tendencia se actualiza en vivo desde aquí (sin lecturas extra).
+    if (_ordenesHoyActivas !== ordenes.length) { _ordenesHoyActivas = ordenes.length; cargarTendenciaDashboard(); }
     const preordenes=ordenes.filter(o=>o.hora_preorden);
     // "Pagos empleados": literal, lo que se le cobra a cada empleado (campo
     // cargo) — para subsidiados es solo extras, para visitas siempre 0.
@@ -1637,9 +1644,10 @@ async function cargarDashboard(){
         <td>${o.escaneado?'<span style="font-size:.72rem;color:var(--g3)">Ya en cocina</span>':'<button class="btn btn-outline btn-sm" onclick="cancelarOrdenAdmin(\''+o.id+'\')">Cancelar</button>'}</td>
       </tr>`).join('');
   });
-  // Empleados count
-  const empSnap=await db.collection('empleados').get();
-  document.getElementById('m-empleados').textContent=empSnap.size;
+  // Empleados count — FIX nov 2026 (cuota): antes leía TODO el directorio
+  // (~670 lecturas) cada vez que se abría el Dashboard, aunque el listener de
+  // cargarEmpleados() ya lo tiene en memoria. Ahora se toma de ahí.
+  if (_empleadosTotal !== null) document.getElementById('m-empleados').textContent=_empleadosTotal;
   // Tendencia de 7 días: consulta aparte (no en vivo, se refresca cada vez
   // que se entra al Dashboard) — no toca ni el listener de hoy ni ningún
   // cálculo de reportes/nómina, solo cuenta órdenes por fecha para dibujar
@@ -1661,14 +1669,38 @@ async function cargarTendenciaDashboard(){
       d.setDate(d.getDate()-i);
       dias.push(d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'));
     }
-    const snap=await db.collection('ordenes').where('fecha','>=',dias[0]).where('fecha','<=',dias[dias.length-1]).get();
+    // FIX nov 2026 (cuota): antes leía TODAS las órdenes de 7 días (~1,000
+    // lecturas) en cada apertura del Dashboard solo para dibujar estas
+    // barritas. Los días pasados ya no cambian, así que se leen una sola vez
+    // al día por navegador y se guardan; el número de HOY sale del listener
+    // en vivo del Dashboard (cero lecturas extra).
     const porDia={};
     dias.forEach(f=>{ porDia[f]=0; });
-    snap.forEach(d=>{
-      const o=d.data();
-      if(o.estado==='cancelado') return;
-      if(porDia[o.fecha]!==undefined) porDia[o.fecha]++;
-    });
+    const hoyT=hoy();
+    const kTend='bf_tend_'+hoyT;
+    let pasado=null;
+    try { pasado=JSON.parse(localStorage.getItem(kTend)||'null'); } catch(e){ pasado=null; }
+    if(!pasado && _tendPromesa && _tendPromesaDia===hoyT){ pasado=await _tendPromesa; }
+    if(!pasado){
+      _tendPromesaDia=hoyT;
+      _tendPromesa=(async()=>{
+      const pasado={};
+      const snap=await db.collection('ordenes').where('fecha','>=',dias[0]).where('fecha','<',hoyT).get();
+      snap.forEach(d=>{
+        const o=d.data();
+        if(o.estado==='cancelado') return;
+        pasado[o.fecha]=(pasado[o.fecha]||0)+1;
+      });
+      try {
+        Object.keys(localStorage).forEach(k=>{ if(k.indexOf('bf_tend_')===0 && k!==kTend) localStorage.removeItem(k); });
+        localStorage.setItem(kTend, JSON.stringify(pasado));
+      } catch(e){}
+      return pasado;
+      })();
+      try { pasado=await _tendPromesa; } catch(e){ _tendPromesa=null; throw e; }
+    }
+    dias.forEach(f=>{ if(f!==hoyT) porDia[f]=pasado[f]||0; });
+    porDia[hoyT]=_ordenesHoyActivas;
     const max=Math.max(1, ...dias.map(f=>porDia[f]));
     const DS_T=['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'];
     const hoyStr=hoy();
@@ -3665,6 +3697,7 @@ function renderResumenEmpleados(lista){
 }
 
 let _empleadosListaCache = [];
+let _empleadosTotal = null;
 
 async function cargarEmpleados(){
   if(unsubEmpleados)unsubEmpleados();
@@ -3674,6 +3707,8 @@ async function cargarEmpleados(){
     const lista=[];
     snap.forEach(d=>{ const e=d.data(); lista.push(Object.assign({id:d.id}, e, {comedor: canonicalizarComedor(e.comedor)})); });
     _empleadosListaCache = lista;
+    _empleadosTotal = snap.size;
+    { const elM = document.getElementById('m-empleados'); if (elM) elM.textContent = snap.size; }
     renderResumenEmpleados(lista);
     renderRiesgo(lista);
     if(snap.empty){ tbody.innerHTML='<tr><td colspan="6" style="text-align:center;padding:2rem;color:var(--g3)">Sin empleados registrados</td></tr>'; return; }
@@ -4098,7 +4133,14 @@ window.eliminarOrdenReporte=async function(id){
 async function limpiarOrdenesNoEscaneadas(){
   try {
     const hoyStr = hoy();
-    const snap = await db.collection('ordenes').where('escaneado','==',false).get();
+    // FIX nov 2026 (cuota Firestore): antes leía TODAS las órdenes no
+    // escaneadas de la historia — incluidas las miles ya canceladas — cada vez
+    // que se abría el admin. Ahora: máximo una vez al día por navegador, y
+    // solo las que siguen pendientes (estado 'pagado').
+    const _kLimp = 'bf_limpieza_' + hoyStr;
+    try { if (localStorage.getItem(_kLimp)) return; } catch(e){}
+    const snap = await db.collection('ordenes').where('escaneado','==',false).where('estado','==','pagado').get();
+    try { localStorage.setItem(_kLimp, '1'); } catch(e){}
     const pendientes = [];
     snap.forEach(d=>{
       const o = d.data();
@@ -4804,8 +4846,19 @@ window.setRepComedor = function(comedor, btn) {
   _repComedor = comedor;
   document.querySelectorAll('.rep-comedor-btn').forEach(b => b.classList.remove('active'));
   btn.classList.add('active');
-  cargarReporte();
+  // El filtro de comedor no cambia la consulta (trae los 3 comedores), así que
+  // si ya hay datos en vivo del mismo periodo solo se repinta.
+  asegurarReporte();
 };
+function asegurarReporte(){
+  const r = getRango();
+  if (_unsubReporteOrdenes && _unsubReporteMov && _repOrdenesDocs !== null && _repMovDocs !== null
+      && !_reporteEsRespaldoActual && _reporteRangoDesde === r.desde && _reporteRangoHasta === r.hasta) {
+    renderizarReporte();
+  } else {
+    cargarReporte();
+  }
+}
 
 // ── VISTA DE REPORTE: Comidas (default) vs Desayunos ──
 // Pestaña aparte pedida por Sebastián para ver el desayuno sin mezclarlo con
@@ -6478,7 +6531,11 @@ function cargarPendientes(){
   if (_unsubPendientes) { _unsubPendientes(); _unsubPendientes = null; }
   _pendDocs = null;
   document.getElementById('pendientes-body').innerHTML = '<div class="loading" style="display:flex"><div class="spinner"></div>&nbsp;Cargando pendientes...</div>';
-  _unsubPendientes = db.collection('ordenes').where('escaneado','==',false).onSnapshot(function(snap){
+  // FIX nov 2026 (cuota): antes escuchaba TODAS las órdenes sin escanear de
+  // la historia (incluidas las miles canceladas). Una orden sin escanear y no
+  // cancelada siempre tiene estado 'pagado', así que se pide solo eso — se ve
+  // exactamente lo mismo, leyendo una fracción.
+  _unsubPendientes = db.collection('ordenes').where('escaneado','==',false).where('estado','==','pagado').onSnapshot(function(snap){
     const docs = [];
     snap.forEach(function(d){
       const o = d.data();
